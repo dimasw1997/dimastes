@@ -191,7 +191,7 @@ def show_config():
         (
             "Kumpulkan dulu, mulai dari posting terbaru"
             if config.auto_apply and config.collect_before_apply
-            else "Per kata kunci (mulai dari posting terbaru)"
+            else "Lamar sambil mencari (halaman terbaru dulu)"
         ),
     )
     table.add_row(

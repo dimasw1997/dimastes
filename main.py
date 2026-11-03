@@ -54,33 +54,8 @@ class AutoApplyEngine:
                 # mulai dari posting paling baru (lintas kata kunci & lokasi).
                 self._kumpulkan_lalu_lamar()
             else:
-                for location in config.locations:
-                    console.print(
-                        f"\n[bold blue]{'#' * 60}[/]"
-                    )
-                    console.print(f"[bold blue]LOKASI: {location}[/]")
-                    console.print(f"[bold blue]{'#' * 60}[/]")
-
-                    for keyword in config.keywords:
-                        keyword = keyword.strip()
-
-                        if not keyword:
-                            continue
-
-                        console.print(f"\n{'=' * 60}")
-                        console.print(
-                            f"[bold]Lokasi: {location} — kata kunci: "
-                            f"{keyword}[/]"
-                        )
-                        console.print(f"{'=' * 60}")
-
-                        self._process_keyword(keyword, location=location)
-
-                        if self.stop_requested:
-                            break
-
-                    if self.stop_requested:
-                        break
+                # Melamar sambil mencari, tetap dari posting terbaru.
+                self._streaming_halaman()
 
         except KeyboardInterrupt:
             console.print("\n[bold yellow]Proses dihentikan.[/]")
@@ -99,120 +74,137 @@ class AutoApplyEngine:
             except Exception as exc:
                 console.print(f"[yellow]Laporan harian gagal dikirim: {exc}[/]")
 
+    def _satu_halaman(self, keyword: str, page: int, location: str = ""):
+        """Cari & saring satu halaman.
+
+        Kembalikan (daftar lowongan siap dilamar, jumlah lowongan terbaca).
+        Jumlah 0 berarti halaman itu tidak memuat hasil apa pun.
+        """
+        jobs = self.bot.search_jobs(keyword, page, location=location)
+
+        if not jobs:
+            console.print(f"Tidak ada lowongan terbaca di halaman {page}.")
+            return [], 0
+
+        # Lewati hasil duplikat atau yang tidak memiliki judul/URL/ID.
+        new_jobs = []
+
+        for job in jobs:
+            title = (job.get("title") or "").strip()
+            url = (job.get("url") or "").strip()
+            job_id = str(job.get("job_id") or "").strip()
+
+            if not title or not url or not job_id:
+                # Tandai supaya lowongan rusak yang sama tidak dihitung
+                # berkali-kali untuk setiap kata kunci.
+                kunci = job_id or url
+                if kunci:
+                    self.seen_job_ids.add(kunci)
+
+                console.print(
+                    "[yellow]Lowongan dilewati: judul, URL, atau ID tidak terbaca.[/]"
+                )
+                self.session_stats["skipped"] += 1
+                continue
+
+            if job_id in self.seen_job_ids:
+                continue
+
+            self.seen_job_ids.add(job_id)
+
+            # Lowongan yang sudah berlabel Applied / sudah pernah dilamar
+            # dilewati diam-diam: tidak ditampilkan dan tidak memakai kuota.
+            if job.get("applied") or db.is_already_applied(job_id):
+                self.session_stats["already"] += 1
+
+                if job.get("applied"):
+                    # Simpan detailnya supaya tetap tampil rapi di riwayat.
+                    db.add_job(job)
+                    db.record_application(
+                        job_id,
+                        "already_applied",
+                        "Ditandai sudah dilamar di JobStreet",
+                    )
+                continue
+
+            # Lowongan lama yang belum pernah dilamar tetap ditinjau
+            # kembali; yang benar-benar baru dihitung terpisah.
+            if db.add_job(job):
+                self.session_stats["new"] += 1
+
+            new_jobs.append(job)
+
+        self.session_stats["found"] += len(new_jobs)
+
+        if not new_jobs:
+            return [], len(jobs)
+
+        eligible_jobs = []
+
+        for job in new_jobs:
+            try:
+                should_apply, reason = job_filter.should_apply(job)
+            except Exception as exc:
+                console.print(
+                    f"[yellow]Lowongan dilewati karena gagal diperiksa: {exc}[/]"
+                )
+                self.session_stats["errors"] += 1
+                continue
+
+            if should_apply:
+                eligible_jobs.append(job)
+            else:
+                title = job.get("title", "Tanpa judul")
+                console.print(f"[dim]Dilewati: {title[:50]} — {reason}[/]")
+                self.session_stats["skipped"] += 1
+
+        eligible_jobs = job_filter.rank_jobs(eligible_jobs)
+
+        console.print(
+            f"{len(eligible_jobs)} dari {len(new_jobs)} "
+            "lowongan baru lolos filter."
+        )
+
+        return eligible_jobs, len(jobs)
+
     def _cari_keyword(self, keyword: str, location: str = "") -> list:
-        """Cari & saring satu kata kunci; kembalikan lowongan siap dilamar."""
+        """Cari & saring satu kata kunci (semua halaman)."""
         terkumpul = []
 
         for page in range(1, config.max_pages + 1):
-            if (
-                config.max_apply_per_day > 0
-                and db.get_today_apply_count() >= config.max_apply_per_day
-            ):
-                console.print(
-                    f"[bold yellow]Batas harian tercapai "
-                    f"({config.max_apply_per_day}).[/]"
-                )
+            if self._batas_harian_tercapai():
                 return terkumpul
 
-            jobs = self.bot.search_jobs(keyword, page, location=location)
+            eligible, terbaca = self._satu_halaman(keyword, page, location)
 
-            if not jobs:
-                console.print(f"Tidak ada lowongan terbaca di halaman {page}.")
+            if terbaca == 0:
                 break
 
-            # Lewati hasil duplikat atau yang tidak memiliki judul/URL/ID.
-            new_jobs = []
+            # Hasil sudah diurutkan dari yang terbaru: begitu satu halaman
+            # tidak memuat lowongan baru, halaman berikutnya pasti lebih lama.
+            if not eligible and page > 1 and config.sort_mode:
+                console.print(
+                    "[dim]Halaman ini tidak memuat lowongan baru; "
+                    "berhenti karena hasil diurutkan dari yang terbaru.[/]"
+                )
+                break
 
-            for job in jobs:
-                title = (job.get("title") or "").strip()
-                url = (job.get("url") or "").strip()
-                job_id = str(job.get("job_id") or "").strip()
-
-                if not title or not url or not job_id:
-                    # Tandai supaya lowongan rusak yang sama tidak dihitung
-                    # berkali-kali untuk setiap kata kunci.
-                    kunci = job_id or url
-                    if kunci:
-                        self.seen_job_ids.add(kunci)
-
-                    console.print(
-                        "[yellow]Lowongan dilewati: judul, URL, atau ID tidak terbaca.[/]"
-                    )
-                    self.session_stats["skipped"] += 1
-                    continue
-
-                if job_id in self.seen_job_ids:
-                    continue
-
-                self.seen_job_ids.add(job_id)
-
-                # Lowongan yang sudah berlabel Applied / sudah pernah dilamar
-                # dilewati diam-diam: tidak ditampilkan dan tidak memakai kuota.
-                if job.get("applied") or db.is_already_applied(job_id):
-                    self.session_stats["already"] += 1
-
-                    if job.get("applied"):
-                        # Simpan detailnya supaya tetap tampil rapi di riwayat.
-                        db.add_job(job)
-                        db.record_application(
-                            job_id,
-                            "already_applied",
-                            "Ditandai sudah dilamar di JobStreet",
-                        )
-                    continue
-
-                # Lowongan lama yang belum pernah dilamar tetap ditinjau
-                # kembali; yang benar-benar baru dihitung terpisah.
-                if db.add_job(job):
-                    self.session_stats["new"] += 1
-
-                new_jobs.append(job)
-
-            self.session_stats["found"] += len(new_jobs)
-
-            if not new_jobs:
-                if page > 1 and config.sort_mode:
-                    # Hasil sudah diurutkan dari yang terbaru: halaman
-                    # berikutnya pasti lebih lama dan sudah diproses.
-                    console.print(
-                        "[dim]Halaman ini tidak memuat lowongan baru; "
-                        "berhenti karena hasil diurutkan dari yang terbaru.[/]"
-                    )
-                    break
-
-                continue
-
-            eligible_jobs = []
-
-            for job in new_jobs:
-                try:
-                    should_apply, reason = job_filter.should_apply(job)
-                except Exception as exc:
-                    console.print(
-                        f"[yellow]Lowongan dilewati karena gagal diperiksa: {exc}[/]"
-                    )
-                    self.session_stats["errors"] += 1
-                    continue
-
-                if should_apply:
-                    eligible_jobs.append(job)
-                else:
-                    title = job.get("title", "Tanpa judul")
-                    console.print(
-                        f"[dim]Dilewati: {title[:50]} — {reason}[/]"
-                    )
-                    self.session_stats["skipped"] += 1
-
-            eligible_jobs = job_filter.rank_jobs(eligible_jobs)
-
-            console.print(
-                f"{len(eligible_jobs)} dari {len(new_jobs)} "
-                "lowongan baru lolos filter."
-            )
-
-            terkumpul.extend(eligible_jobs)
+            terkumpul.extend(eligible)
 
         return terkumpul
+
+    def _batas_harian_tercapai(self) -> bool:
+        if (
+            config.max_apply_per_day > 0
+            and db.get_today_apply_count() >= config.max_apply_per_day
+        ):
+            console.print(
+                f"[bold yellow]Batas harian tercapai "
+                f"({config.max_apply_per_day}).[/]"
+            )
+            return True
+
+        return False
 
     def _lamar(self, job: dict) -> bool:
         """Lamar satu lowongan. False = seluruh sesi harus berhenti."""
@@ -287,11 +279,55 @@ class AutoApplyEngine:
 
         return True
 
-    def _process_keyword(self, keyword: str, location: str = ""):
-        """Mode berurutan: cari satu kata kunci, lalu lamar hasilnya."""
-        for job in self._cari_keyword(keyword, location):
-            if not self._lamar(job):
-                return
+    def _streaming_halaman(self):
+        """Lamar sambil mencari: per halaman, dari posting terbaru.
+
+        Halaman 1 semua kata kunci dan lokasi diselesaikan lebih dulu
+        (lowongan paling baru), baru turun ke halaman 2 yang lebih lama.
+        """
+        selesai = set()
+
+        for page in range(1, config.max_pages + 1):
+            for location in config.locations:
+                if page == 1:
+                    console.print(f"\n[bold blue]{'#' * 60}[/]")
+                    console.print(f"[bold blue]LOKASI: {location}[/]")
+                    console.print(f"[bold blue]{'#' * 60}[/]")
+
+                for keyword in config.keywords:
+                    keyword = keyword.strip()
+
+                    if not keyword or (keyword, location) in selesai:
+                        continue
+
+                    if self.stop_requested:
+                        return
+
+                    if self._batas_harian_tercapai():
+                        return
+
+                    if page == 1:
+                        console.print(f"\n{'=' * 60}")
+                        console.print(
+                            f"[bold]Lokasi: {location} — kata kunci: "
+                            f"{keyword}[/]"
+                        )
+                        console.print(f"{'=' * 60}")
+
+                    eligible, terbaca = self._satu_halaman(
+                        keyword, page, location
+                    )
+
+                    if terbaca == 0:
+                        selesai.add((keyword, location))
+                        continue
+
+                    if not eligible and page > 1 and config.sort_mode:
+                        selesai.add((keyword, location))
+
+                    for job in eligible:
+                        if not self._lamar(job):
+                            return
 
     def _kumpulkan_lalu_lamar(self):
         """Kumpulkan semua kandidat, urutkan dari posting terbaru, lalu lamar."""
@@ -396,7 +432,7 @@ class AutoApplyEngine:
             (
                 "Kumpulkan dulu, mulai dari posting terbaru"
                 if config.auto_apply and config.collect_before_apply
-                else "Per kata kunci (mulai dari posting terbaru)"
+                else "Lamar sambil mencari (halaman terbaru dulu)"
             ),
         )
         table.add_row(

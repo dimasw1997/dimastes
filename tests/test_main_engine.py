@@ -63,6 +63,7 @@ def siapkan(tmp_path, monkeypatch):
 
     halaman = {
         ("inventory", 1): [lowongan("A", 5), lowongan("B", 1)],
+        ("inventory", 2): [lowongan("D", 10)],
         ("ppic", 1): [lowongan("C", 0)],
     }
 
@@ -76,16 +77,18 @@ def test_kumpulkan_dulu_urut_posting_terbaru(siapkan, monkeypatch):
 
     siapkan._kumpulkan_lalu_lamar()
 
+    # max_pages=1, jadi halaman 2 (D) tidak ikut dikumpulkan.
     assert siapkan.bot.dilamar == ["C", "B", "A"]
 
 
-def test_mode_berurutan_per_kata_kunci(siapkan, monkeypatch):
+def test_streaming_halaman_terbaru_dulu(siapkan, monkeypatch):
     monkeypatch.setattr(config, "collect_before_apply", False)
+    monkeypatch.setattr(config, "max_pages", 2)
 
-    for keyword in config.keywords:
-        siapkan._process_keyword(keyword, location="Bandung")
+    siapkan._streaming_halaman()
 
-    assert siapkan.bot.dilamar == ["B", "A", "C"]
+    # Halaman 1 semua kata kunci dulu (lowongan terbaru), halaman 2 menyusul.
+    assert siapkan.bot.dilamar == ["B", "A", "C", "D"]
 
 
 def test_kumpulkan_menghormati_batas_sesi(siapkan, monkeypatch):
@@ -132,3 +135,15 @@ def test_batas_nol_berarti_tanpa_batas(siapkan, monkeypatch):
     siapkan._kumpulkan_lalu_lamar()
 
     assert siapkan.bot.dilamar == ["C", "B", "A"]
+
+
+def test_lowongan_sama_tidak_dilamar_dua_kali(siapkan, monkeypatch):
+    monkeypatch.setattr(config, "collect_before_apply", False)
+    siapkan.bot.halaman = {
+        ("inventory", 1): [lowongan("X", 0)],
+        ("ppic", 1): [lowongan("X", 0)],
+    }
+
+    siapkan._streaming_halaman()
+
+    assert siapkan.bot.dilamar == ["X"]

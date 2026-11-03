@@ -126,7 +126,7 @@ cp .env.example .env
 | `HEADLESS_MODE` | `false` | `true` = Chrome tanpa jendela (tidak cocok untuk tinjau manual) |
 | `TELEGRAM_BOT_TOKEN` | kosong | Opsional, untuk notifikasi |
 | `TELEGRAM_CHAT_ID` | kosong | Opsional, untuk notifikasi |
-| `COLLECT_BEFORE_APPLY` | `true` | Kumpulkan semua kandidat dulu, lalu lamar mulai dari posting terbaru |
+| `COLLECT_BEFORE_APPLY` | `false` | `false` = lamar sambil mencari (halaman terbaru dulu); `true` = kumpulkan dulu |
 | `SORT_MODE` | `ListedDate` | Urutan hasil; `ListedDate` = terbaru dulu, `KeywordRelevance` = relevansi |
 | `PREFER_NEWEST` | `true` | Dahulukan lowongan paling baru saat antrean melamar |
 | `MAX_AGE_DAYS` | `0` | Hanya lowongan N hari terakhir (0 = semua). Nilai valid JobStreet: 1, 3, 7, 14, 31 |
@@ -348,27 +348,30 @@ dilewati.
 
 ### Mulai dari posting terbaru
 
-Lowongan dilamar berurutan **mulai dari yang paling baru diposting**:
+Lowongan selalu dilamar berurutan **mulai dari yang paling baru diposting**:
 
 1. Pencarian memakai `sortmode=ListedDate`, jadi JobStreet mengembalikan
    lowongan terbaru lebih dulu.
-2. Dengan `COLLECT_BEFORE_APPLY=true` (bawaan), semua hasil dari **seluruh
-   kata kunci dan lokasi** dikumpulkan dulu, diurutkan menurut umur posting,
-   baru dilamar satu per satu. Jadi lowongan "hari ini" dari kata kunci mana
-   pun dikerjakan sebelum lowongan "3 hari yang lalu".
+2. Di dalam satu halaman, hasil diurutkan lagi menurut umur posting.
 
-Di terminal terlihat ringkasannya:
+Ada dua cara menjalankannya (pilih lewat `COLLECT_BEFORE_APPLY`):
+
+| Mode | `COLLECT_BEFORE_APPLY` | Kapan lamaran pertama terkirim | Urutan |
+| --- | --- | --- | --- |
+| **Lamar sambil mencari** (bawaan) | `false` | sesaat setelah pencarian pertama | halaman 1 semua kata kunci & lokasi dulu (paling baru), baru halaman 2 |
+| Kumpulkan dulu | `true` | setelah semua pencarian selesai | benar-benar global menurut umur posting |
+
+Contoh mode bawaan: `inventory control — Bandung — halaman 1` langsung
+dilamar, lalu `inventory controller — Bandung — halaman 1`, dan seterusnya;
+halaman 2 yang isinya lebih lama baru diproses setelah semua halaman 1 selesai.
+
+Pada mode kumpulkan, terminal menampilkan ringkasan sebelum melamar:
 
 ```
 Pengumpulan selesai: 12 lowongan siap dilamar, mulai dari posting terbaru.
 (hari ini) Staff PPIC
-(hari ini) Inventory Control
 (1 hari lalu) Staf Gudang
 ```
-
-Konsekuensinya: aplikasi pertama baru dikirim setelah pencarian selesai
-(beberapa menit untuk 14 kata kunci x 7 lokasi). Bila ingin langsung melamar
-per kata kunci, set `COLLECT_BEFORE_APPLY=false`.
 
 Lowongan yang tanggalnya tidak terbaca ditaruh paling akhir.
 

@@ -110,9 +110,9 @@ class Config:
         "cycle count,project control",
     ))
 
-    # Kumpulkan semua kandidat lebih dulu, lalu lamar berurutan mulai dari
-    # posting paling baru (lintas kata kunci & lokasi).
-    collect_before_apply: bool = _bool_setting("COLLECT_BEFORE_APPLY", True)
+    # true  = kumpulkan semua kandidat dulu, baru lamar (mulai terbaru).
+    # false = lamar sambil mencari, per halaman (halaman 1 = terbaru).
+    collect_before_apply: bool = _bool_setting("COLLECT_BEFORE_APPLY", False)
 
     # Urutkan hasil pencarian dari yang paling baru (ListedDate).
     # Kosongkan SORT_MODE untuk kembali ke urutan relevansi JobStreet.
