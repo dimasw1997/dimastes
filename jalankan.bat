@@ -6,9 +6,16 @@ rem          jalankan.bat history --limit 10
 setlocal
 cd /d "%~dp0"
 
+rem Cari Python: utamakan "python", lalu jatuh ke launcher "py -3".
+set "PY=python"
+%PY% --version >nul 2>&1
+if errorlevel 1 set "PY=py -3"
+%PY% --version >nul 2>&1
+if errorlevel 1 goto :tanpapython
+
 if not exist ".venv\Scripts\python.exe" (
     echo [1/3] Membuat virtual environment...
-    python -m venv .venv
+    %PY% -m venv .venv
     if errorlevel 1 goto :gagal
 )
 
@@ -31,9 +38,20 @@ echo.
 ".venv\Scripts\python.exe" cli.py %*
 exit /b %errorlevel%
 
+:tanpapython
+echo.
+echo Python tidak ditemukan.
+echo Install Python 3.10+ dari https://www.python.org/downloads/ dan centang
+echo "Add python.exe to PATH" saat memasang, lalu buka terminal baru.
+pause
+exit /b 1
+
 :gagal
 echo.
-echo GAGAL menyiapkan Python. Pastikan Python 3.10 atau lebih baru sudah
-echo terpasang dan ada di PATH. Cek dengan: python --version
+echo GAGAL menyiapkan lingkungan Python.
+echo - Pastikan Python 3.10+ terpasang:  python --version  atau  py --version
+echo - Pastikan folder proyek TIDAK berada di C:\WINDOWS (pindahkan ke
+echo   Documents, misalnya C:\Users\NamaAnda\Documents\dimastes)
+echo - Jalankan terminal sebagai pengguna biasa, bukan administrator.
 pause
 exit /b 1

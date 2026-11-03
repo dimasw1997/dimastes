@@ -33,13 +33,16 @@ password JobStreet. Login dan penekanan tombol Apply/Submit tetap manual.
 Skrip bantu sudah disiapkan: ia membuat `.venv`, memasang dependensi,
 menyalin `.env.example` menjadi `.env` (sekali), lalu menjalankan perintah.
 
-**Windows** — buka folder proyek, klik dua kali `jalankan.bat`, atau dari
-Command Prompt:
+**Windows** — letakkan folder proyek di tempat biasa (misalnya
+`C:\Users\NamaAnda\Documents\dimastes`, **bukan** di `C:\WINDOWS`), buka
+PowerShell/Command Prompt di folder itu, lalu:
 
-```bat
-jalankan.bat config
-jalankan.bat run
+```powershell
+.\jalankan.bat config
+.\jalankan.bat run
 ```
+
+Di Command Prompt lama, `.\` boleh dihilangkan (`jalankan.bat run`).
 
 **macOS / Linux**:
 
