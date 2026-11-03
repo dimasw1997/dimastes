@@ -137,6 +137,8 @@ cp .env.example .env
 | `RESUME_PATH` | kosong | Path berkas CV untuk unggah otomatis |
 | `AUTO_APPLY_MAX_PER_SESSION` | `25` | Batas lamaran otomatis per sesi |
 | `AUTO_APPLY_STEP_TIMEOUT` | `3` | Batas detik mengenali tiap langkah; lewat itu lowongan dilewati |
+| `AUTO_APPLY_SUBMIT_TIMEOUT` | `20` | Batas detik khusus halaman **Review and submit** (mengirim lamaran) |
+| `AUTO_APPLY_DEBUG` | `true` | Simpan HTML + screenshot halaman yang tak dikenali ke folder `debug/` |
 | `DB_PATH` | `jobstreet_auto.db` | Lokasi file database |
 
 ## Cara pakai
@@ -284,16 +286,21 @@ meninjau sendiri.
 
 1. Bot membuka halaman lowongan, lalu mencari tombol **Lamar**.
 2. Bila muncul langkah berikutnya (**Lanjutkan/Kirim lamaran**), bot menekan
-   otomatis sampai muncul konfirmasi "lamaran telah dikirim".
+   otomatis sampai muncul konfirmasi "lamaran telah dikirim". Di halaman
+   terakhir **Review and submit** bot mencari tombol kirim dengan cakupan lebih
+   luas dan memberi waktu `AUTO_APPLY_SUBMIT_TIMEOUT` detik (default **20**),
+   jadi langkah final ini tidak ikut dibatalkan oleh batas 3 detik.
 3. Lamaran hanya dicatat `applied` **setelah** konfirmasi itu terlihat.
 4. Lowongan **dilewati** (tanpa jeda, langsung lanjut ke berikutnya) bila:
    - lamaran **dialihkan ke situs lain** — baik lewat tombol
      "Lamar di situs perusahaan", tab baru, maupun tab yang sama berpindah
      domain ke ATS perusahaan (Workday, Lever, dll.);
    - alur tidak dikenali dalam `AUTO_APPLY_STEP_TIMEOUT` detik (default **3**);
-   - formulir meminta unggah berkas/pertanyaan wajib yang belum diisi
-     otomatis (`COVER_LETTER`/`RESUME_PATH` kosong), atau pertanyaan pilihan
-     dari perusahaan yang jawabannya tidak boleh ditebak.
+   - formulir meminta unggah berkas **wajib** (`required`) atau pertanyaan
+     wajib yang belum diisi otomatis (`COVER_LETTER`/`RESUME_PATH` kosong),
+     atau pertanyaan pilihan dari perusahaan yang jawabannya tidak boleh
+     ditebak. Bagian "Documents included" yang sifatnya opsional tidak
+     menghalangi pengiriman.
 5. Di akhir sesi muncul daftar lowongan yang dilewati beserta alasannya —
    hanya informasi, tidak perlu Anda kerjakan.
 
@@ -405,7 +412,15 @@ tidak ingin menunggu, set `LOGIN_WAIT=false`.
 
 **Terlalu banyak lowongan dilewati dengan alasan "alur tidak dikenali".**
 Koneksi/laman JobStreet bisa lambat. Naikkan batasnya, mis. `AUTO_APPLY_STEP_TIMEOUT=8`
-di `.env`, lalu jalankan lagi.
+di `.env`, lalu jalankan lagi. Untuk halaman terakhir pakai
+`AUTO_APPLY_SUBMIT_TIMEOUT` (default **20** detik).
+
+**Halaman "Review and submit" tidak terkirim / lowongan dilewati di langkah akhir.**
+Bot sekarang mengenali halaman review lewat URL (`/apply/review`) maupun teks
+halaman, lalu mengklik tombol kirim apa pun yang tersedia (termasuk
+`button[type=submit]`) dengan batas waktu 20 detik. Bila masih gagal, buka folder
+`debug/` di folder program — ada screenshot + HTML halaman saat itu; kirimkan
+`debug/*.png` tersebut agar selector bisa diperbaiki.
 
 **Program masih menunggu Enter saat lowongan dibuka.**
 Berarti mode manual aktif. Pastikan `AUTO_APPLY=true` di `.env` (atau jalankan

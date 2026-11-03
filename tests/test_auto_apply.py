@@ -161,7 +161,9 @@ def test_auto_apply_berhenti_bila_perlu_unggah_berkas():
     driver = FakeDriver()
     driver.elements = {
         APPLY_SELECTORS[0]: [tombol_apply(driver, teks_sukses="")],
-        "input[type='file']": [FakeElement(attrs={"value": ""})],
+        "input[type='file']": [
+            FakeElement(attrs={"value": "", "required": "true"})
+        ],
     }
 
     hasil = AutoApplier(driver).apply({"url": "https://id.jobstreet.com/job/1"})
@@ -314,7 +316,9 @@ def test_auto_apply_tanpa_konfigurasi_tetap_berhenti_aman(monkeypatch):
     driver = FakeDriver()
     driver.elements = {
         APPLY_SELECTORS[0]: [tombol_apply(driver, teks_sukses="")],
-        "input[type='file']": [FakeElement(attrs={"value": ""})],
+        "input[type='file']": [
+            FakeElement(attrs={"value": "", "required": "true"})
+        ],
     }
 
     hasil = AutoApplier(driver).apply({"url": "https://id.jobstreet.com/job/1"})
@@ -379,3 +383,112 @@ def test_auto_apply_dialihkan_setelah_klik():
     assert hasil.status == "manual_required"
     assert "dialihkan ke situs lain" in hasil.reason.lower()
     assert "jobs.workday.com" in hasil.reason
+
+
+def test_unggah_berkas_opsional_tidak_menghalangi():
+    """Bagian "Documents included" punya input file opsional -> jangan blokir."""
+    driver = FakeDriver()
+
+    def klik_kirim():
+        driver.body = "Lamaran Anda telah dikirim"
+
+    driver.elements = {
+        APPLY_SELECTORS[0]: [tombol_apply(driver, teks_sukses="")],
+        "input[type='file']": [FakeElement(attrs={"value": ""})],
+        SUBMIT_SELECTORS[0]: [
+            FakeElement(text="Kirim lamaran", on_click=klik_kirim)
+        ],
+    }
+
+    hasil = AutoApplier(driver).apply({"url": "https://id.jobstreet.com/job/1"})
+
+    assert hasil.applied is True
+
+
+def test_halaman_review_and_submit_dikirim():
+    driver = FakeDriver()
+
+    def ke_halaman_review():
+        driver.current_url = (
+            "https://id.jobstreet.com/job/95549275/apply/review"
+        )
+        driver.elements["button[type='submit']"] = [
+            FakeElement(
+                text="Submit application",
+                on_click=lambda: setattr(
+                    driver, "body", "Lamaran Anda telah dikirim"
+                ),
+            )
+        ]
+
+    driver.elements = {
+        APPLY_SELECTORS[0]: [FakeElement(text="Lamar", on_click=ke_halaman_review)]
+    }
+
+    hasil = AutoApplier(driver).apply(
+        {"url": "https://id.jobstreet.com/job/95549275"}
+    )
+
+    assert hasil.applied is True
+    assert hasil.status == "applied"
+
+
+def test_halaman_review_tanpa_tombol_kirim_dilewati(monkeypatch):
+    monkeypatch.setattr(config, "auto_apply_submit_timeout", 20)
+    monkeypatch.setattr(config, "auto_apply_debug", False)
+
+    jam = {"t": 100.0}
+    monkeypatch.setattr(auto_apply.time, "time", lambda: jam["t"])
+    monkeypatch.setattr(
+        auto_apply.time,
+        "sleep",
+        lambda detik=0: jam.__setitem__("t", jam["t"] + detik),
+    )
+
+    driver = FakeDriver()
+
+    def ke_halaman_review():
+        driver.current_url = (
+            "https://id.jobstreet.com/job/95549275/apply/review"
+        )
+
+    driver.elements = {
+        APPLY_SELECTORS[0]: [FakeElement(text="Lamar", on_click=ke_halaman_review)]
+    }
+
+    hasil = AutoApplier(driver).apply(
+        {"url": "https://id.jobstreet.com/job/95549275"}
+    )
+
+    assert hasil.applied is False
+    assert hasil.status == "manual_required"
+    assert "review and submit" in hasil.reason.lower()
+
+
+def test_halaman_review_tombol_kirim_tanpa_penanda():
+    """Tombol "Kirim" biasa di halaman review tetap harus diklik."""
+    driver = FakeDriver()
+
+    def ke_halaman_review():
+        driver.current_url = (
+            "https://id.jobstreet.com/job/95549275/apply/review"
+        )
+        driver.elements["button"] = [
+            FakeElement(text="Kembali"),
+            FakeElement(
+                text="Kirim",
+                on_click=lambda: setattr(
+                    driver, "body", "Lamaran Anda telah dikirim"
+                ),
+            ),
+        ]
+
+    driver.elements = {
+        APPLY_SELECTORS[0]: [FakeElement(text="Lamar", on_click=ke_halaman_review)]
+    }
+
+    hasil = AutoApplier(driver).apply(
+        {"url": "https://id.jobstreet.com/job/95549275"}
+    )
+
+    assert hasil.applied is True

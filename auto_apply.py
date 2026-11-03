@@ -58,7 +58,11 @@ SUCCESS_TEXTS = (
     "lamaran terkirim",
     "terima kasih telah melamar",
     "anda telah melamar",
+    "lamaran telah dikirim",
+    "lamaranmu telah dikirim",
+    "lamaran kamu telah dikirim",
     "application submitted",
+    "your application has been submitted",
     "you have successfully applied",
     "successfully applied",
     "application sent",
@@ -101,6 +105,8 @@ class AutoApplier:
         self.driver = driver
         self.wait = wait
         self.step_timeout = config.auto_apply_step_timeout
+        self.submit_timeout = config.auto_apply_submit_timeout
+        self.debug_dumps = 0
 
     # ------------------------------------------------------------------
     # Utilitas elemen
@@ -220,6 +226,92 @@ class AutoApplier:
         except Exception:
             return ""
 
+    def _is_review_page(self) -> bool:
+        """Halaman terakhir "Review and submit"."""
+        try:
+            url = (self.driver.current_url or "").lower()
+        except Exception:
+            url = ""
+
+        if "/apply/review" in url or "review-and-submit" in url:
+            return True
+
+        body = self._body_text()
+        return any(
+            text in body
+            for text in ("review and submit", "review & submit",
+                         "tinjau dan kirim")
+        )
+
+    def _dump_debug(self, job: dict):
+        """Simpan HTML + screenshot agar selector mudah diperbaiki."""
+        if not config.auto_apply_debug or self.debug_dumps >= 5:
+            return
+
+        try:
+            folder = Path("debug")
+            folder.mkdir(exist_ok=True)
+
+            stamp = time.strftime("%Y%m%d-%H%M%S")
+            nama = f"{stamp}-{job.get('job_id') or 'lowongan'}"
+            dasar = folder / nama
+
+            try:
+                url = self.driver.current_url or ""
+            except Exception:
+                url = ""
+
+            (dasar.with_suffix(".txt")).write_text(
+                f"URL: {url}\nJob: {job.get('title') or '-'}\n",
+                encoding="utf-8",
+            )
+            (dasar.with_suffix(".html")).write_text(
+                self.driver.page_source or "", encoding="utf-8"
+            )
+            self.driver.save_screenshot(str(dasar.with_suffix(".png")))
+            self.debug_dumps += 1
+            console.print(
+                f"[dim]Halaman tidak dikenali; debug disimpan di "
+                f"debug/{nama}.html[/]"
+            )
+        except Exception:
+            pass
+
+    def _find_submit_button(self, review_page: bool = False):
+        """Cari tombol kirim. Di halaman review, cakupannya lebih luas."""
+        button = self._find_clickable(SUBMIT_SELECTORS, SUBMIT_TEXTS)
+        if button is not None:
+            return button
+
+        if not review_page:
+            return None
+
+        negatif = ("back", "kembali", "batal", "cancel", "hapus", "delete")
+
+        # Tombol kirim di halaman review hampir selalu bertipe submit.
+        for element in self._find_all("button[type='submit']"):
+            if not self._visible(element) or not self._enabled(element):
+                continue
+            if any(kata in self._text(element) for kata in negatif):
+                continue
+            return element
+
+        # Hindari kata "lamar"/"apply": di halaman review tombol itu bisa
+        # berarti memulai ulang lamaran.
+        kata_kunci = ("submit", "kirim", "send application")
+
+        for selector in ("button", "[role='button']", "a"):
+            for element in self._find_all(selector):
+                if not self._visible(element) or not self._enabled(element):
+                    continue
+                label = self._text(element)
+                if any(kata in label for kata in negatif):
+                    continue
+                if any(kata in label for kata in kata_kunci):
+                    return element
+
+        return None
+
     def _is_login_page(self) -> bool:
         try:
             url = (self.driver.current_url or "").lower()
@@ -279,24 +371,37 @@ class AutoApplier:
 
         return terisi
 
+    @staticmethod
+    def _is_required(element) -> bool:
+        """True bila elemen benar-benar wajib (termasuk `required` kosong)."""
+        try:
+            if (element.get_attribute("aria-required") or "") == "true":
+                return True
+            return element.get_attribute("required") is not None
+        except Exception:
+            return False
+
     def _blocker(self) -> str:
         """Alasan alur tidak boleh dilanjutkan otomatis ("" = aman)."""
         for element in self._find_all("input[type='file']"):
             if not self._visible(element):
                 continue
+
+            # Unggah berkas biasanya OPSIONAL ("Documents included").
+            # Hanya anggap penghalang bila memang wajib.
             value = (element.get_attribute("value") or "").strip()
-            if not value:
+
+            if self._is_required(element) and not value:
                 return (
-                    "Alur lamaran meminta unggah berkas "
+                    "Alur lamaran mewajibkan unggah berkas "
                     "(isi RESUME_PATH di .env agar otomatis)"
                 )
 
         for element in self._find_all("textarea"):
             if not self._visible(element):
                 continue
-            required = element.get_attribute("required")
             value = (element.get_attribute("value") or "").strip()
-            if required and not value:
+            if self._is_required(element) and not value:
                 return (
                     "Ada pertanyaan/cover letter wajib "
                     "(isi COVER_LETTER di .env agar otomatis)"
@@ -457,8 +562,13 @@ class AutoApplier:
                     f"({self._external_host()}) — dilewati",
                 )
 
-            deadline = time.time() + self.step_timeout
+            review_page = self._is_review_page()
+            deadline = time.time() + (
+                self.submit_timeout if review_page else self.step_timeout
+            )
             sudah_klik_kirim = False
+            percobaan_kirim = 0
+            kirim_terakhir = 0.0
 
             while time.time() < deadline:
                 time.sleep(0.4)
@@ -474,24 +584,49 @@ class AutoApplier:
                 if self._is_success():
                     return ApplyResult(True, "applied", "Terkirim otomatis")
 
+                # Halaman "Review and submit" sering muncul setelah beberapa
+                # detik; beri waktu lebih panjang untuk mengenalinya.
+                if not review_page and self._is_review_page():
+                    review_page = True
+                    deadline = max(
+                        deadline, time.time() + self.submit_timeout
+                    )
+
                 # Isi otomatis cover letter / unggah CV bila dikonfigurasi.
                 self._autofill()
 
-                blocker = self._blocker()
-                if blocker:
-                    return ApplyResult(False, "manual_required", blocker)
+                if not review_page:
+                    blocker = self._blocker()
+                    if blocker:
+                        # Pastikan bukan halaman yang masih memuat.
+                        time.sleep(0.4)
+                        if self._blocker() == blocker:
+                            self._dump_debug(job)
+                            return ApplyResult(
+                                False, "manual_required", blocker
+                            )
 
-                submit_button = self._find_clickable(
-                    SUBMIT_SELECTORS, SUBMIT_TEXTS
-                )
+                submit_button = self._find_submit_button(review_page)
                 if submit_button is not None:
-                    if not self._click(submit_button):
-                        return ApplyResult(
-                            False, "error", "Tombol kirim lamaran gagal diklik"
-                        )
-                    sudah_klik_kirim = True
-                    deadline = time.time() + self.step_timeout
-                    continue
+                    # Hindari klik ganda: beri jeda 2 detik sebelum mencoba
+                    # lagi bila tombol masih terlihat (halaman lambat).
+                    boleh_klik = (
+                        not sudah_klik_kirim
+                        or time.time() - kirim_terakhir >= 2
+                    )
+                    if boleh_klik and percobaan_kirim < 3:
+                        if not self._click(submit_button):
+                            return ApplyResult(
+                                False,
+                                "error",
+                                "Tombol kirim lamaran gagal diklik",
+                            )
+                        sudah_klik_kirim = True
+                        percobaan_kirim += 1
+                        kirim_terakhir = time.time()
+                        review_page = True
+                        deadline = time.time() + self.submit_timeout
+                        continue
 
                 continue_button = self._find_clickable(
                     CONTINUE_SELECTORS, CONTINUE_TEXTS
@@ -507,13 +642,23 @@ class AutoApplier:
             if self._is_success():
                 return ApplyResult(True, "applied", "Terkirim otomatis")
 
+            self._dump_debug(job)
+
             if sudah_klik_kirim:
                 return ApplyResult(
                     False,
                     "manual_required",
                     "Tombol Kirim sudah diklik, tetapi konfirmasi tidak "
-                    f"muncul dalam {self.step_timeout} detik "
+                    f"muncul dalam {self.submit_timeout} detik "
                     "(periksa riwayat lamaran di JobStreet)",
+                )
+
+            if review_page:
+                return ApplyResult(
+                    False,
+                    "manual_required",
+                    "Halaman Review and submit tidak menampilkan tombol "
+                    "kirim yang dikenali",
                 )
 
             return ApplyResult(

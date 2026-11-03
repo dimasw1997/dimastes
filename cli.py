@@ -64,6 +64,10 @@ def show_config():
             "Batas lamaran otomatis/sesi",
             str(config.auto_apply_max_per_session),
         )
+        table.add_row(
+            "Waktu kirim di halaman review",
+            f"{config.auto_apply_submit_timeout} detik",
+        )
     table.add_row("File database", config.db_path)
     table.add_row(
         "Notifikasi Telegram",

@@ -122,6 +122,13 @@ class Config:
     auto_apply_step_timeout: int = max(
         1, _int_setting("AUTO_APPLY_STEP_TIMEOUT", 3)
     )
+    # Halaman "Review and submit" butuh waktu lebih untuk memuat tombol kirim
+    # dan menampilkan konfirmasi.
+    auto_apply_submit_timeout: int = max(
+        3, _int_setting("AUTO_APPLY_SUBMIT_TIMEOUT", 20)
+    )
+    # Simpan HTML + screenshot saat alur tidak dikenali (maks 5 berkas).
+    auto_apply_debug: bool = _bool_setting("AUTO_APPLY_DEBUG", True)
 
     base_url: str = "https://id.jobstreet.com"
     login_url: str = "https://id.jobstreet.com"

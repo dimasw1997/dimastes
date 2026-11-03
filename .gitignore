@@ -22,3 +22,6 @@ jobstreet_auto.db
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Berkas debug otomatis (HTML/screenshot halaman JobStreet)
+debug/
