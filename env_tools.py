@@ -155,8 +155,10 @@ def parse_pasangan(daftar) -> dict:
                 angka = int(nilai)
             except ValueError:
                 raise ValueError(f"{kunci} harus berupa angka: {nilai}")
-            if angka < 1:
-                raise ValueError(f"{kunci} minimal 1")
+            if angka < 0:
+                raise ValueError(
+                    f"{kunci} minimal 0 (0 = tanpa batas)"
+                )
             nilai = str(angka)
 
         hasil[kunci] = nilai

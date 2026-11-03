@@ -122,3 +122,13 @@ def test_login_habis_menghentikan_pelamaran(siapkan, monkeypatch):
     # Hanya satu lamaran dicoba; sisanya dihentikan.
     assert siapkan.bot.dilamar == ["C"]
     assert siapkan.stop_requested is True
+
+
+def test_batas_nol_berarti_tanpa_batas(siapkan, monkeypatch):
+    monkeypatch.setattr(config, "collect_before_apply", True)
+    monkeypatch.setattr(config, "max_apply_per_day", 0)
+    monkeypatch.setattr(config, "auto_apply_max_per_session", 0)
+
+    siapkan._kumpulkan_lalu_lamar()
+
+    assert siapkan.bot.dilamar == ["C", "B", "A"]

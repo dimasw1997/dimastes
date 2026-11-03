@@ -120,7 +120,7 @@ cp .env.example .env
 | `BLACKLIST_COMPANIES` | kosong | Perusahaan yang tidak ingin dilamar (dipisah koma, cocok longgar) |
 | `EXCLUDE_KEYWORDS` | `principal,director,head,senior,lead` | Kata yang membuat judul otomatis ditolak |
 | `STRICT_LOCATION` | `false` | `true` = tolak lowongan yang lokasinya di luar `LOCATION` |
-| `MAX_APPLY_PER_DAY` | `500` | Batas lamaran tercatat per hari |
+| `MAX_APPLY_PER_DAY` | `0` | Batas lamaran per hari; `0` = tanpa batas |
 | `DELAY_BETWEEN_APPLY` | `3` | Jeda (detik) antar lowongan |
 | `MAX_PAGES` | `3` | Jumlah halaman hasil pencarian per kata kunci |
 | `HEADLESS_MODE` | `false` | `true` = Chrome tanpa jendela (tidak cocok untuk tinjau manual) |
@@ -137,7 +137,7 @@ cp .env.example .env
 | `AUTO_APPLY` | `true` | Kirim lamaran otomatis; pakai `run --manual` untuk meninjau sendiri |
 | `COVER_LETTER` | kosong | Teks cover letter/pesan yang diisi otomatis |
 | `RESUME_PATH` | kosong | Path berkas CV untuk unggah otomatis |
-| `AUTO_APPLY_MAX_PER_SESSION` | `500` | Batas lamaran otomatis per sesi |
+| `AUTO_APPLY_MAX_PER_SESSION` | `0` | Batas lamaran per sesi; `0` = tanpa batas |
 | `AUTO_APPLY_STEP_TIMEOUT` | `3` | Batas detik mengenali tiap langkah; lewat itu lowongan dilewati |
 | `AUTO_ANSWER_QUESTIONS` | `true` | Jawab otomatis pertanyaan dropdown (pengalaman, gaji, pendidikan) |
 | `EXPECTED_SALARY` | `5000000` | Gaji yang diharapkan (kosong = pertanyaan gaji dilewati) |
@@ -179,7 +179,7 @@ python cli.py repair
 python cli.py perbarui-env
 
 # 5c. Ubah nilai di .env tanpa membuka editor
-python cli.py set-env MAX_APPLY_PER_DAY=500 AUTO_APPLY_MAX_PER_SESSION=500
+python cli.py set-env MAX_APPLY_PER_DAY=0 AUTO_APPLY_MAX_PER_SESSION=0
 
 # 6. Uji alur lamaran dengan halaman palsu (tanpa Chrome, tanpa internet)
 python cli.py simulasi
@@ -434,10 +434,17 @@ meninjau sendiri.
 5. Di akhir sesi muncul daftar lowongan yang dilewati beserta alasannya —
    hanya informasi, tidak perlu Anda kerjakan.
 
-Batas pengaman: `MAX_APPLY_PER_DAY` (harian, bawaan **500**),
-`AUTO_APPLY_MAX_PER_SESSION`
-(per sesi), dan `DELAY_BETWEEN_APPLY` (jeda antar lamaran). Jangan
-menaikkannya terlalu tinggi.
+Batas pengaman: `MAX_APPLY_PER_DAY` (harian, bawaan **0** = tanpa batas),
+`AUTO_APPLY_MAX_PER_SESSION` (per sesi, bawaan **0** = tanpa batas), dan
+`DELAY_BETWEEN_APPLY` (jeda antar lamaran, tetap **3** detik agar tidak
+terlihat seperti bot).
+
+Dengan kedua batas `0`, sesi berjalan sampai lowongan habis atau Anda
+menghentikannya (Ctrl+C). Untuk memasang batas lagi:
+
+```bash
+python cli.py set-env MAX_APPLY_PER_DAY=100 AUTO_APPLY_MAX_PER_SESSION=50
+```
 
 ### Versi ringan tanpa Selenium
 

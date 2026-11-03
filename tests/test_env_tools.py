@@ -90,8 +90,11 @@ def test_parse_pasangan_validasi():
     with pytest.raises(ValueError):
         parse_pasangan(["MAX_APPLY_PER_DAY=banyak"])
 
+    # 0 berarti tanpa batas, jadi tetap sah.
+    assert parse_pasangan(["MAX_APPLY_PER_DAY=0"]) == {"MAX_APPLY_PER_DAY": "0"}
+
     with pytest.raises(ValueError):
-        parse_pasangan(["MAX_APPLY_PER_DAY=0"])
+        parse_pasangan(["MAX_APPLY_PER_DAY=-1"])
 
 
 def test_atur_nilai_mengubah_dan_menambah(tmp_path):

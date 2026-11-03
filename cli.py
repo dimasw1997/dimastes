@@ -194,7 +194,14 @@ def show_config():
             else "Per kata kunci (mulai dari posting terbaru)"
         ),
     )
-    table.add_row("Batas lamaran per hari", str(config.max_apply_per_day))
+    table.add_row(
+        "Batas lamaran per hari",
+        (
+            str(config.max_apply_per_day)
+            if config.max_apply_per_day > 0
+            else "Tanpa batas"
+        ),
+    )
     table.add_row("Jeda antar-lowongan", f"{config.delay_between_apply} detik")
     table.add_row("Mode browser", "Headless" if config.headless else "Terlihat")
     table.add_row(
@@ -204,7 +211,11 @@ def show_config():
     if config.auto_apply:
         table.add_row(
             "Batas lamaran otomatis/sesi",
-            str(config.auto_apply_max_per_session),
+            (
+                str(config.auto_apply_max_per_session)
+                if config.auto_apply_max_per_session > 0
+                else "Tanpa batas"
+            ),
         )
         table.add_row(
             "Waktu kirim di halaman review",

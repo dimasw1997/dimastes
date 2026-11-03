@@ -104,7 +104,10 @@ class AutoApplyEngine:
         terkumpul = []
 
         for page in range(1, config.max_pages + 1):
-            if db.get_today_apply_count() >= config.max_apply_per_day:
+            if (
+                config.max_apply_per_day > 0
+                and db.get_today_apply_count() >= config.max_apply_per_day
+            ):
                 console.print(
                     f"[bold yellow]Batas harian tercapai "
                     f"({config.max_apply_per_day}).[/]"
@@ -213,12 +216,16 @@ class AutoApplyEngine:
 
     def _lamar(self, job: dict) -> bool:
         """Lamar satu lowongan. False = seluruh sesi harus berhenti."""
-        if db.get_today_apply_count() >= config.max_apply_per_day:
+        if (
+            config.max_apply_per_day > 0
+            and db.get_today_apply_count() >= config.max_apply_per_day
+        ):
             console.print("[bold yellow]Batas lamaran harian tercapai.[/]")
             return False
 
         if (
             config.auto_apply
+            and config.auto_apply_max_per_session > 0
             and self.session_stats["applied"]
             >= config.auto_apply_max_per_session
         ):
@@ -392,7 +399,14 @@ class AutoApplyEngine:
                 else "Per kata kunci (mulai dari posting terbaru)"
             ),
         )
-        table.add_row("Batas lamaran per hari", str(config.max_apply_per_day))
+        table.add_row(
+            "Batas lamaran per hari",
+            (
+                str(config.max_apply_per_day)
+                if config.max_apply_per_day > 0
+                else "Tanpa batas"
+            ),
+        )
         table.add_row("Jeda antar-lowongan", f"{config.delay_between_apply} detik")
         table.add_row(
             "Mode browser",
@@ -406,7 +420,11 @@ class AutoApplyEngine:
         if config.auto_apply:
             table.add_row(
                 "Batas lamaran otomatis/sesi",
-                str(config.auto_apply_max_per_session),
+                (
+                    str(config.auto_apply_max_per_session)
+                    if config.auto_apply_max_per_session > 0
+                    else "Tanpa batas"
+                ),
             )
         table.add_row(
             "Notifikasi Telegram",
