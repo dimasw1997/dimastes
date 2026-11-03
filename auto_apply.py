@@ -11,6 +11,7 @@ yang harus dijawab), proses dihentikan dan lowongan dikembalikan sebagai
 
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from rich.console import Console
@@ -213,6 +214,42 @@ class AutoApplier:
         body = self._body_text()
         return any(text in body for text in SUCCESS_TEXTS)
 
+    def _autofill(self) -> bool:
+        """Isi cover letter dan unggah CV bila formulir memintanya.
+
+        Hanya berjalan bila COVER_LETTER / RESUME_PATH diisi di .env.
+        """
+        terisi = False
+
+        if config.cover_letter:
+            for element in self._find_all("textarea"):
+                if not self._visible(element):
+                    continue
+                if (element.get_attribute("value") or "").strip():
+                    continue
+                try:
+                    element.send_keys(config.cover_letter)
+                    terisi = True
+                except Exception:
+                    continue
+
+        if config.resume_path:
+            berkas = Path(config.resume_path).expanduser()
+
+            if berkas.is_file():
+                for element in self._find_all("input[type='file']"):
+                    if not self._visible(element):
+                        continue
+                    if (element.get_attribute("value") or "").strip():
+                        continue
+                    try:
+                        element.send_keys(str(berkas))
+                        terisi = True
+                    except Exception:
+                        continue
+
+        return terisi
+
     def _blocker(self) -> str:
         """Alasan alur tidak boleh dilanjutkan otomatis ("" = aman)."""
         for element in self._find_all("input[type='file']"):
@@ -220,7 +257,10 @@ class AutoApplier:
                 continue
             value = (element.get_attribute("value") or "").strip()
             if not value:
-                return "Alur lamaran meminta unggah berkas"
+                return (
+                    "Alur lamaran meminta unggah berkas "
+                    "(isi RESUME_PATH di .env agar otomatis)"
+                )
 
         for element in self._find_all("textarea"):
             if not self._visible(element):
@@ -228,7 +268,10 @@ class AutoApplier:
             required = element.get_attribute("required")
             value = (element.get_attribute("value") or "").strip()
             if required and not value:
-                return "Ada pertanyaan/cover letter yang wajib diisi"
+                return (
+                    "Ada pertanyaan/cover letter wajib "
+                    "(isi COVER_LETTER di .env agar otomatis)"
+                )
 
         for element in self._find_all("select[required]"):
             if not self._visible(element):
@@ -359,6 +402,9 @@ class AutoApplier:
 
                 if self._is_success():
                     return ApplyResult(True, "applied", "Terkirim otomatis")
+
+                # Isi otomatis cover letter / unggah CV bila dikonfigurasi.
+                self._autofill()
 
                 blocker = self._blocker()
                 if blocker:

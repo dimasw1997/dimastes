@@ -40,6 +40,10 @@ class FakeElement:
         if self._on_click:
             self._on_click()
 
+    def send_keys(self, value):
+        self._attrs["value"] = value
+        self.text = str(value)
+
 
 class FakeDriver:
     def __init__(self, elements=None, body="", url="https://id.jobstreet.com/job/1"):
@@ -247,3 +251,71 @@ def test_auto_apply_berhenti_bila_dialihkan_ke_signin():
     )
 
     assert hasil.status == "login_required"
+
+
+def test_auto_apply_isi_cover_letter_otomatis(monkeypatch):
+    monkeypatch.setattr(config, "cover_letter", "Saya siap bergabung.")
+    monkeypatch.setattr(config, "resume_path", "")
+
+    driver = FakeDriver()
+
+    def klik_kirim():
+        driver.body = "Lamaran Anda telah dikirim"
+
+    textarea = FakeElement(attrs={"value": "", "required": "true"})
+    driver.elements = {
+        APPLY_SELECTORS[0]: [tombol_apply(driver, teks_sukses="")],
+        "textarea": [textarea],
+        SUBMIT_SELECTORS[0]: [
+            FakeElement(text="Kirim lamaran", on_click=klik_kirim)
+        ],
+    }
+
+    hasil = AutoApplier(driver).apply({"url": "https://id.jobstreet.com/job/1"})
+
+    assert hasil.applied is True
+    assert textarea.get_attribute("value") == "Saya siap bergabung."
+
+
+def test_auto_apply_unggah_cv_otomatis(monkeypatch, tmp_path):
+    cv = tmp_path / "cv.pdf"
+    cv.write_text("contoh", encoding="utf-8")
+
+    monkeypatch.setattr(config, "cover_letter", "")
+    monkeypatch.setattr(config, "resume_path", str(cv))
+
+    driver = FakeDriver()
+
+    def klik_kirim():
+        driver.body = "Application submitted"
+
+    berkas = FakeElement(attrs={"value": ""})
+    driver.elements = {
+        APPLY_SELECTORS[0]: [tombol_apply(driver, teks_sukses="")],
+        "input[type='file']": [berkas],
+        SUBMIT_SELECTORS[0]: [
+            FakeElement(text="Kirim lamaran", on_click=klik_kirim)
+        ],
+    }
+
+    hasil = AutoApplier(driver).apply({"url": "https://id.jobstreet.com/job/1"})
+
+    assert hasil.applied is True
+    assert berkas.get_attribute("value") == str(cv)
+
+
+def test_auto_apply_tanpa_konfigurasi_tetap_berhenti_aman(monkeypatch):
+    monkeypatch.setattr(config, "cover_letter", "")
+    monkeypatch.setattr(config, "resume_path", "")
+
+    driver = FakeDriver()
+    driver.elements = {
+        APPLY_SELECTORS[0]: [tombol_apply(driver, teks_sukses="")],
+        "input[type='file']": [FakeElement(attrs={"value": ""})],
+    }
+
+    hasil = AutoApplier(driver).apply({"url": "https://id.jobstreet.com/job/1"})
+
+    assert hasil.applied is False
+    assert hasil.status == "manual_required"
+    assert "RESUME_PATH" in hasil.reason

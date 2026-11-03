@@ -95,6 +95,13 @@ class Config:
     # false = jangan menunggu Enter saat login (untuk sesi terjadwal).
     login_wait: bool = _bool_setting("LOGIN_WAIT", True)
 
+    # --- Isian lamaran otomatis ---
+    # Teks yang dipakai bila formulir meminta cover letter / pesan.
+    # Gunakan \n untuk baris baru.
+    cover_letter: str = os.getenv("COVER_LETTER", "").replace("\\n", "\n").strip()
+    # Berkas CV yang diunggah otomatis bila formulir meminta unggah.
+    resume_path: str = os.getenv("RESUME_PATH", "").strip()
+
     # --- Lamaran otomatis ---
     # Default mati; nyalakan lewat AUTO_APPLY=true di .env atau `run --auto`.
     auto_apply: bool = _bool_setting("AUTO_APPLY", False)

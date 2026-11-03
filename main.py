@@ -342,7 +342,7 @@ class AutoApplyEngine:
             "Sudah dilamar (dilewati)", str(self.session_stats["already"])
         )
         table.add_row(
-            "Perlu dilamar manual", str(self.session_stats["manual"])
+            "Dilewati (butuh isian khusus)", str(self.session_stats["manual"])
         )
         table.add_row(
             "Dilewati / tidak dikonfirmasi", str(self.session_stats["skipped"])
@@ -363,7 +363,8 @@ class AutoApplyEngine:
 
         if self.manual_jobs:
             console.print(
-                "\n[bold yellow]Lowongan yang perlu Anda lamar manual:[/]"
+                "\n[bold yellow]Lowongan yang dilewati otomatis "
+                "(tidak perlu Anda kerjakan):[/]"
             )
             for job, reason in self.manual_jobs:
                 console.print(

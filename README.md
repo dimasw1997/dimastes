@@ -38,6 +38,9 @@ di browser.
   dengan pengaman dan batas per sesi.
 - **Sesi login tersimpan** di profil Chrome khusus, jadi login hanya sekali
   (tidak setiap kali menjalankan).
+- **Mode otomatis adalah default**: `python cli.py run` langsung melamar
+  otomatis. Isian cover letter dan unggah CV juga otomatis bila
+  `COVER_LETTER`/`RESUME_PATH` diisi.
 - Mencatat lamaran yang sudah dikirim beserta batas harian.
 - Blacklist perusahaan dan notifikasi Telegram (opsional).
 - Laporan singkat di akhir sesi: `python cli.py stats`, `history`, `config`.
@@ -125,7 +128,9 @@ cp .env.example .env
 | `USE_PROFILE` | `true` | Simpan sesi login di profil Chrome khusus |
 | `CHROME_PROFILE_DIR` | `~/.dimastes/chrome-profile` | Lokasi profil Chrome |
 | `LOGIN_WAIT` | `true` | `false` = jangan tunggu Enter; berhenti bila belum login |
-| `AUTO_APPLY` | `false` | `true` = kirim lamaran otomatis (bisa juga `run --auto`) |
+| `AUTO_APPLY` | `true` | Kirim lamaran otomatis; pakai `run --manual` untuk meninjau sendiri |
+| `COVER_LETTER` | kosong | Teks cover letter/pesan yang diisi otomatis |
+| `RESUME_PATH` | kosong | Path berkas CV untuk unggah otomatis |
 | `AUTO_APPLY_MAX_PER_SESSION` | `25` | Batas lamaran otomatis per sesi |
 | `AUTO_APPLY_STEP_TIMEOUT` | `30` | Detik maksimal menunggu tiap langkah alur lamaran |
 | `DB_PATH` | `jobstreet_auto.db` | Lokasi file database |
@@ -136,11 +141,11 @@ cp .env.example .env
 # 1. Lihat konfigurasi yang benar-benar terbaca
 python cli.py config
 
-# 2a. Jalankan pencarian + tinjau manual (default)
+# 2a. Jalankan pencarian + kirim lamaran otomatis (default)
 python cli.py run
 
-# 2b. Jalankan pencarian + kirim lamaran otomatis
-python cli.py run --auto
+# 2b. Meninjau sendiri (tanpa mengirim otomatis)
+python cli.py run --manual
 
 # Hanya lowongan 3 hari terakhir, 5 halaman per kata kunci
 python cli.py run --auto --max-age-days 3 --max-pages 5
@@ -233,7 +238,28 @@ digabung dan diurutkan dari yang terbaru. Karena itu:
   bisa kosong. Coba `--locations "Bandung,Cikarang,Bekasi,..."` atau cek
   sendiri di situs: `https://id.jobstreet.com/jobs?where=Jababeka`.
 
-### Mode otomatis (`run --auto`)
+### Isian lamaran otomatis
+
+Bila formulir meminta cover letter atau berkas CV, isi dulu di `.env`:
+
+```
+COVER_LETTER=Saya tertarik pada posisi ini dan siap bergabung.\nTerima kasih.
+RESUME_PATH=C:\Users\NAMA\Documents\cv.pdf
+```
+
+Program akan mengisi textarea kosong dan mengunggah berkas tersebut secara
+otomatis, lalu melanjutkan klik Kirim lamaran. Tanpa konfigurasi ini,
+lowongan yang meminta isian khusus akan **dilewati** (bukan diminta dikerjakan
+manual).
+
+Pertanyaan pilihan wajib dari perusahaan (radio/select) **tidak** ditebak
+jawabannya, karena salah jawab lebih merugikan daripada tidak melamar.
+Lowongan seperti itu dilewati otomatis dan hanya dicatat di akhir sesi.
+
+### Mode otomatis (default)
+
+`python cli.py run` sudah otomatis. Gunakan `run --manual` hanya bila ingin
+meninjau sendiri.
 
 1. Bot membuka halaman lowongan, lalu mencari tombol **Lamar**.
 2. Bila muncul langkah berikutnya (**Lanjutkan/Kirim lamaran**), bot menekan
@@ -287,16 +313,18 @@ python buka_pencarian.py --locations "Bandung,Jakarta,Bekasi" --max-tabs 12
 | Mencari lowongan di 7 kota | otomatis |
 | Urut dari posting terbaru | otomatis |
 | Menyaring (senior, gaji, pengalaman, lokasi) | otomatis |
-| Login JobStreet | **sekali saja**, lalu tersimpan |
+| Login JobStreet | **sekali saja**, lalu tersimpan — satu-satunya langkah yang melibatkan Anda |
 | Klik Lamar → Lanjutkan → Kirim | otomatis (`--auto`) |
 | Lowongan lewat situs perusahaan (ATS) | **manual** — JobStreet mengalihkan keluar |
 | Lowongan berlabel "You applied"/sudah pernah dilamar | otomatis dilewati (tidak ditampilkan) |
-| Lowongan yang minta unggah berkas/cover letter/pertanyaan | **manual** — bot tidak menebak jawaban |
+| Lowongan yang minta cover letter/unggah CV | otomatis diisi bila `COVER_LETTER`/`RESUME_PATH` disetel; jika tidak, dilewati otomatis |
+| Pertanyaan pilihan wajib dari perusahaan | dilewati otomatis (jawaban tidak ditebak) |
 | Captcha/OTP saat login | **manual** (tidak bisa dilewati) |
 | Menaikkan batas harian, memilih kota | Anda (lewat `.env`/flag) |
 
-Lowongan yang tidak bisa otomatis dikumpulkan di daftar
-"perlu Anda lamar manual" di akhir sesi, lengkap dengan tautannya.
+Lowongan yang tidak bisa diproses otomatis hanya **dicatat** di akhir sesi
+(lengkap dengan tautan) — Anda tidak perlu mengerjakan apa pun agar sesi
+selesai.
 
 ## Menjalankan test
 
@@ -339,6 +367,10 @@ tersebut. Bila labelnya tidak terdeteksi, jalankan mode manual sekali dan
 kirimkan potongan HTML kartunya agar selector
 `APPLIED_CARD_SELECTORS`/`APPLIED_CARD_TEXTS` di `scraper.py` disesuaikan.
 Lowongan yang sudah tercatat di database tetap dilewati walau tanpa label.
+
+**Program masih menunggu Enter saat lowongan dibuka.**
+Berarti mode manual aktif. Pastikan `AUTO_APPLY=true` di `.env` (atau jalankan
+`run --auto`). Di mode otomatis tidak ada permintaan Enter.
 
 **Semua lowongan masuk "perlu dilamar manual".**
 Penyebab yang paling sering: lowongan memakai "Lamar di situs perusahaan",
