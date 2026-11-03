@@ -62,6 +62,7 @@ class JobStreetBot:
     def __init__(self):
         self.driver = None
         self.wait = None
+        self.login_expired = False
 
     # ------------------------------------------------------------------
     # Browser
@@ -121,8 +122,29 @@ class JobStreetBot:
         self.wait = WebDriverWait(self.driver, 20)
         console.print("[bold green]Chrome siap.[/]")
 
+    def _has_session_cookie(self) -> bool:
+        """Ada cookie sesi JobStreet? Dipakai sebagai bukti sudah login."""
+        try:
+            cookies = self.driver.get_cookies() or []
+        except Exception:
+            return False
+
+        penanda = ("session", "seeker", "auth", "token", "logged")
+
+        for cookie in cookies:
+            name = str(cookie.get("name", "")).lower()
+            domain = str(cookie.get("domain", "")).lower()
+
+            if "jobstreet" not in domain:
+                continue
+
+            if any(kata in name for kata in penanda):
+                return True
+
+        return False
+
     def _login_status(self) -> Optional[bool]:
-        """True = sudah login, False = ada tombol sign in, None = tidak pasti."""
+        """True = sudah login, False = belum, None = tidak pasti."""
         for selector in (
             "a[data-automation='signIn']",
             "button[data-automation='signIn']",
@@ -146,6 +168,11 @@ class JobStreetBot:
                 for element in self._find_elements(selector)
             ):
                 return True
+
+        # Beberapa halaman tidak menampilkan menu akun secara eksplisit;
+        # cookie sesi yang masih ada cukup jadi bukti.
+        if self._has_session_cookie():
+            return True
 
         return None
 
@@ -188,7 +215,10 @@ class JobStreetBot:
                 )
                 return False
 
-            console.print("\n[bold cyan]Silakan login secara manual di jendela Chrome.[/]")
+            console.print(
+                "\n[bold cyan]Sesi login belum ada. Silakan login sendiri di "
+                "jendela Chrome (program tidak meminta email/password).[/]"
+            )
 
             if config.headless:
                 console.print(
@@ -601,6 +631,14 @@ class JobStreetBot:
 
         elif result.status == "already_applied":
             self._record(job_id, "already_applied", result.reason)
+
+        elif result.status == "login_required":
+            self._record(job_id, "error", result.reason)
+            self.login_expired = True
+            console.print(
+                "[bold red]Sesi login JobStreet sudah habis. Berhenti; "
+                "jalankan sekali lagi tanpa --no-login-wait untuk login.[/]"
+            )
 
         elif result.status == "manual_required":
             self._record(job_id, "manual_required", result.reason)

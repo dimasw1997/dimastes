@@ -39,8 +39,9 @@ _MAX_PAGES = max(1, _int_setting("MAX_PAGES", 3))
 
 @dataclass
 class Config:
-    email: str = os.getenv("JOBSTREET_EMAIL", "")
-    password: str = os.getenv("JOBSTREET_PASSWORD", "")
+    # Catatan: alat ini TIDAK pernah meminta/menyimpan email & password
+    # JobStreet. Login dilakukan sendiri di Chrome dan sesinya disimpan
+    # pada profil Chrome (USE_PROFILE).
 
     keywords: list[str] = field(default_factory=lambda: _list_setting(
         "KEYWORDS",

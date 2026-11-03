@@ -175,6 +175,10 @@ Jadi:
 3. Sesi disimpan. Sesi berikutnya program mendeteksi sudah login dan
    **tidak menanyakan apa pun**.
 
+Program **tidak pernah meminta email atau password JobStreet** — tidak ada
+formulir kredensial di mana pun. Semua login terjadi di jendela Chrome milik
+Anda, dan hasilnya disimpan sebagai cookie di profil tersebut.
+
 Untuk sesi terjadwal/tanpa orang di depan komputer:
 
 ```bash
@@ -189,6 +193,18 @@ Opsi lain: `--profile-dir "D:\chrome-dimastes"` untuk lokasi profil lain, dan
 
 Pastikan Chrome lain tidak memakai folder profil yang sama; bila terkunci,
 tutup Chrome tersebut atau pakai `--profile-dir` yang berbeda.
+
+Bila sesi JobStreet kedaluwarsa di tengah sesi, program mendeteksinya
+(halaman dialihkan ke Sign in) lalu **berhenti** dengan pesan jelas, bukan
+mengulang-ulang error. Login sekali lagi, sesi tersimpan kembali.
+
+Ingin memaksa login ulang dari nol? Hapus folder profil:
+
+```powershell
+Remove-Item -Recurse -Force "$HOME\.dimastes\chrome-profile"
+```
+
+atau jalankan sekali dengan `--no-profile`.
 
 ### Banyak lokasi
 
@@ -308,9 +324,11 @@ Itu data lama dari versi sebelumnya yang menyimpan judul kosong. Jalankan
 Aktifkan `STRICT_LOCATION=true` di `.env`.
 
 **Diminta login setiap kali menjalankan.**
-Pastikan `USE_PROFILE=true` (default) dan Chrome lain tidak memakai folder
-profil yang sama. Sesi JobStreet juga bisa kedaluwarsa sendiri; login sekali
-lagi lalu sesi tersimpan kembali.
+Pastikan `USE_PROFILE=true` (default), tidak memakai `--no-profile`, dan
+folder profil (`~/.dimastes/chrome-profile` di Windows
+`C:\Users\NamaAnda\.dimastes\chrome-profile`) tidak dihapus. Permintaan
+login di layar hanya muncul bila cookie sesi benar-benar sudah tidak ada —
+program tidak pernah menanyakan email/password.
 
 **Lowongan yang sudah saya lamar masih muncul.**
 Pastikan JobStreet sudah menampilkan label "Applied" pada kartu lowongan

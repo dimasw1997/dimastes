@@ -28,6 +28,7 @@ class AutoApplyEngine:
             "errors": 0,
         }
         self.manual_jobs = []
+        self.stop_requested = False
 
     def run(self):
         self._print_banner()
@@ -60,6 +61,12 @@ class AutoApplyEngine:
                     console.print(f"{'=' * 60}")
 
                     self._process_keyword(keyword, location=location)
+
+                    if self.stop_requested:
+                        break
+
+                if self.stop_requested:
+                    break
 
         except KeyboardInterrupt:
             console.print("\n[bold yellow]Proses dihentikan.[/]")
@@ -220,6 +227,16 @@ class AutoApplyEngine:
                     )
                     self.session_stats["errors"] += 1
                     continue
+
+                if hasil.status == "login_required":
+                    self.session_stats["errors"] += 1
+                    self.stop_requested = True
+                    console.print(
+                        "[bold red]Sesi login JobStreet sudah habis. "
+                        "Sesi dihentikan agar tidak menumpuk error.[/]"
+                    )
+                    notifier.send_error("Sesi login JobStreet habis")
+                    return
 
                 if hasil.applied:
                     self.session_stats["applied"] += 1

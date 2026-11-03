@@ -13,8 +13,9 @@ class FakeElement:
 
 
 class FakeDriver:
-    def __init__(self, elements=None):
+    def __init__(self, elements=None, cookies=None):
         self.elements = elements or {}
+        self.cookies = cookies or []
         self.opened_urls = []
 
     def get(self, url):
@@ -25,6 +26,9 @@ class FakeDriver:
 
     def find_element(self, by, selector):
         return FakeElement()
+
+    def get_cookies(self):
+        return list(self.cookies)
 
 
 @pytest.fixture(autouse=True)
@@ -89,3 +93,101 @@ def test_login_menunggu_enter_bila_belum_login(monkeypatch):
 
     assert bot.login() is True
     assert dipanggil["jumlah"] == 1
+
+
+def test_cookie_sesi_dianggap_sudah_login():
+    bot = buat_bot({})
+    bot.driver.cookies = [
+        {"name": "JobStreetSession", "domain": ".jobstreet.com", "value": "x"}
+    ]
+
+    assert bot._has_session_cookie() is True
+    assert bot._login_status() is True
+
+
+def test_cookie_situs_lain_tidak_dihitung():
+    bot = buat_bot({})
+    bot.driver.cookies = [
+        {"name": "session", "domain": ".google.com", "value": "x"}
+    ]
+
+    assert bot._has_session_cookie() is False
+    assert bot._login_status() is None
+
+
+def test_login_tidak_menanyakan_apa_pun_bila_cookie_ada(monkeypatch):
+    bot = buat_bot({})
+    bot.driver.cookies = [
+        {"name": "JobStreetSession", "domain": ".jobstreet.com", "value": "x"}
+    ]
+
+    def jangan_tanya(*args, **kwargs):
+        raise AssertionError("tidak boleh meminta input login")
+
+    monkeypatch.setattr("builtins.input", jangan_tanya)
+
+    assert bot.login() is True
+
+
+def test_sesi_habis_menghentikan_seluruh_sesi(tmp_path, monkeypatch):
+    import job_filter as job_filter_module
+    import main as main_module
+    from auto_apply import ApplyResult
+    from database import Database
+
+    database = Database(str(tmp_path / "berhenti.db"))
+    monkeypatch.setattr(main_module, "db", database)
+    monkeypatch.setattr(job_filter_module, "db", database)
+
+    monkeypatch.setattr(config, "locations", ["Bandung"])
+    monkeypatch.setattr(config, "keywords", ["satu", "dua"])
+    monkeypatch.setattr(config, "max_pages", 1)
+    monkeypatch.setattr(config, "delay_between_apply", 0)
+    monkeypatch.setattr(config, "auto_apply", True)
+    monkeypatch.setattr(config, "auto_apply_max_per_session", 25)
+    monkeypatch.setattr(config, "strict_location", False)
+    monkeypatch.setattr(config, "max_age_days", 0)
+
+    class Bot:
+        login_expired = False
+
+        def __init__(self):
+            self.panggilan = []
+
+        def init_browser(self):
+            pass
+
+        def login(self):
+            return True
+
+        def search_jobs(self, keyword, page=1, location=None):
+            self.panggilan.append((location, keyword, page))
+            if page > 1:
+                return []
+            return [{
+                "job_id": f"id-{keyword}",
+                "title": "Inventory Control",
+                "company": "PT Contoh",
+                "location": "Bandung",
+                "salary": "Rp 8.000.000",
+                "description": "",
+                "url": f"https://id.jobstreet.com/job/{keyword}",
+                "date_posted": "Hari ini",
+                "age_days": 0,
+                "applied": False,
+            }]
+
+        def apply_job(self, job):
+            self.login_expired = True
+            return ApplyResult(False, "login_required", "Sesi habis")
+
+        def close(self):
+            pass
+
+    engine = main_module.AutoApplyEngine()
+    engine.bot = Bot()
+    engine.run()
+
+    assert engine.stop_requested is True
+    # Kata kunci kedua tidak dijalankan lagi.
+    assert len(engine.bot.panggilan) == 1

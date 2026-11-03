@@ -190,6 +190,17 @@ class AutoApplier:
         body = self._body_text()
         return any(text in body for text in ALREADY_TEXTS)
 
+    def _is_login_page(self) -> bool:
+        try:
+            url = (self.driver.current_url or "").lower()
+        except Exception:
+            url = ""
+
+        if "signin" in url or "/login" in url:
+            return True
+
+        return bool(self._find_all("input[type='password']"))
+
     def _is_success(self) -> bool:
         try:
             url = (self.driver.current_url or "").lower()
@@ -302,6 +313,13 @@ class AutoApplier:
         try:
             self.driver.get(url)
             time.sleep(2)
+
+            if self._is_login_page():
+                return ApplyResult(
+                    False,
+                    "login_required",
+                    "Sesi login JobStreet sudah habis",
+                )
 
             if self.is_already_applied():
                 return ApplyResult(

@@ -224,3 +224,26 @@ def test_auto_apply_tab_eksternal():
     assert hasil.applied is False
     assert hasil.status == "manual_required"
     assert "situs perusahaan" in hasil.reason.lower()
+
+
+def test_auto_apply_berhenti_bila_halaman_login():
+    driver = FakeDriver()
+    driver.elements = {"input[type='password']": [FakeElement()]}
+
+    hasil = AutoApplier(driver).apply({"url": "https://id.jobstreet.com/job/1"})
+
+    assert hasil.applied is False
+    assert hasil.status == "login_required"
+    assert "login" in hasil.reason.lower()
+
+
+def test_auto_apply_berhenti_bila_dialihkan_ke_signin():
+    class DriverDialihkan(FakeDriver):
+        def get(self, url):
+            self.current_url = "https://id.jobstreet.com/signin?redirect=job"
+
+    hasil = AutoApplier(DriverDialihkan()).apply(
+        {"url": "https://id.jobstreet.com/job/1"}
+    )
+
+    assert hasil.status == "login_required"
