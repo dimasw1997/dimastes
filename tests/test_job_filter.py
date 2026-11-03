@@ -72,7 +72,9 @@ def test_tolak_judul_kosong(filter_baru):
 
 
 def test_tolak_kata_kunci_terlarang(filter_baru):
-    lolos, alasan = filter_baru.should_apply(make_job(title="Senior Planner"))
+    lolos, alasan = filter_baru.should_apply(
+        make_job(title="Senior Inventory Control")
+    )
     assert lolos is False
     assert "senior" in alasan.lower() or "excluded" in alasan.lower()
 
@@ -175,3 +177,42 @@ def test_rank_jobs_mode_skor(filter_baru):
 
     # Judul yang persis cocok dengan kata kunci mendapat skor lebih tinggi.
     assert hasil[0]["job_id"] == "2"
+
+
+def test_tolak_judul_di_luar_minat(filter_baru):
+    lolos, alasan = filter_baru.should_apply(
+        make_job(title="Marketing Communication Staff")
+    )
+    assert lolos is False
+    assert "minat" in alasan.lower()
+
+
+@pytest.mark.parametrize(
+    "judul",
+    [
+        "Inventory Control Staff",
+        "Inventory Controller",
+        "Staff PPIC",
+        "Production Planner",
+        "Material Planner",
+        "Stock Controller",
+        "Inventory Analyst",
+    ],
+)
+def test_judul_sesuai_minat_diterima(filter_baru, judul):
+    assert filter_baru.should_apply(make_job(title=judul))[0] is True
+
+
+def test_filter_judul_bisa_dimatikan(filter_baru, monkeypatch):
+    monkeypatch.setattr(config, "require_keyword_match", False)
+
+    assert filter_baru.should_apply(
+        make_job(title="Marketing Communication Staff")
+    )[0] is True
+
+
+def test_kata_kunci_judul_bisa_ditambah(filter_baru, monkeypatch):
+    monkeypatch.setattr(config, "title_keywords", ["inventory control", "gudang"])
+
+    assert filter_baru.should_apply(make_job(title="Staff Gudang"))[0] is True
+    assert filter_baru.should_apply(make_job(title="Staff PPIC"))[0] is False

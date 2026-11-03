@@ -72,6 +72,13 @@ class Config:
     # Tolak lowongan yang lokasinya jelas di luar LOCATION.
     strict_location: bool = _bool_setting("STRICT_LOCATION", False)
 
+    # Hanya lamar lowongan yang judulnya cocok dengan minat.
+    require_keyword_match: bool = _bool_setting("REQUIRE_KEYWORD_MATCH", True)
+    # Kata kunci untuk mencocokkan judul. Kosong = pakai KEYWORDS.
+    title_keywords: list[str] = field(default_factory=lambda: _list_setting(
+        "TITLE_KEYWORDS", ""
+    ))
+
     # Urutkan hasil pencarian dari yang paling baru (ListedDate).
     # Kosongkan SORT_MODE untuk kembali ke urutan relevansi JobStreet.
     sort_mode: str = os.getenv("SORT_MODE", "ListedDate").strip()
@@ -131,6 +138,13 @@ class Config:
 
         if not self.location and self.locations:
             self.location = self.locations[0]
+
+        # TITLE_KEYWORDS kosong -> pakai daftar kata kunci pencarian.
+        self.title_keywords = [
+            kata for kata in self.title_keywords if kata.strip()
+        ]
+        if not self.title_keywords:
+            self.title_keywords = list(self.keywords)
 
 
 # Baris ini yang dibutuhkan oleh: from config import config

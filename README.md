@@ -28,8 +28,9 @@ di browser.
 - Lowongan yang sudah berlabel **"Applied"/"Anda sudah melamar"** di JobStreet
   otomatis dilewati: tidak ditampilkan lagi, tidak dilamar ulang, dan tidak
   memakan kuota harian.
-- Menyaring lowongan: kata kunci terlarang, posisi terlalu senior, gaji
-  minimum, batas pengalaman, dan (opsional) lokasi.
+- Menyaring lowongan: **judul harus cocok dengan minat**, kata kunci
+  terlarang, posisi terlalu senior, gaji minimum, batas pengalaman, umur
+  lowongan, dan (opsional) lokasi ketat.
 - Hasil pencarian diurutkan **dari yang terbaru** (`sortmode=ListedDate`),
   dengan opsi hanya mengambil lowongan N hari terakhir.
 - Memeringkat lowongan: yang terbaru didahulukan, lalu skor relevansi.
@@ -112,6 +113,8 @@ cp .env.example .env
 | `LOCATIONS` | kosong | Daftar lokasi dipisah koma, mis. `Bandung,Jakarta,Tangerang` |
 | `LOCATION` | `Bandung` | Dipakai hanya bila `LOCATIONS` kosong |
 | `ALLOW_REMOTE` | `false` | `true` = lowongan "Remote" juga diterima saat `STRICT_LOCATION` aktif |
+| `REQUIRE_KEYWORD_MATCH` | `true` | Hanya lamar lowongan yang judulnya cocok dengan minat |
+| `TITLE_KEYWORDS` | kosong | Kata kunci untuk mencocokkan judul (kosong = ikut `KEYWORDS`) |
 | `MIN_SALARY` | `0` | Gaji minimum (0 = tanpa filter) |
 | `MAX_EXPERIENCE_YEARS` | `5` | Tolak lowongan yang minta pengalaman lebih dari ini |
 | `EXCLUDE_KEYWORDS` | `principal,director,head,senior,lead` | Kata yang membuat judul otomatis ditolak |
@@ -241,6 +244,21 @@ digabung dan diurutkan dari yang terbaru. Karena itu:
   bisa kosong. Coba `--locations "Bandung,Cikarang,Bekasi,..."` atau cek
   sendiri di situs: `https://id.jobstreet.com/jobs?where=Jababeka`.
 
+### Hanya melamar yang Anda minati
+
+Secara default program **hanya melamar lowongan yang judulnya memuat salah
+satu `KEYWORDS`** (mis. mengandung "PPIC", "inventory control", "stock
+controller"). Judul yang nyasar di hasil pencarian — misalnya "Marketing
+Staff" — otomatis dilewati, tidak dilamar.
+
+Bila ada istilah lain yang juga Anda minati, tambahkan sinonim:
+
+```
+TITLE_KEYWORDS=inventory control,inventory controller,PPIC,production planner,material planner,material controller,stock controller,inventory analyst,gudang,stok,production planning
+```
+
+Ingin mematikan filter ini (lamar semua yang muncul)? `REQUIRE_KEYWORD_MATCH=false`.
+
 ### Isian lamaran otomatis
 
 Bila formulir meminta cover letter atau berkas CV, isi dulu di `.env`:
@@ -363,6 +381,11 @@ folder profil (`~/.dimastes/chrome-profile` di Windows
 `C:\Users\NamaAnda\.dimastes\chrome-profile`) tidak dihapus. Permintaan
 login di layar hanya muncul bila cookie sesi benar-benar sudah tidak ada —
 program tidak pernah menanyakan email/password.
+
+**Lowongan yang menurut saya relevan malah dilewati.**
+Judulnya tidak memuat kata kunci minat. Tambahkan istilahnya ke
+`TITLE_KEYWORDS` di `.env` (mis. `gudang`, `stok`, `production planning`),
+atau set `REQUIRE_KEYWORD_MATCH=false`.
 
 **Lowongan yang sudah saya lamar masih muncul.**
 Pastikan JobStreet sudah menampilkan label "Applied" pada kartu lowongan

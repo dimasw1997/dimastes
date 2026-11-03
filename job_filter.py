@@ -49,6 +49,9 @@ class JobFilter:
 
         title_lower = title.lower()
 
+        if config.require_keyword_match and not self._matches_interest(title_lower):
+            return False, "Judul tidak sesuai minat"
+
         for keyword in self.exclude_keywords:
             if keyword in title_lower:
                 return False, f"Title mengandung excluded: '{keyword}'"
@@ -82,6 +85,18 @@ class JobFilter:
             return False, f"Experience terlalu tinggi: {exp_years} tahun"
 
         return True, "OK"
+
+    @staticmethod
+    def _matches_interest(title_lower: str) -> bool:
+        """Judul harus memuat salah satu kata kunci minat."""
+        kata_kunci = config.title_keywords or config.keywords
+
+        for kata in kata_kunci:
+            kata = kata.strip().lower()
+            if kata and kata in title_lower:
+                return True
+
+        return False
 
     @staticmethod
     def _location_matches(job_location: str) -> bool:

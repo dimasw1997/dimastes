@@ -284,6 +284,10 @@ class AutoApplyEngine:
             ", ".join(config.locations) if config.locations else "(semua)",
         )
         table.add_row(
+            "Filter judul minat",
+            "Aktif" if config.require_keyword_match else "Tidak aktif",
+        )
+        table.add_row(
             "Filter lokasi ketat",
             "Aktif" if config.strict_location else "Tidak aktif",
         )
