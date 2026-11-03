@@ -178,6 +178,9 @@ class Config:
     # Total pengalaman kerja (tahun) untuk pertanyaan "berapa tahun ...".
     years_experience: float = _float_setting("YEARS_EXPERIENCE", 3.0)
     # Jenjang pendidikan, mis. "S1".
+    # Jawab "Ya" untuk pertanyaan ya/tidak seputar kesediaan/pengalaman.
+    # Pertanyaan ya/tidak lain tetap dilewati agar tidak mengarang jawaban.
+    auto_answer_yes: bool = _bool_setting("AUTO_ANSWER_YES", True)
     education_level: str = os.getenv("EDUCATION_LEVEL", "S1").strip()
 
     base_url: str = "https://id.jobstreet.com"

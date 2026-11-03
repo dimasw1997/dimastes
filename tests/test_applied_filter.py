@@ -5,7 +5,6 @@ from selenium.common.exceptions import NoSuchElementException
 
 import job_filter as job_filter_module
 import main as main_module
-import scraper
 from auto_apply import ApplyResult
 from config import config
 from database import Database

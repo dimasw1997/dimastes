@@ -630,3 +630,124 @@ def test_lanjut_tidak_diklik_berulang(monkeypatch):
     assert hasil.status == "manual_required"
     assert jumlah["klik"] <= 2
     assert "please address" in hasil.reason.lower()
+
+
+def test_id_internal_dikenali():
+    assert auto_apply.tampak_id_internal(
+        "questionnaire.ID_Q_2BF1D9EB5B90F6EECBD28603F9D89656_V_2"
+    )
+    assert auto_apply.tampak_id_internal("questionnaire.ID_Q_368_V_2")
+    assert not auto_apply.tampak_id_internal(
+        "Berapa tahun pengalaman kerjamu sebagai Kepala PPIC?"
+    )
+
+
+def test_ambil_pertanyaan_abaikan_teks_opsi():
+    teks = "Rp 4 Jt\nBerapa gaji bulanan yang kamu inginkan?\nRp 5 Jt"
+
+    assert auto_apply.ambil_pertanyaan(
+        teks, ["Rp 4 Jt", "Rp 5 Jt"]
+    ) == "Berapa gaji bulanan yang kamu inginkan?"
+
+
+def test_pertanyaan_dari_galat_dibersihkan():
+    galat = (
+        "before you can continue with the application, please address the "
+        "following issues: apakah kamu memiliki pengalaman pemrosesan "
+        "dokumen? - please make a selection berapa tahun pengalaman "
+        "kerjamu sebagai staff administrasi? tidak ada pengalaman"
+    )
+
+    teks = auto_apply.pertanyaan_dari_galat(galat)
+
+    assert teks.startswith("apakah kamu memiliki pengalaman")
+    assert "please make a selection" not in teks
+
+
+def test_pertanyaan_dari_wadah_dipakai_bukan_id_internal(monkeypatch):
+    monkeypatch.setattr(auto_apply, "Select", FakeSelect)
+    monkeypatch.setattr(config, "expected_salary", "5000000")
+    monkeypatch.setattr(config, "years_experience", 3.0)
+
+    wadah = FakeElement(
+        text=(
+            "Berapa tahun pengalaman kerjamu sebagai inventory controller?\n"
+            "0 years\n2 years\n3 years"
+        )
+    )
+    wadah.parent = None
+
+    select = FakeElement(attrs={"name": "questionnaire.ID_Q_ABC123_V_2"})
+    select.options = [
+        FakeElement(text=teks) for teks in ("0 years", "2 years", "3 years")
+    ]
+    select.parent = wadah
+
+    driver = FakeDriver(elements={"select": [select]})
+    gagal = AutoApplier(driver).jawab_pertanyaan()
+
+    assert select.get_attribute("value") == "3 years"
+    assert gagal == []
+
+
+def test_batas_17_id_internal_tidak_dilaporkan():
+    """Pesan skip tidak boleh berisi ID internal saja."""
+    wadah = FakeElement(text="Pilih warna kesukaanmu\nMerah\nBiru")
+    select = FakeElement(attrs={"name": "questionnaire.ID_Q_XYZ789_V_1"})
+    select.options = [FakeElement(text="Merah"), FakeElement(text="Biru")]
+    select.parent = wadah
+
+    driver = FakeDriver(elements={"select": [select]})
+    gagal = AutoApplier(driver).jawab_pertanyaan()
+
+    assert gagal == ["Pilih warna kesukaanmu"]
+
+
+def test_radio_ya_tidak_dijawab(monkeypatch):
+    monkeypatch.setattr(config, "auto_answer_yes", True)
+
+    wadah = FakeElement(text="Apakah kamu bersedia bekerja dalam shift?\nYa\nTidak")
+
+    diklik = {}
+
+    ya = FakeElement(
+        attrs={"id": "r1", "name": "bersedia", "value": "ya"},
+        on_click=lambda: diklik.setdefault("ya", True),
+    )
+    tidak = FakeElement(
+        attrs={"id": "r2", "name": "bersedia", "value": "tidak"},
+        on_click=lambda: diklik.setdefault("tidak", True),
+    )
+    ya.parent = wadah
+    tidak.parent = wadah
+
+    driver = FakeDriver(elements={"input[type='radio']": [ya, tidak]})
+    applier = AutoApplier(driver)
+    monkeypatch.setattr(
+        applier,
+        "_label_untuk",
+        lambda el: "Ya" if el is ya else "Tidak",
+    )
+    monkeypatch.setattr(
+        applier,
+        "_find_all",
+        lambda selector: [ya, tidak] if selector == "input[type='radio']" else [],
+    )
+
+    gagal = applier.jawab_pertanyaan()
+
+    assert gagal == []
+    assert diklik == {"ya": True}
+
+
+def test_kolom_teks_gaji_diisi(monkeypatch):
+    monkeypatch.setattr(config, "expected_salary", "5000000")
+
+    wadah = FakeElement(text="Berapa gaji yang kamu harapkan?")
+    kolom = FakeElement(attrs={"value": ""})
+    kolom.parent = wadah
+
+    driver = FakeDriver(elements={"input[type='text']": [kolom]})
+    AutoApplier(driver).jawab_pertanyaan()
+
+    assert kolom.get_attribute("value") == "5000000"

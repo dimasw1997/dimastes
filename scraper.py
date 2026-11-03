@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import urldefrag, urlencode, urljoin
 
+from rich.console import Console
 from selenium import webdriver
 from selenium.common.exceptions import (
     NoSuchElementException,
@@ -21,7 +22,6 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
-from rich.console import Console
 
 from auto_apply import ApplyResult, AutoApplier
 from config import config
@@ -588,7 +588,8 @@ class JobStreetBot:
                 continue
 
         try:
-            page_text = (self.driver.find_element(By.TAG_NAME, "body").text or "").lower()
+            body = self.driver.find_element(By.TAG_NAME, "body")
+            page_text = (body.text or "").lower()
         except Exception:
             return False
 

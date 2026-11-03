@@ -1,6 +1,7 @@
 """Akses database SQLite untuk lowongan, lamaran, dan blacklist."""
 
 import sqlite3
+import threading
 from contextlib import contextmanager
 
 from config import config
@@ -19,21 +20,50 @@ class Database:
         # Path absolut supaya database tidak "hilang" ketika program
         # dijalankan dari folder kerja yang berbeda.
         self.db_path = str(db_path or config.db_path)
+        self._conn = None
+        self._lock = threading.Lock()
         self._init_db()
+        self._aktifkan_wal()
+
+    def _aktifkan_wal(self):
+        """WAL + synchronous NORMAL: tulis jauh lebih cepat, tetap aman.
+
+        Tanpa ini setiap simpanan menunggu fsync penuh (puluhan ms), sehingga
+        sesi dengan ratusan lowongan terasa lambat.
+        """
+        try:
+            conn = self._koneksi()
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.commit()
+        except sqlite3.Error:
+            pass
+
+    def _koneksi(self):
+        """Satu koneksi yang dipakai ulang.
+
+        Membuat koneksi baru untuk setiap query memakan ~1 ms per operasi —
+        pada sesi berisi ratusan lowongan itu jadi beberapa detik terbuang.
+        """
+        if self._conn is None:
+            self._conn = sqlite3.connect(
+                self.db_path, check_same_thread=False
+            )
+            self._conn.row_factory = sqlite3.Row
+        return self._conn
 
     @contextmanager
     def _get_conn(self):
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
+        with self._lock:
+            conn = self._koneksi()
 
-        try:
-            yield conn
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
+            try:
+                yield conn
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
 
     def _init_db(self):
         with self._get_conn() as conn:
@@ -72,6 +102,8 @@ class Database:
                     ON applications (job_id);
                 CREATE INDEX IF NOT EXISTS idx_applications_status
                     ON applications (status);
+                CREATE INDEX IF NOT EXISTS idx_applications_applied_at
+                    ON applications (applied_at);
                 """
             )
             self._migrate(conn)

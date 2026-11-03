@@ -142,6 +142,7 @@ cp .env.example .env
 | `AUTO_ANSWER_QUESTIONS` | `true` | Jawab otomatis pertanyaan dropdown (pengalaman, gaji, pendidikan) |
 | `EXPECTED_SALARY` | `5000000` | Gaji yang diharapkan (kosong = pertanyaan gaji dilewati) |
 | `YEARS_EXPERIENCE` | `3` | Total pengalaman kerja (tahun) untuk pertanyaan pengalaman |
+| `AUTO_ANSWER_YES` | `true` | Jawab **Ya** untuk pertanyaan ya/tidak seputar kesediaan/pengalaman |
 | `EDUCATION_LEVEL` | `S1` | Jenjang pendidikan untuk pertanyaan kualifikasi |
 | `AUTO_APPLY_SUBMIT_TIMEOUT` | `20` | Batas detik khusus halaman **Review and submit** (mengirim lamaran) |
 | `AUTO_APPLY_DEBUG` | `true` | Simpan HTML + screenshot halaman yang tak dikenali ke folder `debug/` |
@@ -322,76 +323,28 @@ Ingin mematikan filter ini (lamar semua yang muncul)?
 
 ### Pertanyaan pilihan dari perusahaan
 
-Banyak lowongan menambahkan pertanyaan wajib berupa dropdown, misalnya:
-
-- *Berapa tahun pengalaman kerjamu sebagai Kepala PPIC?*
-- *Berapa gaji bulanan yang kamu inginkan?*
-- *Kualifikasi mana yang kamu miliki?*
-
-Bot menjawabnya otomatis dengan aturan yang **tidak mengarang pengalaman**:
+Banyak lowongan menambahkan pertanyaan wajib: dropdown, radio ya/tidak, atau
+kolom isian. Bot membacanya dari label/aria/legend di sekitar kolom — **bukan**
+dari atribut `name` yang hanya berisi ID internal seperti
+`questionnaire.ID_Q_...`.
 
 | Pertanyaan | Jawaban bot |
 | --- | --- |
-| Gaji | opsi terdekat dengan `EXPECTED_SALARY` |
-| Pengalaman untuk jabatan yang pernah Anda pegang (staff, inventory controller, PPIC, planner) | opsi yang memuat `YEARS_EXPERIENCE` |
-| Pengalaman untuk jabatan **lebih tinggi** dari pengalaman Anda (Kepala/Head/Manager/Supervisor) | opsi 0 tahun / belum ada pengalaman |
-| Kualifikasi/pendidikan | opsi yang cocok dengan `EDUCATION_LEVEL` (mis. *Sarjana (S1)*) |
-| Pertanyaan lain yang polanya tidak dikenali | **tidak** dijawab — lowongan langsung dilewati |
+| Gaji ("berapa gaji yang diharapkan?") | opsi/kolom terdekat dengan `EXPECTED_SALARY` |
+| Pengalaman pada jabatan yang pernah dipegang (staff, inventory controller, PPIC, planner) | opsi berisi `YEARS_EXPERIENCE`, atau angka itu pada kolom isian |
+| Pengalaman jabatan lebih tinggi (Kepala/Head/Manager/Supervisor) | 0 tahun / belum ada pengalaman |
+| Pendidikan/kualifikasi | opsi sesuai `EDUCATION_LEVEL` (mis. *Sarjana (S1)*) |
+| Ya/tidak seputar kesediaan atau pengalaman ("apakah kamu bersedia…", "have you…") | **Ya** (matikan dengan `AUTO_ANSWER_YES=false`) |
+| Pola lain | tidak ditebak — lowongan dilewati, alasannya ditulis apa adanya |
 
-Setiap jawaban tercetak di terminal (`jawab "3 years" untuk: ...`), jadi Anda
-bisa memeriksa apa yang dipilih bot. Bila formulir tetap ditolak, bot berhenti
-setelah 2 kali klik **Lanjutkan** di halaman yang sama (tidak lagi mengklik
-terus-menerus) dan menampilkan pesan validasi dari JobStreet.
+Setiap jawaban tercetak di terminal, misalnya
+`jawab "3 years" untuk: Berapa tahun pengalaman kerjamu sebagai Inventory Controller?`.
+Bila formulir tetap ditolak, bot berhenti setelah 2 kali klik **Lanjutkan** pada
+halaman yang sama dan menampilkan pesan validasi dari JobStreet (tanpa ID
+internal).
 
-Matikan dengan `AUTO_ANSWER_QUESTIONS=false` bila ingin semua pertanyaan
-dilewati.
-
-### Mulai dari posting terbaru
-
-Lowongan selalu dilamar berurutan **mulai dari yang paling baru diposting**:
-
-1. Pencarian memakai `sortmode=ListedDate`, jadi JobStreet mengembalikan
-   lowongan terbaru lebih dulu.
-2. Di dalam satu halaman, hasil diurutkan lagi menurut umur posting.
-
-Ada dua cara menjalankannya (pilih lewat `COLLECT_BEFORE_APPLY`):
-
-| Mode | `COLLECT_BEFORE_APPLY` | Kapan lamaran pertama terkirim | Urutan |
-| --- | --- | --- | --- |
-| **Lamar sambil mencari** (bawaan) | `false` | sesaat setelah pencarian pertama | halaman 1 semua kata kunci & lokasi dulu (paling baru), baru halaman 2 |
-| Kumpulkan dulu | `true` | setelah semua pencarian selesai | benar-benar global menurut umur posting |
-
-Contoh mode bawaan: `inventory control — Bandung — halaman 1` langsung
-dilamar, lalu `inventory controller — Bandung — halaman 1`, dan seterusnya;
-halaman 2 yang isinya lebih lama baru diproses setelah semua halaman 1 selesai.
-
-Pada mode kumpulkan, terminal menampilkan ringkasan sebelum melamar:
-
-```
-Pengumpulan selesai: 12 lowongan siap dilamar, mulai dari posting terbaru.
-(hari ini) Staff PPIC
-(1 hari lalu) Staf Gudang
-```
-
-Lowongan yang tanggalnya tidak terbaca ditaruh paling akhir.
-
-### Menolak perusahaan tertentu
-
-Ada dua cara mengecualikan perusahaan agar tidak pernah dilamar:
-
-```bash
-# 1) Simpan ke database (paling praktis, cocok longgar)
-python cli.py blacklist "royal abadi" --reason "mantan perusahaan"
-
-# 2) Tetapkan di .env supaya ikut terbawa saat pindah komputer
-BLACKLIST_COMPANIES=royal abadi,pt lain
-```
-
-Pencocokan sengaja longgar: awalan `PT`, `CV`, `Tbk`, tanda baca, dan huruf
-besar/kecil diabaikan. Jadi `royal abadi` menolak **PT Royal Abadi Sejahtera**,
-**PT. ROYAL ABADI SEJAHTERA**, maupun **Royal Abadi**. Di terminal, lowongan
-seperti ini tampil sebagai
-`Dilewati: Staff PPIC — Perusahaan di-blacklist: royal abadi`.
+Matikan semuanya dengan `AUTO_ANSWER_QUESTIONS=false` bila ingin semua
+pertanyaan dilewati.
 
 ### Isian lamaran otomatis
 

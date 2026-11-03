@@ -13,6 +13,7 @@ KUNCI_TAMBAHAN = (
     "BLACKLIST_COMPANIES",
     "COLLECT_BEFORE_APPLY",
     "AUTO_ANSWER_QUESTIONS",
+    "AUTO_ANSWER_YES",
     "EXPECTED_SALARY",
     "YEARS_EXPERIENCE",
     "EDUCATION_LEVEL",
@@ -154,7 +155,9 @@ def parse_pasangan(daftar) -> dict:
             try:
                 angka = int(nilai)
             except ValueError:
-                raise ValueError(f"{kunci} harus berupa angka: {nilai}")
+                raise ValueError(
+                    f"{kunci} harus berupa angka: {nilai}"
+                ) from None
             if angka < 0:
                 raise ValueError(
                     f"{kunci} minimal 0 (0 = tanpa batas)"

@@ -17,7 +17,6 @@ from typing import Optional
 from urllib.parse import urlparse
 
 from rich.console import Console
-from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
 
@@ -78,6 +77,105 @@ ALREADY_TEXTS = (
 )
 
 # Pesan validasi JobStreet saat formulir belum lengkap.
+# Kata yang menandakan sebuah kalimat adalah pertanyaan.
+KATA_TANYA = (
+    "berapa", "apakah", "bagaimana", "kapan", "dimana", "di mana", "mana",
+    "how", "what", "which", "when", "where", "do you", "are you", "have you",
+    "your", "kamu", "anda",
+)
+
+# Pertanyaan ya/tidak yang aman dijawab "Ya" (kesediaan/pengalaman).
+KATA_SETUJU = (
+    "bersedia", "siap", "willing", "pernah", "memiliki", "have you",
+    "do you", "are you", "menguasai", "mampu",
+)
+
+# Penanda atribut internal JobStreet, bukan pertanyaan.
+_ID_INTERNAL = re.compile(
+    r"(questionnaire|\bID_Q_|\bQ_[0-9A-F]{6,}|\bquestion_?id\b)", re.IGNORECASE
+)
+
+
+def tampak_id_internal(teks: str) -> bool:
+    """True bila teks itu ID internal (mis. questionnaire.ID_Q_…) bukan label."""
+    return bool(_ID_INTERNAL.search(str(teks or "")))
+
+
+def ambil_pertanyaan(teks: str, opsi=()) -> str:
+    """Ambil baris pertanyaan dari teks wadah (mengabaikan teks opsi)."""
+    opsi_norm = {_norm(item) for item in (opsi or [])}
+    baris = [
+        " ".join(item.split())
+        for item in str(teks or "").splitlines()
+        if item.strip()
+    ]
+
+    kandidat = [
+        item
+        for item in baris
+        if _norm(item) not in opsi_norm
+        and not tampak_id_internal(item)
+        and len(item) >= 3
+    ]
+
+    for item in kandidat:
+        if item.endswith("?") or any(k in item.lower() for k in KATA_TANYA):
+            return item
+
+    return kandidat[0] if kandidat else ""
+
+
+def pertanyaan_dari_galat(teks: str) -> str:
+    """Ambil inti pesan validasi JobStreet tanpa embel-embel."""
+    teks = " ".join(str(teks or "").split())
+
+    for tanda in (
+        "please address the following issues:",
+        "harap lengkapi:",
+        "harap lengkapi",
+    ):
+        posisi = teks.lower().find(tanda)
+        if posisi >= 0:
+            teks = teks[posisi + len(tanda):]
+            break
+
+    teks = re.split(r"\s*-\s*please make a selection", teks, flags=re.IGNORECASE)[0]
+    teks = re.sub(r"\s*-\s*", " — ", teks).strip(" -—")
+
+    if len(teks) > 110:
+        return teks[:110] + "…"
+
+    return teks
+
+
+def pilih_jawaban_radio(pertanyaan: str, opsi, cfg=None) -> str:
+    """Pilih opsi untuk pertanyaan radio (ya/tidak atau berskala)."""
+    cfg = cfg or config
+    opsi = [item for item in (opsi or []) if _norm(item)]
+
+    if not opsi:
+        return ""
+
+    pilihan = pilih_jawaban(pertanyaan, opsi, cfg)
+    if pilihan:
+        return pilihan
+
+    teks = _norm(pertanyaan)
+    ya = [
+        item for item in opsi
+        if _norm(item) in ("ya", "yes", "iya", "benar", "true")
+    ]
+
+    if (
+        ya
+        and getattr(cfg, "auto_answer_yes", False)
+        and any(kata in teks for kata in KATA_SETUJU)
+    ):
+        return ya[0]
+
+    return ""
+
+
 VALIDATION_TEXTS = (
     "please address the following issues",
     "please make a selection",
@@ -547,23 +645,102 @@ class AutoApplier:
 
         return terisi
 
-    def _pertanyaan(self, element) -> str:
-        """Label/teks pertanyaan untuk sebuah dropdown."""
-        for atribut in ("aria-label", "name", "id"):
-            try:
-                nilai = (element.get_attribute(atribut) or "").strip()
-            except Exception:
-                nilai = ""
-            if nilai:
-                return nilai
+    @staticmethod
+    def _raw_text(element) -> str:
+        """Teks elemen apa adanya; baris dipertahankan agar label bisa dipisah."""
+        try:
+            baris = [
+                " ".join(item.split())
+                for item in (element.text or "").splitlines()
+                if item.strip()
+            ]
+        except Exception:
+            return ""
+
+        return "\n".join(baris)
+
+    def _label_untuk(self, element) -> str:
+        """Teks label untuk satu input (radio/checkbox)."""
+        try:
+            id_el = (element.get_attribute("id") or "").strip()
+        except Exception:
+            id_el = ""
+
+        if id_el:
+            for label in self._find_all(f"label[for='{id_el}']"):
+                teks = " ".join(self._raw_text(label).split())
+                if teks:
+                    return teks
 
         try:
-            induk = element.find_element(By.XPATH, "..")
-            teks = " ".join((induk.text or "").split())
-            if teks:
-                return teks
+            label = " ".join((element.get_attribute("aria-label") or "").split())
         except Exception:
-            pass
+            label = ""
+
+        if label and not tampak_id_internal(label):
+            return label
+
+        return ""
+
+    def _pertanyaan(self, element, opsi=()) -> str:
+        """Teks pertanyaan sesungguhnya untuk sebuah input.
+
+        JobStreet menaruh pertanyaan di elemen lain (aria-labelledby, label,
+        legend, atau wadah di atasnya), sedangkan atribut `name`/`id` hanya
+        berisi ID internal seperti `questionnaire.ID_Q_...`. Karena itu ID
+        internal tidak pernah dipakai sebagai teks pertanyaan.
+        """
+        opsi = list(opsi or [])
+
+        # 1. aria-labelledby -> teks elemen yang dirujuk
+        try:
+            ids = (element.get_attribute("aria-labelledby") or "").split()
+        except Exception:
+            ids = []
+
+        for id_rujukan in ids:
+            for label in self._find_all(f"[id='{id_rujukan}']"):
+                teks = " ".join(self._raw_text(label).split())
+                if teks and not tampak_id_internal(teks):
+                    return teks
+
+        # 2. aria-label
+        try:
+            label = " ".join((element.get_attribute("aria-label") or "").split())
+        except Exception:
+            label = ""
+
+        if label and not tampak_id_internal(label):
+            return label
+
+        # 3. label[for=id]
+        try:
+            id_el = (element.get_attribute("id") or "").strip()
+        except Exception:
+            id_el = ""
+
+        if id_el:
+            for label_el in self._find_all(f"label[for='{id_el}']"):
+                teks = " ".join(self._raw_text(label_el).split())
+                if teks:
+                    return teks
+
+        # 4. teks di sekitar input (naik maksimum empat tingkat)
+        induk = element
+
+        for _ in range(4):
+            try:
+                induk = induk.find_element(By.XPATH, "..")
+            except Exception:
+                break
+
+            teks = self._raw_text(induk)
+            if not teks:
+                continue
+
+            kandidat = ambil_pertanyaan(teks, opsi)
+            if kandidat and not tampak_id_internal(kandidat):
+                return kandidat
 
         return ""
 
@@ -603,8 +780,123 @@ class AutoApplier:
 
         return False
 
+    def _jawab_select(self, element) -> str:
+        """Isi satu dropdown. Kembalikan teks jawaban ('' bila tidak dijawab)."""
+        try:
+            terisi = (element.get_attribute("value") or "").strip()
+        except Exception:
+            terisi = ""
+
+        if terisi:
+            return ""
+
+        opsi = self._teks_opsi(element)
+        pertanyaan = self._pertanyaan(element, opsi)
+        pilihan = pilih_jawaban(pertanyaan, opsi)
+
+        if pilihan and self._pilih_opsi(element, pilihan):
+            console.print(
+                f'[dim]   jawab "{pilihan}" untuk: '
+                f'{pertanyaan[:70] or "pertanyaan"}[/]'
+            )
+            return pilihan
+
+        return "" if not opsi else "-"
+
+    def _jawab_radio(self) -> list:
+        """Jawab pertanyaan radio (ya/tidak) yang polanya dikenali."""
+        grup = {}
+
+        for element in self._find_all("input[type='radio']"):
+            if not self._visible(element) or not self._enabled(element):
+                continue
+
+            try:
+                nama = (element.get_attribute("name") or "").strip()
+            except Exception:
+                nama = ""
+
+            if nama:
+                grup.setdefault(nama, []).append(element)
+
+        gagal = []
+
+        for element_grup in grup.values():
+            if any(self._selected(item) for item in element_grup):
+                continue
+
+            opsi = []
+            for item in element_grup:
+                label = self._label_untuk(item)
+                if label:
+                    opsi.append(label)
+
+            pertanyaan = self._pertanyaan(element_grup[0], opsi)
+            pilihan = pilih_jawaban_radio(pertanyaan, opsi)
+
+            if not pilihan:
+                gagal.append(pertanyaan or "pertanyaan pilihan")
+                continue
+
+            diklik = False
+            for item in element_grup:
+                if _norm(self._label_untuk(item)) == _norm(pilihan):
+                    diklik = self._click(item)
+                    break
+
+            if diklik:
+                console.print(
+                    f'[dim]   jawab "{pilihan}" untuk: '
+                    f'{pertanyaan[:70] or "pertanyaan"}[/]'
+                )
+            else:
+                gagal.append(pertanyaan or "pertanyaan pilihan")
+
+        return gagal
+
+    def _jawab_teks(self) -> list:
+        """Isi kolom teks/nomor untuk pertanyaan gaji atau pengalaman."""
+        gagal = []
+
+        for selector in ("input[type='text']", "input[type='number']"):
+            for element in self._find_all(selector):
+                if not self._visible(element) or not self._enabled(element):
+                    continue
+
+                try:
+                    terisi = (element.get_attribute("value") or "").strip()
+                except Exception:
+                    terisi = ""
+
+                if terisi:
+                    continue
+
+                pertanyaan = self._pertanyaan(element)
+                jenis = klasifikasi_pertanyaan(pertanyaan)
+
+                if jenis == "gaji":
+                    nilai = str(config.expected_salary or "").strip()
+                elif jenis == "pengalaman":
+                    nilai = f"{float(config.years_experience or 0):g}"
+                else:
+                    continue
+
+                if not nilai:
+                    gagal.append(pertanyaan)
+                    continue
+
+                try:
+                    element.send_keys(nilai)
+                    console.print(
+                        f'[dim]   isi "{nilai}" untuk: {pertanyaan[:70]}[/]'
+                    )
+                except Exception:
+                    gagal.append(pertanyaan)
+
+        return gagal
+
     def jawab_pertanyaan(self) -> list:
-        """Jawab pertanyaan pilihan yang polanya dikenali.
+        """Jawab pertanyaan formulir yang polanya dikenali.
 
         Kembalikan daftar pertanyaan yang belum bisa dijawab otomatis.
         """
@@ -617,25 +909,16 @@ class AutoApplier:
             if not self._visible(element) or not self._enabled(element):
                 continue
 
-            try:
-                terisi = (element.get_attribute("value") or "").strip()
-            except Exception:
-                terisi = ""
+            hasil = self._jawab_select(element)
 
-            if terisi:
-                continue
-
-            pertanyaan = self._pertanyaan(element)
-            opsi = self._teks_opsi(element)
-            pilihan = pilih_jawaban(pertanyaan, opsi)
-
-            if pilihan and self._pilih_opsi(element, pilihan):
-                console.print(
-                    f'[dim]   jawab "{pilihan}"'
-                    f' untuk: {pertanyaan[:60] or "pertanyaan"}[/]'
+            if hasil == "-":
+                opsi = self._teks_opsi(element)
+                gagal.append(
+                    self._pertanyaan(element, opsi) or "pertanyaan pilihan"
                 )
-            else:
-                gagal.append(pertanyaan or "pertanyaan tanpa label")
+
+        gagal.extend(self._jawab_radio())
+        gagal.extend(self._jawab_teks())
 
         return gagal
 
@@ -887,16 +1170,19 @@ class AutoApplier:
 
                     galat = self._validation_error()
                     if galat and belum_terjawab:
+                        rinci = (
+                            pertanyaan_dari_galat(galat)
+                            or belum_terjawab[0][:80]
+                        )
                         console.print(
-                            "[dim]   pertanyaan belum bisa dijawab: "
-                            f"{belum_terjawab[0][:60]}[/]"
+                            f"[dim]   belum bisa dijawab otomatis: {rinci}[/]"
                         )
                         self._dump_debug(job)
                         return ApplyResult(
                             False,
                             "manual_required",
                             "Formulir meminta isian yang belum bisa dijawab "
-                            f"otomatis ({belum_terjawab[0][:60]}) — dilewati",
+                            f"otomatis: {rinci} — dilewati",
                         )
 
                     blocker = self._blocker()

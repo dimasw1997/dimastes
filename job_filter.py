@@ -84,10 +84,13 @@ class JobFilter:
                 f"Lowongan lebih lama dari {config.max_age_days} hari"
             )
 
-        if config.strict_location and location:
-            if not self._location_matches(location):
-                daftar = ", ".join(config.locations) or config.location
-                return False, f"Lokasi di luar daftar ({daftar}): {location}"
+        if (
+            config.strict_location
+            and location
+            and not self._location_matches(location)
+        ):
+            daftar = ", ".join(config.locations) or config.location
+            return False, f"Lokasi di luar daftar ({daftar}): {location}"
 
         if config.min_salary > 0 and salary_text:
             parsed_salary = self._parse_salary(salary_text)
@@ -211,8 +214,10 @@ class JobFilter:
 
     def _extract_experience(self, text: str) -> Optional[int]:
         patterns = [
-            r"(\d+)\+?\s*(?:years?|tahun)\s*(?:of\s+)?"
-            r"(?:experience|pengalaman)",
+            (
+                r"(\d+)\+?\s*(?:years?|tahun)\s*(?:of\s+)?"
+                r"(?:experience|pengalaman)"
+            ),
             r"(?:minimal?|minimum|at least)\s*(\d+)\s*(?:years?|tahun)",
             r"(\d+)\s*-\s*\d+\s*(?:years?|tahun)",
         ]

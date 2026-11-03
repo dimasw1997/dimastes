@@ -124,7 +124,7 @@ def atur_env(pasangan_teks):
         pasangan = parse_pasangan(pasangan_teks)
     except ValueError as exc:
         console.print(f"[bold red]{exc}[/]")
-        raise SystemExit(2)
+        raise SystemExit(2) from None
 
     hasil = atur_nilai(Path(".env"), pasangan)
 

@@ -10,7 +10,6 @@ from job_filter import job_filter
 from notifier import notifier
 from scraper import JobStreetBot
 
-
 console = Console()
 
 
