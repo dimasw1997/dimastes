@@ -9,6 +9,7 @@ yang harus dijawab), proses dihentikan dan lowongan dikembalikan sebagai
 "manual_required" supaya Anda yang menyelesaikan sendiri.
 """
 
+import contextlib
 import re
 import time
 from dataclasses import dataclass
@@ -445,12 +446,10 @@ class AutoApplier:
         return None
 
     def _click(self, element) -> bool:
-        try:
+        with contextlib.suppress(Exception):
             self.driver.execute_script(
                 "arguments[0].scrollIntoView({block: 'center'});", element
             )
-        except Exception:
-            pass
 
         try:
             element.click()

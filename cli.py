@@ -1,4 +1,5 @@
 import argparse
+import contextlib
 import subprocess
 
 from rich.console import Console
@@ -57,10 +58,8 @@ def uji_lamar(url: str):
             {"url": url, "title": "lowongan uji"}
         )
     finally:
-        try:
+        with contextlib.suppress(Exception):
             bot.close()
-        except Exception:
-            pass
 
     warna = "green" if hasil.applied else "yellow"
     console.print(

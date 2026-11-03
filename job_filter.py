@@ -1,5 +1,6 @@
 """Aturan penyaringan dan pemeringkatan lowongan."""
 
+import contextlib
 import re
 from typing import Dict, List, Optional
 
@@ -111,12 +112,10 @@ class JobFilter:
 
         daftar = list(getattr(config, "blacklist_companies", []) or [])
 
-        try:
+        with contextlib.suppress(Exception):
             daftar += [
                 item.get("company_name", "") for item in db.get_blacklist()
             ]
-        except Exception:
-            pass
 
         for item in daftar:
             kunci = normalisasi_perusahaan(item)

@@ -2,7 +2,7 @@
 
 import sqlite3
 import threading
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 
 from config import config
 
@@ -312,17 +312,14 @@ class Database:
         if not company_name:
             return
 
-        with self._get_conn() as conn:
-            try:
-                conn.execute(
-                    """
+        with self._get_conn() as conn, suppress(sqlite3.IntegrityError):
+            conn.execute(
+                """
                     INSERT INTO blacklist (company_name, reason)
                     VALUES (?, ?)
                     """,
-                    (company_name, reason),
-                )
-            except sqlite3.IntegrityError:
-                pass
+                (company_name, reason),
+            )
 
     # ------------------------------------------------------------------
     # Statistik & perbaikan data
