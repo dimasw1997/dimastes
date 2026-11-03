@@ -120,7 +120,7 @@ cp .env.example .env
 | `BLACKLIST_COMPANIES` | kosong | Perusahaan yang tidak ingin dilamar (dipisah koma, cocok longgar) |
 | `EXCLUDE_KEYWORDS` | `principal,director,head,senior,lead` | Kata yang membuat judul otomatis ditolak |
 | `STRICT_LOCATION` | `false` | `true` = tolak lowongan yang lokasinya di luar `LOCATION` |
-| `MAX_APPLY_PER_DAY` | `5` | Batas lamaran tercatat per hari |
+| `MAX_APPLY_PER_DAY` | `500` | Batas lamaran tercatat per hari |
 | `DELAY_BETWEEN_APPLY` | `3` | Jeda (detik) antar lowongan |
 | `MAX_PAGES` | `3` | Jumlah halaman hasil pencarian per kata kunci |
 | `HEADLESS_MODE` | `false` | `true` = Chrome tanpa jendela (tidak cocok untuk tinjau manual) |
@@ -136,7 +136,7 @@ cp .env.example .env
 | `AUTO_APPLY` | `true` | Kirim lamaran otomatis; pakai `run --manual` untuk meninjau sendiri |
 | `COVER_LETTER` | kosong | Teks cover letter/pesan yang diisi otomatis |
 | `RESUME_PATH` | kosong | Path berkas CV untuk unggah otomatis |
-| `AUTO_APPLY_MAX_PER_SESSION` | `25` | Batas lamaran otomatis per sesi |
+| `AUTO_APPLY_MAX_PER_SESSION` | `500` | Batas lamaran otomatis per sesi |
 | `AUTO_APPLY_STEP_TIMEOUT` | `3` | Batas detik mengenali tiap langkah; lewat itu lowongan dilewati |
 | `AUTO_ANSWER_QUESTIONS` | `true` | Jawab otomatis pertanyaan dropdown (pengalaman, gaji, pendidikan) |
 | `EXPECTED_SALARY` | `5000000` | Gaji yang diharapkan (kosong = pertanyaan gaji dilewati) |
@@ -176,6 +176,9 @@ python cli.py repair
 
 # 5b. Samakan kata kunci di .env dengan daftar terbaru (cadangan: .env.bak)
 python cli.py perbarui-env
+
+# 5c. Ubah nilai di .env tanpa membuka editor
+python cli.py set-env MAX_APPLY_PER_DAY=500 AUTO_APPLY_MAX_PER_SESSION=500
 
 # 6. Uji alur lamaran dengan halaman palsu (tanpa Chrome, tanpa internet)
 python cli.py simulasi
@@ -404,7 +407,8 @@ meninjau sendiri.
 5. Di akhir sesi muncul daftar lowongan yang dilewati beserta alasannya —
    hanya informasi, tidak perlu Anda kerjakan.
 
-Batas pengaman: `MAX_APPLY_PER_DAY` (harian), `AUTO_APPLY_MAX_PER_SESSION`
+Batas pengaman: `MAX_APPLY_PER_DAY` (harian, bawaan **500**),
+`AUTO_APPLY_MAX_PER_SESSION`
 (per sesi), dan `DELAY_BETWEEN_APPLY` (jeda antar lamaran). Jangan
 menaikkannya terlalu tinggi.
 

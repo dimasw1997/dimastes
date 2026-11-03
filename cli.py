@@ -114,6 +114,33 @@ def simulasi():
         raise SystemExit(1)
 
 
+def atur_env(pasangan_teks):
+    """Ubah nilai tertentu di .env, mis. MAX_APPLY_PER_DAY=500."""
+    from pathlib import Path
+
+    from env_tools import atur_nilai, parse_pasangan
+
+    try:
+        pasangan = parse_pasangan(pasangan_teks)
+    except ValueError as exc:
+        console.print(f"[bold red]{exc}[/]")
+        raise SystemExit(2)
+
+    hasil = atur_nilai(Path(".env"), pasangan)
+
+    if hasil["status"] == "sudah_terbaru":
+        console.print("[green].env sudah memakai nilai tersebut.[/]")
+        return
+
+    console.print(
+        "[bold green]Nilai di .env diperbarui:[/] "
+        + ", ".join(hasil["perubahan"])
+    )
+    if hasil["backup"]:
+        console.print(f"[dim]Cadangan file lama: {hasil['backup']}[/]")
+    console.print("[dim]Jalankan ulang program agar nilai baru terpakai.[/]")
+
+
 def show_config():
     table = Table(title="Konfigurasi")
     table.add_column("Pengaturan", style="cyan")
@@ -316,6 +343,16 @@ if __name__ == "__main__":
     )
     uji_parser.add_argument("--url", required=True, help="URL lowongan JobStreet")
 
+    env_parser = subparsers.add_parser(
+        "set-env",
+        help="Ubah nilai di .env, mis. set-env MAX_APPLY_PER_DAY=500",
+    )
+    env_parser.add_argument(
+        "pasangan",
+        nargs="+",
+        help="Satu atau beberapa KUNCI=nilai",
+    )
+
     bl_parser = subparsers.add_parser("blacklist", help="Blacklist company")
     bl_parser.add_argument("company", help="Nama company")
     bl_parser.add_argument("--reason", default="", help="Alasan")
@@ -368,6 +405,8 @@ if __name__ == "__main__":
         perbarui_env()
     elif args.command == "simulasi":
         simulasi()
+    elif args.command == "set-env":
+        atur_env(args.pasangan)
     elif args.command == "history":
         show_applications(args.limit)
     elif args.command == "uji-lamar":

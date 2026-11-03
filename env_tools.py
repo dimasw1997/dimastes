@@ -125,3 +125,61 @@ def perbarui_env(
         "perubahan": perubahan,
         "backup": str(backup) if backup else None,
     }
+
+
+# Batas yang harus berupa bilangan bulat positif.
+KUNCI_ANGKA = ("MAX_APPLY_PER_DAY", "AUTO_APPLY_MAX_PER_SESSION")
+
+
+def parse_pasangan(daftar) -> dict:
+    """Ubah ["KUNCI=nilai", ...] menjadi dict, dengan validasi sederhana."""
+    hasil = {}
+
+    for item in daftar:
+        teks = str(item or "")
+        if "=" not in teks:
+            raise ValueError(
+                f"Format harus KUNCI=nilai (contoh MAX_APPLY_PER_DAY=500): {teks}"
+            )
+
+        kunci, _, nilai = teks.partition("=")
+        kunci = kunci.strip().upper()
+        nilai = nilai.strip()
+
+        if not kunci:
+            raise ValueError(f"Nama kunci kosong: {teks}")
+
+        if kunci in KUNCI_ANGKA:
+            try:
+                angka = int(nilai)
+            except ValueError:
+                raise ValueError(f"{kunci} harus berupa angka: {nilai}")
+            if angka < 1:
+                raise ValueError(f"{kunci} minimal 1")
+            nilai = str(angka)
+
+        hasil[kunci] = nilai
+
+    return hasil
+
+
+def atur_nilai(path_env: Path, pasangan: dict) -> dict:
+    """Ganti/tambah nilai tertentu di .env (cadangan .env.bak)."""
+    path_env = Path(path_env)
+    teks_lama = (
+        path_env.read_text(encoding="utf-8") if path_env.is_file() else ""
+    )
+
+    backup = None
+    if path_env.is_file():
+        backup = path_env.with_name(path_env.name + ".bak")
+        backup.write_text(teks_lama, encoding="utf-8")
+
+    teks_baru, perubahan = perbarui_nilai(teks_lama, pasangan)
+    path_env.write_text(teks_baru, encoding="utf-8")
+
+    return {
+        "status": "diperbarui" if perubahan else "sudah_terbaru",
+        "perubahan": perubahan,
+        "backup": str(backup) if backup else None,
+    }

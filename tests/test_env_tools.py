@@ -72,3 +72,41 @@ def test_perbarui_env_tidak_menimpa_isian_pengguna(tmp_path):
     assert "EXPECTED_SALARY=7000000" in isi
     assert "AUTO_ANSWER_QUESTIONS=true" in isi
     assert "YEARS_EXPERIENCE=3" in isi
+
+
+def test_parse_pasangan_validasi():
+    from env_tools import parse_pasangan
+
+    assert parse_pasangan(["MAX_APPLY_PER_DAY=500"]) == {
+        "MAX_APPLY_PER_DAY": "500"
+    }
+    assert parse_pasangan(["expected_salary=6000000"]) == {
+        "EXPECTED_SALARY": "6000000"
+    }
+
+    with pytest.raises(ValueError):
+        parse_pasangan(["tanpa_sama_dengan"])
+
+    with pytest.raises(ValueError):
+        parse_pasangan(["MAX_APPLY_PER_DAY=banyak"])
+
+    with pytest.raises(ValueError):
+        parse_pasangan(["MAX_APPLY_PER_DAY=0"])
+
+
+def test_atur_nilai_mengubah_dan_menambah(tmp_path):
+    from env_tools import atur_nilai
+
+    env = tmp_path / ".env"
+    env.write_text("MAX_APPLY_PER_DAY=100\nCOVER_LETTER=hai\n", encoding="utf-8")
+
+    hasil = atur_nilai(
+        env,
+        {"MAX_APPLY_PER_DAY": "500", "AUTO_APPLY_MAX_PER_SESSION": "500"},
+    )
+
+    isi = env.read_text(encoding="utf-8")
+    assert hasil["status"] == "diperbarui"
+    assert "MAX_APPLY_PER_DAY=500" in isi
+    assert "COVER_LETTER=hai" in isi
+    assert "AUTO_APPLY_MAX_PER_SESSION=500" in isi
