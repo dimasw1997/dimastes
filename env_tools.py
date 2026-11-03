@@ -10,6 +10,7 @@ KUNCI_KATA_KUNCI = ("KEYWORDS", "TITLE_KEYWORDS")
 # Kunci baru yang ditambahkan hanya bila belum ada di .env, sehingga isian
 # yang sudah Anda sesuaikan sendiri tidak pernah tertimpa.
 KUNCI_TAMBAHAN = (
+    "BLACKLIST_COMPANIES",
     "AUTO_ANSWER_QUESTIONS",
     "EXPECTED_SALARY",
     "YEARS_EXPERIENCE",

@@ -189,6 +189,11 @@ def show_config():
 def blacklist_company(company: str, reason: str = ""):
     db.add_blacklist(company, reason)
     console.print(f"[green]{company} di-blacklist[/]")
+    console.print(
+        "[dim]Nama dicocokkan longgar: \"royal abadi\" juga menangkap "
+        "\"PT Royal Abadi Sejahtera\", \"PT. ROYAL ABADI SEJAHTERA\", "
+        "dst.[/]"
+    )
 
 
 def show_applications(limit: int = 50):

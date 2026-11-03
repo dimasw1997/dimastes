@@ -117,6 +117,7 @@ cp .env.example .env
 | `TITLE_KEYWORDS` | 43 kata kunci (inventory, gudang, ppic, logistik, ...) | Kata kunci pencocok **judul**; kosong = ikut `KEYWORDS` |
 | `MIN_SALARY` | `0` | Gaji minimum (0 = tanpa filter) |
 | `MAX_EXPERIENCE_YEARS` | `5` | Tolak lowongan yang minta pengalaman lebih dari ini |
+| `BLACKLIST_COMPANIES` | kosong | Perusahaan yang tidak ingin dilamar (dipisah koma, cocok longgar) |
 | `EXCLUDE_KEYWORDS` | `principal,director,head,senior,lead` | Kata yang membuat judul otomatis ditolak |
 | `STRICT_LOCATION` | `false` | `true` = tolak lowongan yang lokasinya di luar `LOCATION` |
 | `MAX_APPLY_PER_DAY` | `5` | Batas lamaran tercatat per hari |
@@ -167,8 +168,8 @@ python cli.py run --auto --locations "Bandung,Jakarta,Tangerang,Jababeka"
 python cli.py stats
 python cli.py history --limit 20
 
-# 4. Blacklist perusahaan
-python cli.py blacklist "PT Contoh" --reason "tidak sesuai"
+# 4. Blacklist perusahaan (cocok longgar, termasuk variasi nama)
+python cli.py blacklist "royal abadi" --reason "mantan perusahaan"
 
 # 5. Rapikan data lama
 python cli.py repair
@@ -340,6 +341,24 @@ terus-menerus) dan menampilkan pesan validasi dari JobStreet.
 
 Matikan dengan `AUTO_ANSWER_QUESTIONS=false` bila ingin semua pertanyaan
 dilewati.
+
+### Menolak perusahaan tertentu
+
+Ada dua cara mengecualikan perusahaan agar tidak pernah dilamar:
+
+```bash
+# 1) Simpan ke database (paling praktis, cocok longgar)
+python cli.py blacklist "royal abadi" --reason "mantan perusahaan"
+
+# 2) Tetapkan di .env supaya ikut terbawa saat pindah komputer
+BLACKLIST_COMPANIES=royal abadi,pt lain
+```
+
+Pencocokan sengaja longgar: awalan `PT`, `CV`, `Tbk`, tanda baca, dan huruf
+besar/kecil diabaikan. Jadi `royal abadi` menolak **PT Royal Abadi Sejahtera**,
+**PT. ROYAL ABADI SEJAHTERA**, maupun **Royal Abadi**. Di terminal, lowongan
+seperti ini tampil sebagai
+`Dilewati: Staff PPIC — Perusahaan di-blacklist: royal abadi`.
 
 ### Isian lamaran otomatis
 

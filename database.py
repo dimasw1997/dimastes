@@ -265,6 +265,15 @@ class Database:
 
             return result is not None
 
+    def get_blacklist(self) -> list[dict]:
+        """Semua perusahaan yang dikecualikan beserta alasannya."""
+        with self._get_conn() as conn:
+            rows = conn.execute(
+                "SELECT company_name, reason FROM blacklist ORDER BY company_name"
+            ).fetchall()
+
+        return [dict(row) for row in rows]
+
     def add_blacklist(self, company_name: str, reason: str = ""):
         company_name = str(company_name or "").strip()
 

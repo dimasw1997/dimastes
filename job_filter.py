@@ -20,6 +20,18 @@ LOCATION_ALIASES = {
 }
 
 
+AWALAN_PERUSAHAAN = ("pt", "cv", "ud", "pd", "koperasi", "persero", "tbk")
+
+
+def normalisasi_perusahaan(nama: str) -> str:
+    """Bentuk baku nama perusahaan untuk pencocokan longgar."""
+    teks = str(nama or "").lower()
+    teks = re.sub(r"[^a-z0-9 ]+", " ", teks)
+    return " ".join(
+        kata for kata in teks.split() if kata not in AWALAN_PERUSAHAAN
+    )
+
+
 class JobFilter:
     def __init__(self):
         self.exclude_keywords = [
@@ -44,8 +56,10 @@ class JobFilter:
         if job_id and db.is_already_applied(job_id):
             return False, "Sudah pernah apply"
 
-        if company and db.is_blacklisted(company):
-            return False, f"Company di-blacklist: {company}"
+        if company:
+            dikecualikan = self._perusahaan_dikecualikan(company)
+            if dikecualikan:
+                return False, f"Perusahaan di-blacklist: {dikecualikan}"
 
         title_lower = title.lower()
 
@@ -85,6 +99,28 @@ class JobFilter:
             return False, f"Experience terlalu tinggi: {exp_years} tahun"
 
         return True, "OK"
+
+    def _perusahaan_dikecualikan(self, company: str) -> str:
+        """Nama perusahaan yang dikecualikan; "" bila boleh dilamar."""
+        nama = normalisasi_perusahaan(company)
+        if not nama:
+            return ""
+
+        daftar = list(getattr(config, "blacklist_companies", []) or [])
+
+        try:
+            daftar += [
+                item.get("company_name", "") for item in db.get_blacklist()
+            ]
+        except Exception:
+            pass
+
+        for item in daftar:
+            kunci = normalisasi_perusahaan(item)
+            if kunci and (kunci in nama or nama in kunci):
+                return str(item).strip()
+
+        return ""
 
     @staticmethod
     def _matches_interest(title_lower: str) -> bool:

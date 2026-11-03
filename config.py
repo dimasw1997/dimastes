@@ -79,6 +79,12 @@ class Config:
         "EXCLUDE_KEYWORDS",
         "principal,director,head,senior,lead"
     ))
+    # Nama perusahaan yang tidak ingin dilamar lagi (mantan perusahaan,
+    # dsb). Dicocokkan longgar: "royal abadi" juga menangkap
+    # "PT Royal Abadi Sejahtera".
+    blacklist_companies: list[str] = field(
+        default_factory=lambda: _list_setting("BLACKLIST_COMPANIES", "")
+    )
 
     # Tolak lowongan yang lokasinya jelas di luar LOCATION.
     strict_location: bool = _bool_setting("STRICT_LOCATION", False)

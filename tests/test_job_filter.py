@@ -282,3 +282,46 @@ def test_judul_di_luar_pengalaman_cv_tetap_ditolak(monkeypatch, judul):
     monkeypatch.setattr(config, "title_keywords", _kata_kunci_judul())
 
     assert JobFilter._matches_interest(judul.lower()) is False
+
+
+@pytest.mark.parametrize(
+    "company",
+    [
+        "PT Royal Abadi Sejahtera",
+        "PT. ROYAL ABADI SEJAHTERA",
+        "Royal Abadi Sejahtera",
+        "PT Royal Abadi",
+    ],
+)
+def test_blacklist_cocok_longgar(filter_baru, monkeypatch, company):
+    monkeypatch.setattr(
+        config, "blacklist_companies", ["royal abadi"]
+    )
+
+    lolos, alasan = filter_baru.should_apply(make_job(company=company))
+
+    assert lolos is False
+    assert "blacklist" in alasan.lower()
+
+
+def test_blacklist_tidak_menolak_perusahaan_lain(filter_baru, monkeypatch):
+    monkeypatch.setattr(config, "blacklist_companies", ["royal abadi"])
+
+    lolos, _ = filter_baru.should_apply(
+        make_job(company="PT Sinar Abadi Nusantara")
+    )
+
+    assert lolos is True
+
+
+def test_blacklist_dari_daftar_tersimpan(filter_baru, monkeypatch):
+    monkeypatch.setattr(config, "blacklist_companies", [])
+    filter_baru.__class__  # noqa: B018 - hanya memastikan filter siap
+    job_filter_module.db.add_blacklist("Royal Abadi", "mantan perusahaan")
+
+    lolos, alasan = filter_baru.should_apply(
+        make_job(company="PT Royal Abadi Sejahtera")
+    )
+
+    assert lolos is False
+    assert "blacklist" in alasan.lower()
