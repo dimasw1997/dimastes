@@ -176,6 +176,8 @@ def test_sesi_habis_menghentikan_seluruh_sesi(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "auto_apply_max_per_session", 25)
     monkeypatch.setattr(config, "strict_location", False)
     monkeypatch.setattr(config, "max_age_days", 0)
+    # Mode berurutan: kata kunci berikutnya tidak dicari setelah sesi habis.
+    monkeypatch.setattr(config, "collect_before_apply", False)
 
     class Bot:
         login_expired = False

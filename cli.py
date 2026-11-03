@@ -186,6 +186,14 @@ def show_config():
         if config.max_age_days > 0 else "Tanpa batas umur",
     )
     table.add_row("Halaman per kata kunci", str(config.max_pages))
+    table.add_row(
+        "Urutan pelamaran",
+        (
+            "Kumpulkan dulu, mulai dari posting terbaru"
+            if config.auto_apply and config.collect_before_apply
+            else "Per kata kunci (mulai dari posting terbaru)"
+        ),
+    )
     table.add_row("Batas lamaran per hari", str(config.max_apply_per_day))
     table.add_row("Jeda antar-lowongan", f"{config.delay_between_apply} detik")
     table.add_row("Mode browser", "Headless" if config.headless else "Terlihat")

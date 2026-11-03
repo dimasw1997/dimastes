@@ -11,6 +11,7 @@ KUNCI_KATA_KUNCI = ("KEYWORDS", "TITLE_KEYWORDS")
 # yang sudah Anda sesuaikan sendiri tidak pernah tertimpa.
 KUNCI_TAMBAHAN = (
     "BLACKLIST_COMPANIES",
+    "COLLECT_BEFORE_APPLY",
     "AUTO_ANSWER_QUESTIONS",
     "EXPECTED_SALARY",
     "YEARS_EXPERIENCE",

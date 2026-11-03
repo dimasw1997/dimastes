@@ -1,0 +1,124 @@
+"""Urutan pelamaran: mulai dari posting terbaru."""
+
+from types import SimpleNamespace
+
+import pytest
+
+import job_filter as job_filter_module
+import main as main_module
+from config import config
+from database import Database
+
+
+class BotPalsu:
+    def __init__(self, halaman):
+        self.halaman = halaman
+        self.dilamar = []
+
+    def search_jobs(self, keyword, page=1, location=""):
+        return list(self.halaman.get((keyword, page), []))
+
+    def apply_job(self, job):
+        self.dilamar.append(job["job_id"])
+        return SimpleNamespace(
+            applied=True, status="applied", reason="Terkirim otomatis"
+        )
+
+
+def lowongan(job_id, age_days, title="Staff Inventory"):
+    return {
+        "job_id": str(job_id),
+        "title": title,
+        "company": "PT Contoh",
+        "location": "Bandung",
+        "salary": "Rp 5.000.000",
+        "description": "",
+        "url": f"https://id.jobstreet.com/job/{job_id}",
+        "date_posted": "Hari ini",
+        "age_days": age_days,
+    }
+
+
+@pytest.fixture
+def siapkan(tmp_path, monkeypatch):
+    database = Database(str(tmp_path / "engine.db"))
+    monkeypatch.setattr(main_module, "db", database)
+    monkeypatch.setattr(job_filter_module, "db", database)
+
+    monkeypatch.setattr(config, "locations", ["Bandung"])
+    monkeypatch.setattr(config, "keywords", ["inventory", "ppic"])
+    monkeypatch.setattr(config, "max_pages", 1)
+    monkeypatch.setattr(config, "auto_apply", True)
+    monkeypatch.setattr(config, "require_keyword_match", False)
+    monkeypatch.setattr(config, "max_age_days", 0)
+    monkeypatch.setattr(config, "min_salary", 0)
+    monkeypatch.setattr(config, "blacklist_companies", [])
+    monkeypatch.setattr(config, "max_apply_per_day", 500)
+    monkeypatch.setattr(config, "auto_apply_max_per_session", 500)
+    monkeypatch.setattr(config, "delay_between_apply", 0)
+    monkeypatch.setattr(config, "sort_mode", "ListedDate")
+    monkeypatch.setattr(config, "prefer_newest", True)
+    monkeypatch.setattr(main_module.notifier, "send_apply_success", lambda *_: None)
+    monkeypatch.setattr(main_module.notifier, "send_error", lambda *_: None)
+
+    halaman = {
+        ("inventory", 1): [lowongan("A", 5), lowongan("B", 1)],
+        ("ppic", 1): [lowongan("C", 0)],
+    }
+
+    mesin = main_module.AutoApplyEngine()
+    mesin.bot = BotPalsu(halaman)
+    return mesin
+
+
+def test_kumpulkan_dulu_urut_posting_terbaru(siapkan, monkeypatch):
+    monkeypatch.setattr(config, "collect_before_apply", True)
+
+    siapkan._kumpulkan_lalu_lamar()
+
+    assert siapkan.bot.dilamar == ["C", "B", "A"]
+
+
+def test_mode_berurutan_per_kata_kunci(siapkan, monkeypatch):
+    monkeypatch.setattr(config, "collect_before_apply", False)
+
+    for keyword in config.keywords:
+        siapkan._process_keyword(keyword, location="Bandung")
+
+    assert siapkan.bot.dilamar == ["B", "A", "C"]
+
+
+def test_kumpulkan_menghormati_batas_sesi(siapkan, monkeypatch):
+    monkeypatch.setattr(config, "collect_before_apply", True)
+    monkeypatch.setattr(config, "auto_apply_max_per_session", 2)
+
+    siapkan._kumpulkan_lalu_lamar()
+
+    assert siapkan.bot.dilamar == ["C", "B"]
+
+
+def test_tidak_ada_kandidat_tidak_error(siapkan, monkeypatch):
+    monkeypatch.setattr(config, "collect_before_apply", True)
+    siapkan.bot.halaman = {}
+
+    siapkan._kumpulkan_lalu_lamar()
+
+    assert siapkan.bot.dilamar == []
+
+
+def test_login_habis_menghentikan_pelamaran(siapkan, monkeypatch):
+    monkeypatch.setattr(config, "collect_before_apply", True)
+
+    def habis(job):
+        siapkan.bot.dilamar.append(job["job_id"])
+        return SimpleNamespace(
+            applied=False, status="login_required", reason="Sesi habis"
+        )
+
+    monkeypatch.setattr(siapkan.bot, "apply_job", habis)
+
+    siapkan._kumpulkan_lalu_lamar()
+
+    # Hanya satu lamaran dicoba; sisanya dihentikan.
+    assert siapkan.bot.dilamar == ["C"]
+    assert siapkan.stop_requested is True

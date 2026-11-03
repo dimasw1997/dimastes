@@ -126,6 +126,7 @@ cp .env.example .env
 | `HEADLESS_MODE` | `false` | `true` = Chrome tanpa jendela (tidak cocok untuk tinjau manual) |
 | `TELEGRAM_BOT_TOKEN` | kosong | Opsional, untuk notifikasi |
 | `TELEGRAM_CHAT_ID` | kosong | Opsional, untuk notifikasi |
+| `COLLECT_BEFORE_APPLY` | `true` | Kumpulkan semua kandidat dulu, lalu lamar mulai dari posting terbaru |
 | `SORT_MODE` | `ListedDate` | Urutan hasil; `ListedDate` = terbaru dulu, `KeywordRelevance` = relevansi |
 | `PREFER_NEWEST` | `true` | Dahulukan lowongan paling baru saat antrean melamar |
 | `MAX_AGE_DAYS` | `0` | Hanya lowongan N hari terakhir (0 = semua). Nilai valid JobStreet: 1, 3, 7, 14, 31 |
@@ -344,6 +345,32 @@ terus-menerus) dan menampilkan pesan validasi dari JobStreet.
 
 Matikan dengan `AUTO_ANSWER_QUESTIONS=false` bila ingin semua pertanyaan
 dilewati.
+
+### Mulai dari posting terbaru
+
+Lowongan dilamar berurutan **mulai dari yang paling baru diposting**:
+
+1. Pencarian memakai `sortmode=ListedDate`, jadi JobStreet mengembalikan
+   lowongan terbaru lebih dulu.
+2. Dengan `COLLECT_BEFORE_APPLY=true` (bawaan), semua hasil dari **seluruh
+   kata kunci dan lokasi** dikumpulkan dulu, diurutkan menurut umur posting,
+   baru dilamar satu per satu. Jadi lowongan "hari ini" dari kata kunci mana
+   pun dikerjakan sebelum lowongan "3 hari yang lalu".
+
+Di terminal terlihat ringkasannya:
+
+```
+Pengumpulan selesai: 12 lowongan siap dilamar, mulai dari posting terbaru.
+(hari ini) Staff PPIC
+(hari ini) Inventory Control
+(1 hari lalu) Staf Gudang
+```
+
+Konsekuensinya: aplikasi pertama baru dikirim setelah pencarian selesai
+(beberapa menit untuk 14 kata kunci x 7 lokasi). Bila ingin langsung melamar
+per kata kunci, set `COLLECT_BEFORE_APPLY=false`.
+
+Lowongan yang tanggalnya tidak terbaca ditaruh paling akhir.
 
 ### Menolak perusahaan tertentu
 

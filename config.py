@@ -110,6 +110,10 @@ class Config:
         "cycle count,project control",
     ))
 
+    # Kumpulkan semua kandidat lebih dulu, lalu lamar berurutan mulai dari
+    # posting paling baru (lintas kata kunci & lokasi).
+    collect_before_apply: bool = _bool_setting("COLLECT_BEFORE_APPLY", True)
+
     # Urutkan hasil pencarian dari yang paling baru (ListedDate).
     # Kosongkan SORT_MODE untuk kembali ke urutan relevansi JobStreet.
     sort_mode: str = os.getenv("SORT_MODE", "ListedDate").strip()

@@ -49,32 +49,38 @@ class AutoApplyEngine:
                 console.print("[bold red]Login belum selesai. Program berhenti.[/]")
                 return
 
-            for location in config.locations:
-                console.print(
-                    f"\n[bold blue]{'#' * 60}[/]"
-                )
-                console.print(f"[bold blue]LOKASI: {location}[/]")
-                console.print(f"[bold blue]{'#' * 60}[/]")
-
-                for keyword in config.keywords:
-                    keyword = keyword.strip()
-
-                    if not keyword:
-                        continue
-
-                    console.print(f"\n{'=' * 60}")
+            if config.auto_apply and config.collect_before_apply:
+                # Semua kandidat dikumpulkan dulu, lalu dilamar berurutan
+                # mulai dari posting paling baru (lintas kata kunci & lokasi).
+                self._kumpulkan_lalu_lamar()
+            else:
+                for location in config.locations:
                     console.print(
-                        f"[bold]Lokasi: {location} — kata kunci: {keyword}[/]"
+                        f"\n[bold blue]{'#' * 60}[/]"
                     )
-                    console.print(f"{'=' * 60}")
+                    console.print(f"[bold blue]LOKASI: {location}[/]")
+                    console.print(f"[bold blue]{'#' * 60}[/]")
 
-                    self._process_keyword(keyword, location=location)
+                    for keyword in config.keywords:
+                        keyword = keyword.strip()
+
+                        if not keyword:
+                            continue
+
+                        console.print(f"\n{'=' * 60}")
+                        console.print(
+                            f"[bold]Lokasi: {location} — kata kunci: "
+                            f"{keyword}[/]"
+                        )
+                        console.print(f"{'=' * 60}")
+
+                        self._process_keyword(keyword, location=location)
+
+                        if self.stop_requested:
+                            break
 
                     if self.stop_requested:
                         break
-
-                if self.stop_requested:
-                    break
 
         except KeyboardInterrupt:
             console.print("\n[bold yellow]Proses dihentikan.[/]")
@@ -93,14 +99,17 @@ class AutoApplyEngine:
             except Exception as exc:
                 console.print(f"[yellow]Laporan harian gagal dikirim: {exc}[/]")
 
-    def _process_keyword(self, keyword: str, location: str = ""):
+    def _cari_keyword(self, keyword: str, location: str = "") -> list:
+        """Cari & saring satu kata kunci; kembalikan lowongan siap dilamar."""
+        terkumpul = []
+
         for page in range(1, config.max_pages + 1):
             if db.get_today_apply_count() >= config.max_apply_per_day:
                 console.print(
                     f"[bold yellow]Batas harian tercapai "
                     f"({config.max_apply_per_day}).[/]"
                 )
-                return
+                return terkumpul
 
             jobs = self.bot.search_jobs(keyword, page, location=location)
 
@@ -159,17 +168,16 @@ class AutoApplyEngine:
             self.session_stats["found"] += len(new_jobs)
 
             if not new_jobs:
-                continue
+                if page > 1 and config.sort_mode:
+                    # Hasil sudah diurutkan dari yang terbaru: halaman
+                    # berikutnya pasti lebih lama dan sudah diproses.
+                    console.print(
+                        "[dim]Halaman ini tidak memuat lowongan baru; "
+                        "berhenti karena hasil diurutkan dari yang terbaru.[/]"
+                    )
+                    break
 
-            # Hasil sudah diurutkan dari yang terbaru: begitu satu halaman
-            # tidak memuat lowongan baru lagi, halaman berikutnya pasti lebih
-            # lama dan sudah pernah diproses pada sesi ini.
-            if page > 1 and len(new_jobs) == 0 and config.sort_mode:
-                console.print(
-                    "[dim]Halaman ini tidak memuat lowongan baru; "
-                    "berhenti karena hasil diurutkan dari yang terbaru.[/]"
-                )
-                break
+                continue
 
             eligible_jobs = []
 
@@ -199,73 +207,143 @@ class AutoApplyEngine:
                 "lowongan baru lolos filter."
             )
 
-            for job in eligible_jobs:
-                if db.get_today_apply_count() >= config.max_apply_per_day:
-                    console.print(
-                        "[bold yellow]Batas lamaran harian tercapai.[/]"
-                    )
-                    return
+            terkumpul.extend(eligible_jobs)
 
-                if (
-                    config.auto_apply
-                    and self.session_stats["applied"]
-                    >= config.auto_apply_max_per_session
-                ):
-                    console.print(
-                        "[bold yellow]Batas lamaran otomatis per sesi "
-                        f"({config.auto_apply_max_per_session}) tercapai. "
-                        "Sisa lowongan dilewati.[/]"
-                    )
-                    return
+        return terkumpul
 
-                title = (job.get("title") or "").strip()
+    def _lamar(self, job: dict) -> bool:
+        """Lamar satu lowongan. False = seluruh sesi harus berhenti."""
+        if db.get_today_apply_count() >= config.max_apply_per_day:
+            console.print("[bold yellow]Batas lamaran harian tercapai.[/]")
+            return False
 
-                try:
-                    # Mode otomatis: bot mengirim lamaran sendiri.
-                    # Mode manual: halaman dibuka untuk Anda tinjau.
-                    hasil = self.bot.apply_job(job)
+        if (
+            config.auto_apply
+            and self.session_stats["applied"]
+            >= config.auto_apply_max_per_session
+        ):
+            console.print(
+                "[bold yellow]Batas lamaran otomatis per sesi "
+                f"({config.auto_apply_max_per_session}) tercapai. "
+                "Sisa lowongan dilewati.[/]"
+            )
+            return False
 
-                except KeyboardInterrupt:
-                    raise
+        title = (job.get("title") or "").strip()
 
-                except Exception as exc:
-                    console.print(
-                        f"[bold red]Error saat memproses lowongan "
-                        f"'{title}': {exc}[/]"
-                    )
-                    self.session_stats["errors"] += 1
+        try:
+            # Mode otomatis: bot mengirim lamaran sendiri.
+            # Mode manual: halaman dibuka untuk Anda tinjau.
+            hasil = self.bot.apply_job(job)
+
+        except KeyboardInterrupt:
+            raise
+
+        except Exception as exc:
+            console.print(
+                f"[bold red]Error saat memproses lowongan "
+                f"'{title}': {exc}[/]"
+            )
+            self.session_stats["errors"] += 1
+            return True
+
+        if hasil.status == "login_required":
+            self.session_stats["errors"] += 1
+            self.stop_requested = True
+            console.print(
+                "[bold red]Sesi login JobStreet sudah habis. "
+                "Sesi dihentikan agar tidak menumpuk error.[/]"
+            )
+            notifier.send_error("Sesi login JobStreet habis")
+            return False
+
+        if hasil.applied:
+            self.session_stats["applied"] += 1
+            notifier.send_apply_success(job)
+
+        elif hasil.status == "manual_required":
+            self.session_stats["manual"] += 1
+            self.manual_jobs.append((job, hasil.reason))
+
+        else:
+            self.session_stats["skipped"] += 1
+
+        # Jeda hanya untuk lamaran yang benar-benar diproses;
+        # lowongan yang dilewati langsung lanjut ke berikutnya.
+        delay = max(0, int(config.delay_between_apply))
+
+        if delay and (hasil.applied or hasil.status == "error"):
+            console.print(
+                f"[dim]Jeda {delay} detik sebelum lowongan berikutnya...[/]"
+            )
+            time.sleep(delay)
+
+        return True
+
+    def _process_keyword(self, keyword: str, location: str = ""):
+        """Mode berurutan: cari satu kata kunci, lalu lamar hasilnya."""
+        for job in self._cari_keyword(keyword, location):
+            if not self._lamar(job):
+                return
+
+    def _kumpulkan_lalu_lamar(self):
+        """Kumpulkan semua kandidat, urutkan dari posting terbaru, lalu lamar."""
+        kandidat = []
+
+        for location in config.locations:
+            console.print(f"\n[bold blue]{'#' * 60}[/]")
+            console.print(f"[bold blue]LOKASI: {location}[/]")
+            console.print(f"[bold blue]{'#' * 60}[/]")
+
+            for keyword in config.keywords:
+                keyword = keyword.strip()
+
+                if not keyword:
                     continue
 
-                if hasil.status == "login_required":
-                    self.session_stats["errors"] += 1
-                    self.stop_requested = True
-                    console.print(
-                        "[bold red]Sesi login JobStreet sudah habis. "
-                        "Sesi dihentikan agar tidak menumpuk error.[/]"
-                    )
-                    notifier.send_error("Sesi login JobStreet habis")
-                    return
+                if self.stop_requested:
+                    break
 
-                if hasil.applied:
-                    self.session_stats["applied"] += 1
-                    notifier.send_apply_success(job)
+                console.print(f"\n{'=' * 60}")
+                console.print(
+                    f"[bold]Lokasi: {location} — kata kunci: {keyword}[/]"
+                )
+                console.print(f"{'=' * 60}")
 
-                elif hasil.status == "manual_required":
-                    self.session_stats["manual"] += 1
-                    self.manual_jobs.append((job, hasil.reason))
+                kandidat.extend(self._cari_keyword(keyword, location=location))
 
-                else:
-                    self.session_stats["skipped"] += 1
+            if self.stop_requested:
+                break
 
-                # Jeda hanya untuk lamaran yang benar-benar diproses;
-                # lowongan yang dilewati langsung lanjut ke berikutnya.
-                delay = max(0, int(config.delay_between_apply))
+        if not kandidat:
+            console.print(
+                "[yellow]Tidak ada lowongan baru yang lolos filter.[/]"
+            )
+            return
 
-                if delay and (hasil.applied or hasil.status == "error"):
-                    console.print(
-                        f"[dim]Jeda {delay} detik sebelum lowongan berikutnya...[/]"
-                    )
-                    time.sleep(delay)
+        kandidat = job_filter.rank_jobs(kandidat, prefer_newest=True)
+
+        console.print(
+            f"\n[bold green]Pengumpulan selesai: {len(kandidat)} lowongan "
+            "siap dilamar, mulai dari posting terbaru.[/]"
+        )
+
+        for job in kandidat:
+            if self.stop_requested:
+                break
+
+            umur = job.get("age_days")
+            keterangan = (
+                "hari ini" if umur == 0
+                else f"{umur} hari lalu" if isinstance(umur, int)
+                else "tanggal tak terbaca"
+            )
+            console.print(
+                f"[dim]({keterangan})[/] {job.get('title', '')[:60]}"
+            )
+
+            if not self._lamar(job):
+                return
 
     def _print_banner(self):
         banner = """
@@ -306,6 +384,14 @@ class AutoApplyEngine:
             if config.max_age_days > 0 else "Tanpa batas umur",
         )
         table.add_row("Halaman per kata kunci", str(config.max_pages))
+        table.add_row(
+            "Urutan pelamaran",
+            (
+                "Kumpulkan dulu, mulai dari posting terbaru"
+                if config.auto_apply and config.collect_before_apply
+                else "Per kata kunci (mulai dari posting terbaru)"
+            ),
+        )
         table.add_row("Batas lamaran per hari", str(config.max_apply_per_day))
         table.add_row("Jeda antar-lowongan", f"{config.delay_between_apply} detik")
         table.add_row(
