@@ -80,19 +80,48 @@ def test_login_berhenti_tanpa_menunggu_bila_belum_login(monkeypatch):
     assert bot.login() is False
 
 
-def test_login_menunggu_enter_bila_belum_login(monkeypatch):
+def test_login_menunggu_lalu_lanjut_saat_login_terdeteksi(monkeypatch):
+    """Tanpa menekan Enter: program mendeteksi login sendiri."""
     monkeypatch.setattr(config, "login_wait", True)
+    monkeypatch.setattr(config, "login_timeout", 60)
+
     bot = buat_bot({"a[data-automation='signIn']": [FakeElement()]})
-    dipanggil = {"jumlah": 0}
+    urutan = [False, False, True]
 
-    def jawab(*args, **kwargs):
-        dipanggil["jumlah"] += 1
-        return ""
+    def status_palsu():
+        return urutan.pop(0) if urutan else True
 
-    monkeypatch.setattr("builtins.input", jawab)
+    monkeypatch.setattr(bot, "_login_status", status_palsu)
+
+    def jangan_tanya(*args, **kwargs):
+        raise AssertionError("login tidak boleh memakai input()")
+
+    monkeypatch.setattr("builtins.input", jangan_tanya)
 
     assert bot.login() is True
-    assert dipanggil["jumlah"] == 1
+
+
+def test_login_berhenti_setelah_batas_waktu(monkeypatch):
+    monkeypatch.setattr(config, "login_wait", True)
+    monkeypatch.setattr(config, "login_timeout", 30)
+
+    bot = buat_bot({})
+    monkeypatch.setattr(bot, "_login_status", lambda: False)
+
+    waktu = {"t": 1000}
+    monkeypatch.setattr(scraper.time, "time", lambda: waktu["t"])
+    monkeypatch.setattr(
+        scraper.time,
+        "sleep",
+        lambda detik=0: waktu.__setitem__("t", waktu["t"] + detik),
+    )
+
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("tanpa input")),
+    )
+
+    assert bot.login() is False
 
 
 def test_cookie_sesi_dianggap_sudah_login():

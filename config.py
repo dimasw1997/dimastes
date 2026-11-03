@@ -92,8 +92,10 @@ class Config:
         "CHROME_PROFILE_DIR",
         str(Path.home() / ".dimastes" / "chrome-profile"),
     )
-    # false = jangan menunggu Enter saat login (untuk sesi terjadwal).
+    # false = jangan menunggu login sama sekali (untuk sesi terjadwal).
     login_wait: bool = _bool_setting("LOGIN_WAIT", True)
+    # Lama menunggu Anda login di Chrome (detik), tanpa perlu tekan Enter.
+    login_timeout: int = max(30, _int_setting("LOGIN_TIMEOUT", 300))
 
     # --- Isian lamaran otomatis ---
     # Teks yang dipakai bila formulir meminta cover letter / pesan.

@@ -190,7 +190,11 @@ class JobStreetBot:
             return False
 
     def login(self) -> bool:
-        """Memakai sesi tersimpan bila ada; login manual hanya bila perlu."""
+        """Memakai sesi tersimpan; bila belum ada, menunggu login di Chrome.
+
+        Tidak ada tombol Enter: program memeriksa sendiri sampai login
+        terdeteksi (cookie sesi / menu akun muncul).
+        """
         if not self.driver:
             console.print("[bold red]Browser belum dibuka.[/]")
             return False
@@ -199,9 +203,7 @@ class JobStreetBot:
             self.driver.get(config.base_url)
             time.sleep(2)
 
-            status = self._login_status()
-
-            if status is True:
+            if self._login_status() is True:
                 console.print(
                     "[bold green]Sudah login (sesi tersimpan di profil "
                     "Chrome).[/]"
@@ -211,13 +213,14 @@ class JobStreetBot:
             if not config.login_wait:
                 console.print(
                     "[bold red]Belum login dan LOGIN_WAIT mati. "
-                    "Jalankan sekali tanpa --no-login-wait untuk login.[/]"
+                    "Jalankan sekali dengan LOGIN_WAIT=true untuk login.[/]"
                 )
                 return False
 
             console.print(
-                "\n[bold cyan]Sesi login belum ada. Silakan login sendiri di "
-                "jendela Chrome (program tidak meminta email/password).[/]"
+                "\n[bold cyan]Silakan login di jendela Chrome. Program "
+                "menunggu otomatis — tidak perlu menekan apa pun di "
+                "terminal.[/]"
             )
 
             if config.headless:
@@ -226,25 +229,34 @@ class JobStreetBot:
                     "tidak terlihat. Set HEADLESS_MODE=false untuk login.[/]"
                 )
 
-            console.print("Buka tombol Sign in di halaman JobStreet dan selesaikan login.")
-            input("Jika sudah selesai, kembali ke terminal lalu tekan Enter: ")
+            batas = time.time() + config.login_timeout
+            putaran = 0
 
-            ulang = self._login_status()
+            while time.time() < batas:
+                time.sleep(3)
+                putaran += 1
 
-            if ulang is False:
-                console.print(
-                    "[yellow]Tombol Sign in masih terlihat. Lamaran otomatis "
-                    "kemungkinan gagal; pastikan login benar-benar selesai.[/]"
-                )
-            else:
-                console.print(
-                    "[green]Sesi login akan disimpan, jadi lain kali tidak "
-                    "perlu login ulang.[/]"
-                )
+                if self._login_status() is True:
+                    console.print(
+                        "[bold green]Login terdeteksi. Melanjutkan...[/]"
+                    )
+                    time.sleep(1)
+                    return True
 
-            return True
+                if putaran % 5 == 0:
+                    sisa = max(0, int(batas - time.time()))
+                    console.print(
+                        f"[dim]Masih menunggu login di Chrome "
+                        f"({sisa} detik lagi)...[/]"
+                    )
 
-        except (EOFError, KeyboardInterrupt):
+            console.print(
+                "[bold red]Batas waktu login habis. Jalankan ulang program, "
+                "atau naikkan LOGIN_TIMEOUT di .env.[/]"
+            )
+            return False
+
+        except KeyboardInterrupt:
             console.print("\n[yellow]Login dibatalkan.[/]")
             return False
 

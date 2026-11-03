@@ -127,7 +127,8 @@ cp .env.example .env
 | `MAX_AGE_DAYS` | `0` | Hanya lowongan N hari terakhir (0 = semua). Nilai valid JobStreet: 1, 3, 7, 14, 31 |
 | `USE_PROFILE` | `true` | Simpan sesi login di profil Chrome khusus |
 | `CHROME_PROFILE_DIR` | `~/.dimastes/chrome-profile` | Lokasi profil Chrome |
-| `LOGIN_WAIT` | `true` | `false` = jangan tunggu Enter; berhenti bila belum login |
+| `LOGIN_WAIT` | `true` | `false` = jangan menunggu; berhenti bila belum login |
+| `LOGIN_TIMEOUT` | `300` | Lama menunggu login di Chrome (detik) |
 | `AUTO_APPLY` | `true` | Kirim lamaran otomatis; pakai `run --manual` untuk meninjau sendiri |
 | `COVER_LETTER` | kosong | Teks cover letter/pesan yang diisi otomatis |
 | `RESUME_PATH` | kosong | Path berkas CV untuk unggah otomatis |
@@ -166,7 +167,8 @@ python cli.py repair
 
 Saat `run` berjalan:
 
-1. Chrome terbuka, Anda login manual, lalu tekan Enter di terminal.
+1. Chrome terbuka. Bila sesi belum ada, Anda login di Chrome — **tidak perlu
+   menekan apa pun di terminal**, program mendeteksinya sendiri.
 2. Setiap lowongan yang lolos filter dibuka satu per satu.
 3. Tinjau di browser. Setelah selesai, kembali ke terminal:
    - tekan **Enter** saja jika lamaran **tidak** dikirim (dicatat `skipped`);
@@ -179,7 +181,8 @@ Secara default program memakai profil Chrome sendiri di
 Jadi:
 
 1. Jalankan pertama kali: `python cli.py run --auto`
-2. Login manual di jendela Chrome yang terbuka, tekan Enter di terminal.
+2. Login di jendela Chrome yang terbuka. Program menunggu dan mendeteksinya
+   otomatis (tanpa Enter), maksimal `LOGIN_TIMEOUT` detik.
 3. Sesi disimpan. Sesi berikutnya program mendeteksi sudah login dan
    **tidak menanyakan apa pun**.
 
@@ -194,7 +197,7 @@ python cli.py run --auto --no-login-wait
 ```
 
 Perintah itu langsung berhenti dengan pesan jelas bila sesi sudah kedaluwarsa
-(sehingga Anda tahu perlu login sekali lagi), bukan menggantung menunggu Enter.
+(sehingga Anda tahu perlu login sekali lagi), bukan menggantung menunggu.
 
 Opsi lain: `--profile-dir "D:\chrome-dimastes"` untuk lokasi profil lain, dan
 `--no-profile` untuk kembali ke profil sementara (selalu login ulang).
@@ -313,7 +316,7 @@ python buka_pencarian.py --locations "Bandung,Jakarta,Bekasi" --max-tabs 12
 | Mencari lowongan di 7 kota | otomatis |
 | Urut dari posting terbaru | otomatis |
 | Menyaring (senior, gaji, pengalaman, lokasi) | otomatis |
-| Login JobStreet | **sekali saja**, lalu tersimpan — satu-satunya langkah yang melibatkan Anda |
+| Login JobStreet | **sekali saja**, lalu tersimpan — satu-satunya langkah yang melibatkan Anda (tanpa Enter) |
 | Klik Lamar → Lanjutkan → Kirim | otomatis (`--auto`) |
 | Lowongan lewat situs perusahaan (ATS) | **manual** — JobStreet mengalihkan keluar |
 | Lowongan berlabel "You applied"/sudah pernah dilamar | otomatis dilewati (tidak ditampilkan) |
@@ -367,6 +370,11 @@ tersebut. Bila labelnya tidak terdeteksi, jalankan mode manual sekali dan
 kirimkan potongan HTML kartunya agar selector
 `APPLIED_CARD_SELECTORS`/`APPLIED_CARD_TEXTS` di `scraper.py` disesuaikan.
 Lowongan yang sudah tercatat di database tetap dilewati walau tanpa label.
+
+**Program berhenti dengan pesan "Login dibatalkan" atau "Batas waktu login habis".**
+Sesi belum ada dan login tidak terdeteksi. Jalankan lagi, login di Chrome, dan
+biarkan jendela Chrome terbuka — program melanjutkan sendiri. Bila Anda memang
+tidak ingin menunggu, set `LOGIN_WAIT=false`.
 
 **Program masih menunggu Enter saat lowongan dibuka.**
 Berarti mode manual aktif. Pastikan `AUTO_APPLY=true` di `.env` (atau jalankan
