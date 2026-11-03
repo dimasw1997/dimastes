@@ -6,6 +6,19 @@ from typing import Dict, List, Optional
 from config import config
 from database import db
 
+# Nama lain yang sering dipakai JobStreet untuk satu wilayah.
+LOCATION_ALIASES = {
+    "bandung": ("kabupaten bandung", "kota bandung"),
+    "cimahi": ("cimahi",),
+    "jakarta": ("jakarta selatan", "jakarta pusat", "jakarta barat",
+                "jakarta timur", "jakarta utara", "jabodetabek"),
+    "tangerang": ("tangerang selatan", "serpong", "bsd", "karawaci",
+                  "cikupa"),
+    "jababeka": ("cikarang", "bekasi", "jababeka"),
+    "purwakarta": ("purwakarta",),
+    "bogor": ("kabupaten bogor", "kota bogor", "cibinong", "sentul"),
+}
+
 
 class JobFilter:
     def __init__(self):
@@ -54,10 +67,10 @@ class JobFilter:
                 f"Lowongan lebih lama dari {config.max_age_days} hari"
             )
 
-        if config.strict_location and config.location and location:
-            target = config.location.lower()
-            if target not in location.lower():
-                return False, f"Lokasi di luar {config.location}: {location}"
+        if config.strict_location and location:
+            if not self._location_matches(location):
+                daftar = ", ".join(config.locations) or config.location
+                return False, f"Lokasi di luar daftar ({daftar}): {location}"
 
         if config.min_salary > 0 and salary_text:
             parsed_salary = self._parse_salary(salary_text)
@@ -69,6 +82,31 @@ class JobFilter:
             return False, f"Experience terlalu tinggi: {exp_years} tahun"
 
         return True, "OK"
+
+    @staticmethod
+    def _location_matches(job_location: str) -> bool:
+        """Apakah lokasi lowongan termasuk salah satu wilayah yang dicari."""
+        text = str(job_location or "").lower()
+
+        if not text:
+            return True
+
+        if config.allow_remote and "remote" in text:
+            return True
+
+        for target in config.locations:
+            key = target.strip().lower()
+            if not key:
+                continue
+
+            if key in text:
+                return True
+
+            for alias in LOCATION_ALIASES.get(key, ()):
+                if alias in text:
+                    return True
+
+        return False
 
     @staticmethod
     def _to_number(token: str) -> float:

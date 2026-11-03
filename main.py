@@ -39,17 +39,26 @@ class AutoApplyEngine:
                 console.print("[bold red]Login belum selesai. Program berhenti.[/]")
                 return
 
-            for keyword in config.keywords:
-                keyword = keyword.strip()
+            for location in config.locations:
+                console.print(
+                    f"\n[bold blue]{'#' * 60}[/]"
+                )
+                console.print(f"[bold blue]LOKASI: {location}[/]")
+                console.print(f"[bold blue]{'#' * 60}[/]")
 
-                if not keyword:
-                    continue
+                for keyword in config.keywords:
+                    keyword = keyword.strip()
 
-                console.print(f"\n{'=' * 60}")
-                console.print(f"[bold]Kata kunci: {keyword}[/]")
-                console.print(f"{'=' * 60}")
+                    if not keyword:
+                        continue
 
-                self._process_keyword(keyword)
+                    console.print(f"\n{'=' * 60}")
+                    console.print(
+                        f"[bold]Lokasi: {location} — kata kunci: {keyword}[/]"
+                    )
+                    console.print(f"{'=' * 60}")
+
+                    self._process_keyword(keyword, location=location)
 
         except KeyboardInterrupt:
             console.print("\n[bold yellow]Proses dihentikan.[/]")
@@ -68,7 +77,7 @@ class AutoApplyEngine:
             except Exception as exc:
                 console.print(f"[yellow]Laporan harian gagal dikirim: {exc}[/]")
 
-    def _process_keyword(self, keyword: str):
+    def _process_keyword(self, keyword: str, location: str = ""):
         for page in range(1, config.max_pages + 1):
             if db.get_today_apply_count() >= config.max_apply_per_day:
                 console.print(
@@ -77,7 +86,7 @@ class AutoApplyEngine:
                 )
                 return
 
-            jobs = self.bot.search_jobs(keyword, page)
+            jobs = self.bot.search_jobs(keyword, page, location=location)
 
             if not jobs:
                 console.print(f"Tidak ada lowongan terbaca di halaman {page}.")
@@ -85,7 +94,6 @@ class AutoApplyEngine:
 
             # Lewati hasil duplikat atau yang tidak memiliki judul/URL/ID.
             new_jobs = []
-            baru_di_database = 0
 
             for job in jobs:
                 title = (job.get("title") or "").strip()
@@ -114,7 +122,6 @@ class AutoApplyEngine:
                 # kembali; yang benar-benar baru dihitung terpisah.
                 if db.add_job(job):
                     self.session_stats["new"] += 1
-                    baru_di_database += 1
 
                 new_jobs.append(job)
 
@@ -124,9 +131,9 @@ class AutoApplyEngine:
                 continue
 
             # Hasil sudah diurutkan dari yang terbaru: begitu satu halaman
-            # tidak memuat lowongan baru sama sekali, halaman berikutnya
-            # pasti lebih lama dan sudah pernah diproses.
-            if page > 1 and baru_di_database == 0 and config.sort_mode:
+            # tidak memuat lowongan baru lagi, halaman berikutnya pasti lebih
+            # lama dan sudah pernah diproses pada sesi ini.
+            if page > 1 and len(new_jobs) == 0 and config.sort_mode:
                 console.print(
                     "[dim]Halaman ini tidak memuat lowongan baru; "
                     "berhenti karena hasil diurutkan dari yang terbaru.[/]"
@@ -231,7 +238,10 @@ class AutoApplyEngine:
         table.add_column("Nilai", style="green")
 
         table.add_row("Kata kunci", ", ".join(config.keywords))
-        table.add_row("Lokasi", config.location)
+        table.add_row(
+            "Lokasi pencarian",
+            ", ".join(config.locations) if config.locations else "(semua)",
+        )
         table.add_row(
             "Filter lokasi ketat",
             "Aktif" if config.strict_location else "Tidak aktif",

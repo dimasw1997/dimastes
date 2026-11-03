@@ -1,8 +1,9 @@
-"""Membuka tab pencarian JobStreet untuk beberapa kata kunci sekaligus.
+"""Membuka tab pencarian JobStreet untuk beberapa lokasi dan kata kunci.
 
 Skrip ringan ini tidak butuh Selenium: cukup browser default Anda.
 """
 
+import argparse
 import csv
 import os
 import time
@@ -12,8 +13,9 @@ from urllib.parse import quote_plus
 
 from config import config
 
-TRACKER = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                       "catatan_lamaran.csv")
+TRACKER = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "catatan_lamaran.csv"
+)
 
 
 def buat_tracker():
@@ -27,31 +29,89 @@ def buat_tracker():
         print(f"File {TRACKER} sudah ada.")
 
 
-def buka_pencarian(delay: float = 1.0):
-    """Membuka satu tab per kata kunci, berurutan dari .env."""
-    keywords = [keyword for keyword in config.keywords if keyword.strip()]
+def buat_url(keyword: str, location: str) -> str:
+    params = f"keywords={quote_plus(keyword)}"
 
-    if not keywords:
+    if location:
+        params += f"&where={quote_plus(location)}"
+
+    if config.sort_mode:
+        params += f"&sortmode={quote_plus(config.sort_mode)}"
+
+    return f"{config.search_url}?{params}"
+
+
+def buka_pencarian(
+    locations=None,
+    keywords=None,
+    delay: float = 1.0,
+    max_tabs: int = 24,
+) -> int:
+    """Buka tab pencarian. Mengembalikan jumlah tab yang dibuka."""
+    daftar_kata = [
+        kata.strip()
+        for kata in (keywords or config.keywords)
+        if kata and kata.strip()
+    ]
+    daftar_lokasi = [
+        loc.strip() for loc in (locations or config.locations) if loc.strip()
+    ] or [""]
+
+    if not daftar_kata:
         print("KEYWORDS di .env masih kosong.")
-        return
+        return 0
 
-    for index, keyword in enumerate(keywords, start=1):
-        url = (
-            f"{config.search_url}"
-            f"?keywords={quote_plus(keyword)}"
-            f"&where={quote_plus(config.location)}"
-        )
-        print(f"[{index}/{len(keywords)}] Membuka: {keyword}")
-        webbrowser.open_new_tab(url)
+    total = 0
 
-        # Jeda kecil supaya browser tidak dianggap memblokir pop-up.
-        if index < len(keywords):
-            time.sleep(delay)
+    for location in daftar_lokasi:
+        for keyword in daftar_kata:
+            if total >= max_tabs:
+                print(
+                    f"Batas {max_tabs} tab tercapai. Sisa pencarian dilewati; "
+                    "naikkan dengan --max-tabs bila perlu."
+                )
+                return total
+
+            print(f"[{total + 1}] {location or 'semua lokasi'}: {keyword}")
+            webbrowser.open_new_tab(buat_url(keyword, location))
+            total += 1
+
+            # Jeda kecil supaya browser tidak menganggapnya pop-up.
+            if delay and total < max_tabs:
+                time.sleep(delay)
+
+    return total
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Buka tab pencarian JobStreet"
+    )
+    parser.add_argument(
+        "--locations",
+        default=None,
+        help='Daftar lokasi dipisah koma, mis. "Bandung,Jakarta,Tangerang"',
+    )
+    parser.add_argument(
+        "--max-tabs", type=int, default=24, help="Batas jumlah tab (default 24)"
+    )
+    parser.add_argument(
+        "--delay", type=float, default=1.0, help="Jeda antar tab dalam detik"
+    )
+    args = parser.parse_args()
+
+    lokasi = None
+    if args.locations:
+        lokasi = [
+            item.strip() for item in args.locations.split(",") if item.strip()
+        ]
+
     print("Tanggal:", date.today())
-    print("Lokasi:", config.location)
+    print("Lokasi:", ", ".join(lokasi or config.locations))
     buat_tracker()
-    buka_pencarian()
-    print("Selesai. Periksa tab di browser Anda.")
+    jumlah = buka_pencarian(
+        locations=lokasi,
+        delay=max(0.0, args.delay),
+        max_tabs=max(1, args.max_tabs),
+    )
+    print(f"Selesai. {jumlah} tab dibuka. Periksa browser Anda.")

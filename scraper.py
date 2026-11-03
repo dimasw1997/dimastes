@@ -124,7 +124,9 @@ class JobStreetBot:
     # ------------------------------------------------------------------
     # Pencarian
     # ------------------------------------------------------------------
-    def search_jobs(self, keyword: str, page: int = 1) -> List[Dict]:
+    def search_jobs(
+        self, keyword: str, page: int = 1, location: Optional[str] = None
+    ) -> List[Dict]:
         """Membuka hasil pencarian dan membaca lowongan yang dapat dikenali."""
         jobs: List[Dict] = []
         seen_urls = set()
@@ -135,10 +137,12 @@ class JobStreetBot:
             return jobs
 
         try:
+            # Lokasi bisa berbeda per pencarian (mendukung banyak kota).
+            lokasi = (location or config.location or "").strip()
             params = {"keywords": keyword}
 
-            if config.location:
-                params["where"] = config.location
+            if lokasi:
+                params["where"] = lokasi
 
             # ListedDate = urutkan dari lowongan yang paling baru diposting.
             if config.sort_mode:
@@ -152,7 +156,10 @@ class JobStreetBot:
 
             url = f"{config.search_url}?{urlencode(params)}"
 
-            console.print(f"[bold cyan]Mencari: {keyword} — halaman {page}[/]")
+            console.print(
+                f"[bold cyan]Mencari: {keyword} — {lokasi or 'semua lokasi'} "
+                f"— halaman {page}[/]"
+            )
             self.driver.get(url)
 
             try:

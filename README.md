@@ -21,7 +21,9 @@ di browser.
 
 ## Fitur
 
-- Mencari lowongan berdasarkan daftar kata kunci dan lokasi dari `.env`.
+- Mencari lowongan berdasarkan daftar kata kunci dan **banyak lokasi**
+  sekaligus (Bandung, Jakarta, Tangerang, Jababeka, Cimahi, Purwakarta,
+  Bogor, dan seterusnya).
 - Menyimpan lowongan ke SQLite agar tidak diproses dua kali.
 - Menyaring lowongan: kata kunci terlarang, posisi terlalu senior, gaji
   minimum, batas pengalaman, dan (opsional) lokasi.
@@ -96,7 +98,9 @@ cp .env.example .env
 | Variabel | Default | Keterangan |
 | --- | --- | --- |
 | `KEYWORDS` | `inventory control,PPIC,...` | Daftar kata kunci, dipisah koma |
-| `LOCATION` | `Bandung` | Lokasi pencarian |
+| `LOCATIONS` | kosong | Daftar lokasi dipisah koma, mis. `Bandung,Jakarta,Tangerang` |
+| `LOCATION` | `Bandung` | Dipakai hanya bila `LOCATIONS` kosong |
+| `ALLOW_REMOTE` | `false` | `true` = lowongan "Remote" juga diterima saat `STRICT_LOCATION` aktif |
 | `MIN_SALARY` | `0` | Gaji minimum (0 = tanpa filter) |
 | `MAX_EXPERIENCE_YEARS` | `5` | Tolak lowongan yang minta pengalaman lebih dari ini |
 | `EXCLUDE_KEYWORDS` | `principal,director,head,senior,lead` | Kata yang membuat judul otomatis ditolak |
@@ -130,6 +134,9 @@ python cli.py run --auto
 # Hanya lowongan 3 hari terakhir, 5 halaman per kata kunci
 python cli.py run --auto --max-age-days 3 --max-pages 5
 
+# Lokasi lain tanpa mengubah .env
+python cli.py run --auto --locations "Bandung,Jakarta,Tangerang,Jababeka"
+
 # 3. Lihat hasil
 python cli.py stats
 python cli.py history --limit 20
@@ -148,6 +155,30 @@ Saat `run` berjalan:
 3. Tinjau di browser. Setelah selesai, kembali ke terminal:
    - tekan **Enter** saja jika lamaran **tidak** dikirim (dicatat `skipped`);
    - ketik **y** jika lamaran benar-benar sudah dikirim (dicatat `applied`).
+
+### Banyak lokasi
+
+Isi `.env`:
+
+```
+LOCATIONS=Bandung,Jakarta,Tangerang,Jababeka,Cimahi,Purwakarta,Bogor
+STRICT_LOCATION=true
+```
+
+Pencarian dijalankan **per lokasi** (bukan digabung), lalu hasilnya
+digabung dan diurutkan dari yang terbaru. Karena itu:
+
+- Jumlah pencarian = lokasi × kata kunci × halaman. Dengan 7 lokasi,
+  8 kata kunci, dan `MAX_PAGES=3` ada 168 pemuatan halaman. Kurangi
+  `MAX_PAGES` (mis. 2) atau pakai `--max-age-days 3` agar lebih cepat.
+- `STRICT_LOCATION=true` membuang lowongan di luar daftar lokasi. Nama
+  wilayah dicocokkan dengan beberapa alias, misalnya **Jababeka** juga
+  menerima lokasi *Cikarang* dan *Bekasi*, **Tangerang** menerima
+  *Tangerang Selatan/BSD/Serpong*, **Jakarta** menerima *Jakarta
+  Selatan/Pusat/Barat/Timur/Utara*.
+- Bila JobStreet tidak mengenali nama lokasi (mis. "Jababeka"), hasilnya
+  bisa kosong. Coba `--locations "Bandung,Cikarang,Bekasi,..."` atau cek
+  sendiri di situs: `https://id.jobstreet.com/jobs?where=Jababeka`.
 
 ### Mode otomatis (`run --auto`)
 
@@ -172,8 +203,13 @@ menaikkannya terlalu tinggi.
 python buka_pencarian.py
 ```
 
-Perintah ini hanya membuka tab pencarian JobStreet untuk setiap kata kunci
-dan menyiapkan `catatan_lamaran.csv` sebagai pelacak manual.
+Perintah ini membuka tab pencarian JobStreet untuk setiap lokasi × kata
+kunci (default maksimal 24 tab) dan menyiapkan `catatan_lamaran.csv` sebagai
+pelacak manual.
+
+```bash
+python buka_pencarian.py --locations "Bandung,Jakarta,Bekasi" --max-tabs 12
+```
 
 ## Struktur proyek
 
@@ -223,6 +259,11 @@ Aktifkan `STRICT_LOCATION=true` di `.env`.
 Penyebab yang paling sering: lowongan memakai "Lamar di situs perusahaan",
 meminta unggah berkas, atau punya pertanyaan wajib. Bot sengaja tidak menebak
 jawaban. Selesaikan lewat tautan di daftar akhir sesi.
+
+**Lowongan Jakarta/Tangerang tidak muncul.**
+Pastikan `LOCATIONS` berisi kota itu (bukan hanya `LOCATION`), dan
+`STRICT_LOCATION` tidak memakai daftar lama. Cek juga nama lokasi yang
+dipakai JobStreet; "Jababeka" sering tampil sebagai *Cikarang* atau *Bekasi*.
 
 **Ingin hanya lowongan yang baru tayang.**
 Tambahkan `--max-age-days 3` (atau `1`) saat menjalankan `run`, atau isi

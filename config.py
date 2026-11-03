@@ -46,7 +46,16 @@ class Config:
         "KEYWORDS",
         "inventory control,PPIC,production planner,material planner"
     ))
+    # Lokasi utama (dipertahankan untuk kompatibilitas).
     location: str = os.getenv("LOCATION", "Bandung")
+
+    # Daftar lokasi yang dicari. Bila kosong, dipakai LOCATION saja.
+    locations: list[str] = field(default_factory=lambda: _list_setting(
+        "LOCATIONS", ""
+    ))
+
+    # Ikut sertakan lowongan yang sepenuhnya remote.
+    allow_remote: bool = _bool_setting("ALLOW_REMOTE", False)
     min_salary: int = _int_setting("MIN_SALARY", 0)
     max_experience: int = _int_setting("MAX_EXPERIENCE_YEARS", 5)
     exclude_keywords: list[str] = field(default_factory=lambda: _list_setting(
@@ -88,6 +97,15 @@ class Config:
     telegram_chat_id: str = os.getenv("TELEGRAM_CHAT_ID", "")
 
     db_path: str = os.getenv("DB_PATH", str(BASE_DIR / "jobstreet_auto.db"))
+
+    def __post_init__(self):
+        # LOCATIONS kosong -> pakai LOCATION tunggal.
+        self.locations = [loc for loc in self.locations if loc.strip()]
+        if not self.locations:
+            self.locations = [self.location] if self.location else []
+
+        if not self.location and self.locations:
+            self.location = self.locations[0]
 
 
 # Baris ini yang dibutuhkan oleh: from config import config

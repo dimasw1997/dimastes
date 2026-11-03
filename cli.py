@@ -27,7 +27,10 @@ def show_config():
     table.add_column("Nilai", style="green")
 
     table.add_row("Kata kunci", ", ".join(config.keywords))
-    table.add_row("Lokasi", config.location)
+    table.add_row(
+        "Lokasi pencarian",
+        ", ".join(config.locations) if config.locations else "(semua)",
+    )
     table.add_row(
         "Filter lokasi ketat",
         "Aktif" if config.strict_location else "Tidak aktif",
@@ -137,6 +140,11 @@ if __name__ == "__main__":
         help="Hanya lowongan yang diposting dalam N hari terakhir",
     )
     run_parser.add_argument(
+        "--locations",
+        default=None,
+        help="Daftar lokasi dipisah koma, mis. \"Bandung,Jakarta,Tangerang\"",
+    )
+    run_parser.add_argument(
         "--max-pages",
         type=int,
         default=None,
@@ -169,6 +177,14 @@ if __name__ == "__main__":
             config.auto_apply = True
         elif args.manual:
             config.auto_apply = False
+
+        if args.locations:
+            lokasi = [
+                item.strip() for item in args.locations.split(",") if item.strip()
+            ]
+            if lokasi:
+                config.locations = lokasi
+                config.location = lokasi[0]
 
         if args.max_age_days is not None:
             config.max_age_days = max(0, args.max_age_days)
