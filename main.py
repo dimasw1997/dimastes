@@ -22,6 +22,7 @@ class AutoApplyEngine:
             "found": 0,
             "new": 0,
             "applied": 0,
+            "already": 0,
             "manual": 0,
             "skipped": 0,
             "errors": 0,
@@ -117,6 +118,21 @@ class AutoApplyEngine:
                     continue
 
                 self.seen_job_ids.add(job_id)
+
+                # Lowongan yang sudah berlabel Applied / sudah pernah dilamar
+                # dilewati diam-diam: tidak ditampilkan dan tidak memakai kuota.
+                if job.get("applied") or db.is_already_applied(job_id):
+                    self.session_stats["already"] += 1
+
+                    if job.get("applied"):
+                        # Simpan detailnya supaya tetap tampil rapi di riwayat.
+                        db.add_job(job)
+                        db.record_application(
+                            job_id,
+                            "already_applied",
+                            "Ditandai sudah dilamar di JobStreet",
+                        )
+                    continue
 
                 # Lowongan lama yang belum pernah dilamar tetap ditinjau
                 # kembali; yang benar-benar baru dihitung terpisah.
@@ -296,6 +312,9 @@ class AutoApplyEngine:
         )
         table.add_row(
             "Lamaran dikonfirmasi terkirim", str(self.session_stats["applied"])
+        )
+        table.add_row(
+            "Sudah dilamar (dilewati)", str(self.session_stats["already"])
         )
         table.add_row(
             "Perlu dilamar manual", str(self.session_stats["manual"])

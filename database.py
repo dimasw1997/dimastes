@@ -5,8 +5,11 @@ from contextlib import contextmanager
 
 from config import config
 
-# Status yang dianggap sebagai "lamaran benar-benar terkirim".
+# Status yang dianggap "lowongan sudah pernah dilamar".
 APPLIED_STATUSES = ("applied", "already_applied")
+
+# Status yang memakan kuota harian (hanya lamaran yang dikirim alat ini).
+QUOTA_STATUSES = ("applied",)
 
 TITLE_FALLBACK = "(judul tidak tersedia)"
 
@@ -200,7 +203,8 @@ class Database:
             )
 
     def get_today_apply_count(self) -> int:
-        placeholders = ", ".join("?" for _ in APPLIED_STATUSES)
+        """Jumlah lamaran terkirim hari ini (dipakai untuk batas harian)."""
+        placeholders = ", ".join("?" for _ in QUOTA_STATUSES)
 
         with self._get_conn() as conn:
             result = conn.execute(
@@ -210,7 +214,7 @@ class Database:
                 WHERE DATE(applied_at, 'localtime') = DATE('now', 'localtime')
                   AND status IN ({placeholders})
                 """,
-                APPLIED_STATUSES,
+                QUOTA_STATUSES,
             ).fetchone()
 
             return int(result["count"])

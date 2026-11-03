@@ -51,8 +51,21 @@ def test_status_lama_already_applied_dihitung(database):
     database.record_application("123", "already_applied")
 
     assert database.is_already_applied("123") is True
+    # Masuk statistik lamaran...
     assert database.get_stats()["total_applied"] == 1
+    # ...tapi tidak memakan kuota harian (kuota hanya lamaran terkirim).
+    assert database.get_today_apply_count() == 0
+
+
+def test_kuota_harian_hanya_lamaran_terkirim(database):
+    database.add_job(make_job(job_id="a"))
+    database.add_job(make_job(job_id="b", url="https://contoh/b"))
+
+    database.record_application("a", "applied")
+    database.record_application("b", "already_applied")
+
     assert database.get_today_apply_count() == 1
+    assert database.get_stats()["total_applied"] == 2
 
 
 def test_status_ditolak_tidak_dihitung(database):

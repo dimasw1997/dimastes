@@ -35,6 +35,22 @@ CARD_SELECTORS = (
     "[data-testid='job-card']",
 )
 
+# Badge "Applied/Anda sudah melamar" pada kartu hasil pencarian.
+APPLIED_CARD_SELECTORS = (
+    "[data-automation='jobCardAppliedBadge']",
+    "[data-automation*='applied']",
+    "[data-testid*='applied']",
+)
+
+APPLIED_CARD_TEXTS = {
+    "applied",
+    "anda sudah melamar",
+    "you applied",
+    "telah melamar",
+    "sudah dilamar",
+    "sudah pernah melamar",
+}
+
 ALREADY_APPLIED_MARKERS = (
     "[data-automation='job-detail-applied-badge']",
     "[data-automation='appliedBadge']",
@@ -371,7 +387,37 @@ class JobStreetBot:
             "url": job_url,
             "date_posted": date_posted,
             "age_days": self._parse_listing_age(date_posted),
+            "applied": self._card_is_applied(card),
         }
+
+    @staticmethod
+    def _card_is_applied(card) -> bool:
+        """Apakah kartu lowongan sudah berlabel Applied / Anda sudah melamar."""
+        for selector in APPLIED_CARD_SELECTORS:
+            try:
+                elements = card.find_elements(By.CSS_SELECTOR, selector)
+            except Exception:
+                continue
+
+            for element in elements:
+                try:
+                    if element.is_displayed():
+                        return True
+                except Exception:
+                    continue
+
+        try:
+            text = card.text or ""
+        except Exception:
+            text = ""
+
+        baris = {
+            " ".join(line.split()).strip().lower()
+            for line in text.splitlines()
+            if line.strip()
+        }
+
+        return bool(baris & APPLIED_CARD_TEXTS)
 
     @staticmethod
     def _parse_listing_age(text: str) -> Optional[int]:
@@ -529,7 +575,6 @@ class JobStreetBot:
             job["job_id"] = job_id
 
         if db.is_already_applied(job_id):
-            console.print(f"[yellow]Sudah tercatat sebagai dilamar: {title}[/]")
             return ApplyResult(False, "already_applied", "Sudah tercatat dilamar")
 
         if config.auto_apply:
@@ -556,7 +601,6 @@ class JobStreetBot:
 
         elif result.status == "already_applied":
             self._record(job_id, "already_applied", result.reason)
-            console.print(f"[yellow]{result.reason}. Dicatat dan dilewati.[/]")
 
         elif result.status == "manual_required":
             self._record(job_id, "manual_required", result.reason)

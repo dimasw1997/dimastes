@@ -25,6 +25,9 @@ di browser.
   sekaligus (Bandung, Jakarta, Tangerang, Jababeka, Cimahi, Purwakarta,
   Bogor, dan seterusnya).
 - Menyimpan lowongan ke SQLite agar tidak diproses dua kali.
+- Lowongan yang sudah berlabel **"Applied"/"Anda sudah melamar"** di JobStreet
+  otomatis dilewati: tidak ditampilkan lagi, tidak dilamar ulang, dan tidak
+  memakan kuota harian.
 - Menyaring lowongan: kata kunci terlarang, posisi terlalu senior, gaji
   minimum, batas pengalaman, dan (opsional) lokasi.
 - Hasil pencarian diurutkan **dari yang terbaru** (`sortmode=ListedDate`),
@@ -268,6 +271,7 @@ python buka_pencarian.py --locations "Bandung,Jakarta,Bekasi" --max-tabs 12
 | Login JobStreet | **sekali saja**, lalu tersimpan |
 | Klik Lamar → Lanjutkan → Kirim | otomatis (`--auto`) |
 | Lowongan lewat situs perusahaan (ATS) | **manual** — JobStreet mengalihkan keluar |
+| Lowongan berlabel "You applied"/sudah pernah dilamar | otomatis dilewati (tidak ditampilkan) |
 | Lowongan yang minta unggah berkas/cover letter/pertanyaan | **manual** — bot tidak menebak jawaban |
 | Captcha/OTP saat login | **manual** (tidak bisa dilewati) |
 | Menaikkan batas harian, memilih kota | Anda (lewat `.env`/flag) |
@@ -307,6 +311,13 @@ Aktifkan `STRICT_LOCATION=true` di `.env`.
 Pastikan `USE_PROFILE=true` (default) dan Chrome lain tidak memakai folder
 profil yang sama. Sesi JobStreet juga bisa kedaluwarsa sendiri; login sekali
 lagi lalu sesi tersimpan kembali.
+
+**Lowongan yang sudah saya lamar masih muncul.**
+Pastikan JobStreet sudah menampilkan label "Applied" pada kartu lowongan
+tersebut. Bila labelnya tidak terdeteksi, jalankan mode manual sekali dan
+kirimkan potongan HTML kartunya agar selector
+`APPLIED_CARD_SELECTORS`/`APPLIED_CARD_TEXTS` di `scraper.py` disesuaikan.
+Lowongan yang sudah tercatat di database tetap dilewati walau tanpa label.
 
 **Semua lowongan masuk "perlu dilamar manual".**
 Penyebab yang paling sering: lowongan memakai "Lamar di situs perusahaan",
