@@ -1,0 +1,231 @@
+import time
+
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+
+from config import config
+from database import db
+from scraper import JobStreetBot
+from job_filter import job_filter
+from notifier import notifier
+
+
+console = Console()
+
+
+class AutoApplyEngine:
+    def __init__(self):
+        self.bot = JobStreetBot()
+        self.seen_job_ids = set()
+        self.session_stats = {
+            "found": 0,
+            "applied": 0,
+            "skipped": 0,
+            "errors": 0,
+        }
+
+    def run(self):
+        self._print_banner()
+        self._print_config()
+
+        try:
+            self.bot.init_browser()
+
+            if not self.bot.login():
+                console.print("[bold red]Login belum selesai. Program berhenti.[/]")
+                return
+
+            for keyword in config.keywords:
+                keyword = keyword.strip()
+
+                if not keyword:
+                    continue
+
+                console.print(f"\n{'=' * 60}")
+                console.print(f"[bold]Kata kunci: {keyword}[/]")
+                console.print(f"{'=' * 60}")
+
+                self._process_keyword(keyword)
+
+            notifier.send_daily_report(db.get_stats())
+
+        except KeyboardInterrupt:
+            console.print("\n[bold yellow]Proses dihentikan.[/]")
+
+        except Exception as exc:
+            console.print(f"[bold red]Terjadi error: {exc}[/]")
+            notifier.send_error(str(exc))
+
+        finally:
+            self.bot.close()
+            self._print_results()
+
+    def _process_keyword(self, keyword: str):
+        max_pages = 3
+
+        for page in range(1, max_pages + 1):
+            if db.get_today_apply_count() >= config.max_apply_per_day:
+                console.print(
+                    f"[bold yellow]Batas harian tercapai "
+                    f"({config.max_apply_per_day}).[/]"
+                )
+                return
+
+            jobs = self.bot.search_jobs(keyword, page)
+
+            if not jobs:
+                console.print(f"Tidak ada lowongan terbaca di halaman {page}.")
+                break
+
+            # Lewati hasil duplikat atau yang tidak memiliki judul/URL/ID.
+            new_jobs = []
+
+            for job in jobs:
+                title = (job.get("title") or "").strip()
+                url = (job.get("url") or "").strip()
+                job_id = str(job.get("job_id") or "").strip()
+
+                if not title or not url or not job_id:
+                    console.print(
+                        "[yellow]Lowongan dilewati: judul, URL, atau ID tidak terbaca.[/]"
+                    )
+                    self.session_stats["skipped"] += 1
+                    continue
+
+                if job_id in self.seen_job_ids:
+                    continue
+
+                self.seen_job_ids.add(job_id)
+                db.add_job(job)
+                new_jobs.append(job)
+
+            self.session_stats["found"] += len(new_jobs)
+
+            if not new_jobs:
+                continue
+
+            eligible_jobs = []
+
+            for job in new_jobs:
+                try:
+                    should_apply, reason = job_filter.should_apply(job)
+                except Exception as exc:
+                    console.print(
+                        f"[yellow]Lowongan dilewati karena gagal diperiksa: {exc}[/]"
+                    )
+                    self.session_stats["errors"] += 1
+                    continue
+
+                if should_apply:
+                    eligible_jobs.append(job)
+                else:
+                    title = job.get("title", "Tanpa judul")
+                    console.print(
+                        f"[dim]Dilewati: {title[:50]} — {reason}[/]"
+                    )
+                    self.session_stats["skipped"] += 1
+
+            eligible_jobs = job_filter.rank_jobs(eligible_jobs)
+
+            console.print(
+                f"{len(eligible_jobs)} dari {len(new_jobs)} "
+                "lowongan baru lolos filter."
+            )
+
+            for job in eligible_jobs:
+                if db.get_today_apply_count() >= config.max_apply_per_day:
+                    console.print(
+                        "[bold yellow]Batas lamaran harian tercapai.[/]"
+                    )
+                    return
+
+                title = (job.get("title") or "").strip()
+
+                try:
+                    # Versi scraper manual membuka lowongan untuk Anda tinjau.
+                    # True hanya jika Anda mengonfirmasi lamaran sudah dikirim.
+                    confirmed = self.bot.apply_job(job)
+
+                except KeyboardInterrupt:
+                    raise
+
+                except Exception as exc:
+                    console.print(
+                        f"[bold red]Error saat membuka lowongan "
+                        f"'{title}': {exc}[/]"
+                    )
+                    self.session_stats["errors"] += 1
+                    continue
+
+                if confirmed:
+                    self.session_stats["applied"] += 1
+                    notifier.send_apply_success(job)
+                else:
+                    self.session_stats["skipped"] += 1
+
+                delay = max(0, int(config.delay_between_apply))
+
+                if delay:
+                    console.print(
+                        f"[dim]Jeda {delay} detik sebelum lowongan berikutnya...[/]"
+                    )
+                    time.sleep(delay)
+
+    def _print_banner(self):
+        banner = """
+    ==========================================
+        JobStreet Job Review System
+    ==========================================
+        """
+        console.print(Panel(banner, style="bold blue"))
+
+    def _print_config(self):
+        table = Table(title="Konfigurasi", show_header=False)
+        table.add_column("Pengaturan", style="cyan")
+        table.add_column("Nilai", style="green")
+
+        table.add_row("Kata kunci", ", ".join(config.keywords))
+        table.add_row("Lokasi", config.location)
+        table.add_row("Gaji minimum", f"Rp {config.min_salary:,}")
+        table.add_row("Batas pengalaman", f"{config.max_experience} tahun")
+        table.add_row("Batas lamaran per hari", str(config.max_apply_per_day))
+        table.add_row("Jeda antar-lowongan", f"{config.delay_between_apply} detik")
+        table.add_row("Mode", "Tinjau dan kirim secara manual")
+        table.add_row(
+            "Notifikasi Telegram",
+            "Aktif" if notifier.enabled else "Tidak aktif",
+        )
+
+        console.print(table)
+        console.print()
+
+    def _print_results(self):
+        console.print(f"\n{'=' * 60}")
+
+        table = Table(title="Hasil Sesi")
+        table.add_column("Keterangan", style="cyan")
+        table.add_column("Jumlah", style="green", justify="right")
+
+        table.add_row("Lowongan baru terbaca", str(self.session_stats["found"]))
+        table.add_row("Lamaran dikonfirmasi terkirim", str(self.session_stats["applied"]))
+        table.add_row("Dilewati / tidak dikonfirmasi", str(self.session_stats["skipped"]))
+        table.add_row("Error", str(self.session_stats["errors"]))
+
+        try:
+            stats = db.get_stats()
+            table.add_row("Total lowongan di database", str(stats["total_jobs_found"]))
+            table.add_row("Total lamaran tercatat", str(stats["total_applied"]))
+            table.add_row("Lamaran tercatat hari ini", str(stats["today_applied"]))
+        except Exception as exc:
+            console.print(f"[yellow]Statistik database tidak tersedia: {exc}[/]")
+
+        console.print(table)
+
+
+def main():
+    AutoApplyEngine().run()
+
+
+if __name__ == "__main__":
+    main()
