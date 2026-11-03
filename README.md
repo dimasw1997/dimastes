@@ -28,7 +28,31 @@ password JobStreet. Login dan penekanan tombol Apply/Submit tetap manual.
 - Google Chrome (Selenium 4.6+ mengunduh ChromeDriver otomatis)
 - Koneksi internet
 
-## Instalasi
+## Cara cepat (disarankan)
+
+Skrip bantu sudah disiapkan: ia membuat `.venv`, memasang dependensi,
+menyalin `.env.example` menjadi `.env` (sekali), lalu menjalankan perintah.
+
+**Windows** — buka folder proyek, klik dua kali `jalankan.bat`, atau dari
+Command Prompt:
+
+```bat
+jalankan.bat config
+jalankan.bat run
+```
+
+**macOS / Linux**:
+
+```bash
+chmod +x jalankan.sh
+./jalankan.sh config
+./jalankan.sh run
+```
+
+Argumen apa pun diteruskan ke `cli.py`, misalnya
+`jalankan.bat history --limit 10` atau `jalankan.bat repair`.
+
+## Instalasi manual
 
 ```bash
 git clone https://github.com/dimasw1997/dimastes.git
@@ -116,6 +140,7 @@ dan menyiapkan `catatan_lamaran.csv` sebagai pelacak manual.
 | `cli.py` | Perintah `run`, `stats`, `history`, `config`, `repair`, `blacklist` |
 | `notifier.py` | Notifikasi Telegram (opsional) |
 | `buka_pencarian.py` | Pembuka tab pencarian tanpa Selenium |
+| `jalankan.bat` / `jalankan.sh` | Skrip bantu: siapkan `.venv`, pasang dependensi, jalankan CLI |
 | `tests/` | Unit test untuk filter dan database |
 
 ## Menjalankan test
