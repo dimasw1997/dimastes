@@ -654,9 +654,7 @@ class JobStreetBot:
 
         elif result.status == "manual_required":
             self._record(job_id, "manual_required", result.reason)
-            console.print(
-                f"[yellow]Perlu dilamar manual: {result.reason}[/]"
-            )
+            console.print(f"[yellow]Dilewati: {result.reason}[/]")
 
         else:
             self._record(job_id, "error", result.reason)
