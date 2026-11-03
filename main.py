@@ -54,6 +54,7 @@ class AutoApplyEngine:
 
         except Exception as exc:
             console.print(f"[bold red]Terjadi error: {exc}[/]")
+            self.session_stats["errors"] += 1
             notifier.send_error(str(exc))
 
         finally:
