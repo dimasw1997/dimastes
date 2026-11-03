@@ -229,7 +229,8 @@ def test_auto_apply_tab_eksternal():
 
     assert hasil.applied is False
     assert hasil.status == "manual_required"
-    assert "situs perusahaan" in hasil.reason.lower()
+    assert "situs lain" in hasil.reason.lower()
+    assert "karier.contoh.com" in hasil.reason
 
 
 def test_auto_apply_berhenti_bila_halaman_login():
@@ -343,3 +344,38 @@ def test_auto_apply_lewati_setelah_batas_waktu(monkeypatch):
     assert hasil.applied is False
     assert hasil.status == "manual_required"
     assert "3 detik" in hasil.reason
+
+
+def test_auto_apply_dialihkan_sebelum_klik():
+    class DriverDialihkan(FakeDriver):
+        def get(self, url):
+            self.current_url = "https://karir.perusahaan.com/lowongan/9"
+
+    hasil = AutoApplier(DriverDialihkan()).apply(
+        {"url": "https://id.jobstreet.com/job/1"}
+    )
+
+    assert hasil.applied is False
+    assert hasil.status == "manual_required"
+    assert "dialihkan ke situs lain" in hasil.reason.lower()
+    assert "karir.perusahaan.com" in hasil.reason
+
+
+def test_auto_apply_dialihkan_setelah_klik():
+    driver = FakeDriver()
+
+    def pindah_ke_luar():
+        driver.current_url = "https://jobs.workday.com/apply/123"
+
+    driver.elements = {
+        APPLY_SELECTORS[0]: [
+            FakeElement(text="Lamar", on_click=pindah_ke_luar)
+        ],
+    }
+
+    hasil = AutoApplier(driver).apply({"url": "https://id.jobstreet.com/job/1"})
+
+    assert hasil.applied is False
+    assert hasil.status == "manual_required"
+    assert "dialihkan ke situs lain" in hasil.reason.lower()
+    assert "jobs.workday.com" in hasil.reason

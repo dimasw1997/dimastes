@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from rich.console import Console
 from selenium.common.exceptions import WebDriverException
@@ -75,6 +76,8 @@ ALREADY_SELECTORS = (
     "[data-automation='appliedBadge']",
     "[data-testid='applied-badge']",
 )
+
+JOBSTREET_DOMAIN = "jobstreet.com"
 
 EXTERNAL_BUTTON_TEXTS = (
     "lamar di situs perusahaan",
@@ -190,6 +193,32 @@ class AutoApplier:
 
         body = self._body_text()
         return any(text in body for text in ALREADY_TEXTS)
+
+    @staticmethod
+    def _is_jobstreet_url(url: str) -> bool:
+        try:
+            host = (urlparse(url or "").netloc or "").lower()
+        except Exception:
+            return True
+
+        if not host:
+            return True
+
+        return JOBSTREET_DOMAIN in host
+
+    def _is_external_page(self) -> bool:
+        try:
+            url = self.driver.current_url or ""
+        except Exception:
+            return False
+
+        return bool(url) and not self._is_jobstreet_url(url)
+
+    def _external_host(self) -> str:
+        try:
+            return (urlparse(self.driver.current_url or "").netloc or "").lower()
+        except Exception:
+            return ""
 
     def _is_login_page(self) -> bool:
         try:
@@ -326,13 +355,19 @@ class AutoApplier:
 
         try:
             self.driver.switch_to.window(new_handles.pop())
-            time.sleep(1)
-            url = (self.driver.current_url or "").lower()
+            time.sleep(0.3)
+            url = self.driver.current_url or ""
         except Exception:
             return "Gagal berpindah ke tab lamaran"
 
-        if "jobstreet." in url:
+        if self._is_jobstreet_url(url):
             return ""
+
+        # Simpan domain sebelum tab ditutup, agar pesannya tetap benar.
+        try:
+            host = (urlparse(url).netloc or "").lower()
+        except Exception:
+            host = ""
 
         # Lamaran dibuka di situs perusahaan (ATS eksternal).
         try:
@@ -342,7 +377,10 @@ class AutoApplier:
         except Exception:
             pass
 
-        return "Lamaran diarahkan ke situs perusahaan, bukan JobStreet"
+        return (
+            "Lamaran diarahkan ke situs lain "
+            f"({host or 'situs perusahaan'}) — dilewati"
+        )
 
     # ------------------------------------------------------------------
     # Alur utama
@@ -362,6 +400,14 @@ class AutoApplier:
                     False,
                     "login_required",
                     "Sesi login JobStreet sudah habis",
+                )
+
+            if self._is_external_page():
+                return ApplyResult(
+                    False,
+                    "manual_required",
+                    "Lowongan dialihkan ke situs lain "
+                    f"({self._external_host()}) — dilewati",
                 )
 
             if self.is_already_applied():
@@ -403,11 +449,27 @@ class AutoApplier:
             if external_reason:
                 return ApplyResult(False, "manual_required", external_reason)
 
+            if self._is_external_page():
+                return ApplyResult(
+                    False,
+                    "manual_required",
+                    "Lamaran dialihkan ke situs lain "
+                    f"({self._external_host()}) — dilewati",
+                )
+
             deadline = time.time() + self.step_timeout
             sudah_klik_kirim = False
 
             while time.time() < deadline:
                 time.sleep(0.4)
+
+                if self._is_external_page():
+                    return ApplyResult(
+                        False,
+                        "manual_required",
+                        "Lamaran dialihkan ke situs lain "
+                        f"({self._external_host()}) — dilewati",
+                    )
 
                 if self._is_success():
                     return ApplyResult(True, "applied", "Terkirim otomatis")

@@ -286,13 +286,16 @@ meninjau sendiri.
 2. Bila muncul langkah berikutnya (**Lanjutkan/Kirim lamaran**), bot menekan
    otomatis sampai muncul konfirmasi "lamaran telah dikirim".
 3. Lamaran hanya dicatat `applied` **setelah** konfirmasi itu terlihat.
-4. Bot berhenti dan menyerahkan ke Anda bila:
-   - lowongan memakai **"Lamar di situs perusahaan"** (ATS eksternal),
-   - alur meminta **unggah berkas/cover letter** atau ada **pertanyaan wajib**,
+4. Lowongan **dilewati** (tanpa jeda, langsung lanjut ke berikutnya) bila:
+   - lamaran **dialihkan ke situs lain** — baik lewat tombol
+     "Lamar di situs perusahaan", tab baru, maupun tab yang sama berpindah
+     domain ke ATS perusahaan (Workday, Lever, dll.);
    - alur tidak dikenali dalam `AUTO_APPLY_STEP_TIMEOUT` detik (default **3**);
-     lowongan itu langsung dilewati, tanpa jeda, dan lanjut ke berikutnya.
-5. Di akhir sesi muncul daftar **"Lowongan yang perlu Anda lamar manual"**
-   lengkap dengan tautannya.
+   - formulir meminta unggah berkas/pertanyaan wajib yang belum diisi
+     otomatis (`COVER_LETTER`/`RESUME_PATH` kosong), atau pertanyaan pilihan
+     dari perusahaan yang jawabannya tidak boleh ditebak.
+5. Di akhir sesi muncul daftar lowongan yang dilewati beserta alasannya —
+   hanya informasi, tidak perlu Anda kerjakan.
 
 Batas pengaman: `MAX_APPLY_PER_DAY` (harian), `AUTO_APPLY_MAX_PER_SESSION`
 (per sesi), dan `DELAY_BETWEEN_APPLY` (jeda antar lamaran). Jangan
