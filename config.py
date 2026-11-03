@@ -79,6 +79,16 @@ class Config:
     max_pages: int = _MAX_PAGES
     headless: bool = _bool_setting("HEADLESS_MODE", False)
 
+    # --- Sesi Chrome (agar tidak login ulang tiap kali) ---
+    use_profile: bool = _bool_setting("USE_PROFILE", True)
+    # Disimpan di folder pengguna, bukan di dalam proyek.
+    profile_dir: str = os.getenv(
+        "CHROME_PROFILE_DIR",
+        str(Path.home() / ".dimastes" / "chrome-profile"),
+    )
+    # false = jangan menunggu Enter saat login (untuk sesi terjadwal).
+    login_wait: bool = _bool_setting("LOGIN_WAIT", True)
+
     # --- Lamaran otomatis ---
     # Default mati; nyalakan lewat AUTO_APPLY=true di .env atau `run --auto`.
     auto_apply: bool = _bool_setting("AUTO_APPLY", False)

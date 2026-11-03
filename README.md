@@ -33,6 +33,8 @@ di browser.
 - Mode manual: halaman lowongan dibuka di Chrome, Anda yang melamar.
 - Mode otomatis (`run --auto`): klik Lamar → Lanjutkan → Kirim lamaran,
   dengan pengaman dan batas per sesi.
+- **Sesi login tersimpan** di profil Chrome khusus, jadi login hanya sekali
+  (tidak setiap kali menjalankan).
 - Mencatat lamaran yang sudah dikirim beserta batas harian.
 - Blacklist perusahaan dan notifikasi Telegram (opsional).
 - Laporan singkat di akhir sesi: `python cli.py stats`, `history`, `config`.
@@ -114,6 +116,9 @@ cp .env.example .env
 | `SORT_MODE` | `ListedDate` | Urutan hasil; `ListedDate` = terbaru dulu, `KeywordRelevance` = relevansi |
 | `PREFER_NEWEST` | `true` | Dahulukan lowongan paling baru saat antrean melamar |
 | `MAX_AGE_DAYS` | `0` | Hanya lowongan N hari terakhir (0 = semua). Nilai valid JobStreet: 1, 3, 7, 14, 31 |
+| `USE_PROFILE` | `true` | Simpan sesi login di profil Chrome khusus |
+| `CHROME_PROFILE_DIR` | `~/.dimastes/chrome-profile` | Lokasi profil Chrome |
+| `LOGIN_WAIT` | `true` | `false` = jangan tunggu Enter; berhenti bila belum login |
 | `AUTO_APPLY` | `false` | `true` = kirim lamaran otomatis (bisa juga `run --auto`) |
 | `AUTO_APPLY_MAX_PER_SESSION` | `25` | Batas lamaran otomatis per sesi |
 | `AUTO_APPLY_STEP_TIMEOUT` | `30` | Detik maksimal menunggu tiap langkah alur lamaran |
@@ -155,6 +160,32 @@ Saat `run` berjalan:
 3. Tinjau di browser. Setelah selesai, kembali ke terminal:
    - tekan **Enter** saja jika lamaran **tidak** dikirim (dicatat `skipped`);
    - ketik **y** jika lamaran benar-benar sudah dikirim (dicatat `applied`).
+
+### Login sekali saja (sesi tersimpan)
+
+Secara default program memakai profil Chrome sendiri di
+`~/.dimastes/chrome-profile` (Windows: `C:\Users\NamaAnda\.dimastes\chrome-profile`).
+Jadi:
+
+1. Jalankan pertama kali: `python cli.py run --auto`
+2. Login manual di jendela Chrome yang terbuka, tekan Enter di terminal.
+3. Sesi disimpan. Sesi berikutnya program mendeteksi sudah login dan
+   **tidak menanyakan apa pun**.
+
+Untuk sesi terjadwal/tanpa orang di depan komputer:
+
+```bash
+python cli.py run --auto --no-login-wait
+```
+
+Perintah itu langsung berhenti dengan pesan jelas bila sesi sudah kedaluwarsa
+(sehingga Anda tahu perlu login sekali lagi), bukan menggantung menunggu Enter.
+
+Opsi lain: `--profile-dir "D:\chrome-dimastes"` untuk lokasi profil lain, dan
+`--no-profile` untuk kembali ke profil sementara (selalu login ulang).
+
+Pastikan Chrome lain tidak memakai folder profil yang sama; bila terkunci,
+tutup Chrome tersebut atau pakai `--profile-dir` yang berbeda.
 
 ### Banyak lokasi
 
@@ -227,6 +258,23 @@ python buka_pencarian.py --locations "Bandung,Jakarta,Bekasi" --max-tabs 12
 | `jalankan.bat` / `jalankan.sh` | Skrip bantu: siapkan `.venv`, pasang dependensi, jalankan CLI |
 | `tests/` | Unit test untuk filter dan database |
 
+## Seberapa otomatis alat ini?
+
+| Langkah | Status |
+|---|---|
+| Mencari lowongan di 7 kota | otomatis |
+| Urut dari posting terbaru | otomatis |
+| Menyaring (senior, gaji, pengalaman, lokasi) | otomatis |
+| Login JobStreet | **sekali saja**, lalu tersimpan |
+| Klik Lamar → Lanjutkan → Kirim | otomatis (`--auto`) |
+| Lowongan lewat situs perusahaan (ATS) | **manual** — JobStreet mengalihkan keluar |
+| Lowongan yang minta unggah berkas/cover letter/pertanyaan | **manual** — bot tidak menebak jawaban |
+| Captcha/OTP saat login | **manual** (tidak bisa dilewati) |
+| Menaikkan batas harian, memilih kota | Anda (lewat `.env`/flag) |
+
+Lowongan yang tidak bisa otomatis dikumpulkan di daftar
+"perlu Anda lamar manual" di akhir sesi, lengkap dengan tautannya.
+
 ## Menjalankan test
 
 ```bash
@@ -254,6 +302,11 @@ Itu data lama dari versi sebelumnya yang menyimpan judul kosong. Jalankan
 
 **Lowongan muncul tapi lokasinya bukan Kota Anda.**
 Aktifkan `STRICT_LOCATION=true` di `.env`.
+
+**Diminta login setiap kali menjalankan.**
+Pastikan `USE_PROFILE=true` (default) dan Chrome lain tidak memakai folder
+profil yang sama. Sesi JobStreet juga bisa kedaluwarsa sendiri; login sekali
+lagi lalu sesi tersimpan kembali.
 
 **Semua lowongan masuk "perlu dilamar manual".**
 Penyebab yang paling sering: lowongan memakai "Lamar di situs perusahaan",

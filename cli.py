@@ -155,6 +155,21 @@ if __name__ == "__main__":
         action="store_true",
         help="Jalankan Chrome tanpa jendela",
     )
+    run_parser.add_argument(
+        "--profile-dir",
+        default=None,
+        help="Folder profil Chrome untuk menyimpan sesi login",
+    )
+    run_parser.add_argument(
+        "--no-profile",
+        action="store_true",
+        help="Pakai profil sementara (harus login ulang setiap sesi)",
+    )
+    run_parser.add_argument(
+        "--no-login-wait",
+        action="store_true",
+        help="Jangan menunggu Enter saat login; berhenti bila belum login",
+    )
     subparsers.add_parser("stats", help="Tampilkan statistik")
     subparsers.add_parser("config", help="Tampilkan konfigurasi aktif")
     subparsers.add_parser("repair", help="Rapikan data lama di database")
@@ -194,6 +209,16 @@ if __name__ == "__main__":
 
         if args.headless:
             config.headless = True
+
+        if args.profile_dir:
+            config.profile_dir = args.profile_dir
+            config.use_profile = True
+
+        if args.no_profile:
+            config.use_profile = False
+
+        if args.no_login_wait:
+            config.login_wait = False
 
         from main import main
 

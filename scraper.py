@@ -7,6 +7,7 @@ agar pengguna meninjau dan mengirim lamaran sendiri di browser.
 import hashlib
 import re
 import time
+from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import urldefrag, urlencode, urljoin
 
@@ -57,6 +58,21 @@ class JobStreetBot:
         options.add_argument("--window-size=1400,900")
         options.add_argument("--disable-blink-features=AutomationControlled")
 
+        # Profil tetap -> cookie login tersimpan, tidak perlu login tiap sesi.
+        if config.use_profile:
+            profile_path = Path(config.profile_dir).expanduser()
+
+            try:
+                profile_path.mkdir(parents=True, exist_ok=True)
+                options.add_argument(f"--user-data-dir={profile_path}")
+                options.add_argument("--profile-directory=Default")
+                console.print(f"[dim]Profil Chrome: {profile_path}[/]")
+            except Exception as exc:
+                console.print(
+                    f"[yellow]Profil Chrome tidak bisa dipakai ({exc}); "
+                    "memakai profil sementara.[/]"
+                )
+
         if config.headless:
             options.add_argument("--headless=new")
             options.add_argument("--disable-gpu")
@@ -89,8 +105,49 @@ class JobStreetBot:
         self.wait = WebDriverWait(self.driver, 20)
         console.print("[bold green]Chrome siap.[/]")
 
+    def _login_status(self) -> Optional[bool]:
+        """True = sudah login, False = ada tombol sign in, None = tidak pasti."""
+        for selector in (
+            "a[data-automation='signIn']",
+            "button[data-automation='signIn']",
+            "a[href*='/signin']",
+            "a[href*='/login']",
+        ):
+            if any(
+                self._visible(element)
+                for element in self._find_elements(selector)
+            ):
+                return False
+
+        for selector in (
+            "[data-automation='accountMenu']",
+            "[data-automation='userMenu']",
+            "[data-automation*='account']",
+            "a[href*='/profile']",
+        ):
+            if any(
+                self._visible(element)
+                for element in self._find_elements(selector)
+            ):
+                return True
+
+        return None
+
+    def _find_elements(self, selector: str) -> list:
+        try:
+            return self.driver.find_elements(By.CSS_SELECTOR, selector)
+        except Exception:
+            return []
+
+    @staticmethod
+    def _visible(element) -> bool:
+        try:
+            return element.is_displayed()
+        except Exception:
+            return False
+
     def login(self) -> bool:
-        """Login dilakukan sendiri oleh pengguna di browser."""
+        """Memakai sesi tersimpan bila ada; login manual hanya bila perlu."""
         if not self.driver:
             console.print("[bold red]Browser belum dibuka.[/]")
             return False
@@ -99,17 +156,45 @@ class JobStreetBot:
             self.driver.get(config.base_url)
             time.sleep(2)
 
+            status = self._login_status()
+
+            if status is True:
+                console.print(
+                    "[bold green]Sudah login (sesi tersimpan di profil "
+                    "Chrome).[/]"
+                )
+                return True
+
+            if not config.login_wait:
+                console.print(
+                    "[bold red]Belum login dan LOGIN_WAIT mati. "
+                    "Jalankan sekali tanpa --no-login-wait untuk login.[/]"
+                )
+                return False
+
             console.print("\n[bold cyan]Silakan login secara manual di jendela Chrome.[/]")
 
             if config.headless:
                 console.print(
                     "[yellow]HEADLESS_MODE aktif sehingga jendela Chrome "
-                    "tidak terlihat. Set HEADLESS_MODE=false untuk login "
-                    "dan meninjau lowongan secara manual.[/]"
+                    "tidak terlihat. Set HEADLESS_MODE=false untuk login.[/]"
                 )
 
             console.print("Buka tombol Sign in di halaman JobStreet dan selesaikan login.")
             input("Jika sudah selesai, kembali ke terminal lalu tekan Enter: ")
+
+            ulang = self._login_status()
+
+            if ulang is False:
+                console.print(
+                    "[yellow]Tombol Sign in masih terlihat. Lamaran otomatis "
+                    "kemungkinan gagal; pastikan login benar-benar selesai.[/]"
+                )
+            else:
+                console.print(
+                    "[green]Sesi login akan disimpan, jadi lain kali tidak "
+                    "perlu login ulang.[/]"
+                )
 
             return True
 
