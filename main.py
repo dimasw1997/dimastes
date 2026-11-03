@@ -34,6 +34,14 @@ class AutoApplyEngine:
         self._print_banner()
         self._print_config()
 
+        if not config.auto_apply:
+            console.print(
+                "[bold yellow]Mode manual aktif: setiap lowongan akan "
+                "menunggu Enter dan lamaran Anda kirim sendiri. "
+                "Pakai `run --auto` (atau AUTO_APPLY=true di .env) untuk "
+                "mengirim lamaran otomatis.[/]\n"
+            )
+
         try:
             self.bot.init_browser()
 
