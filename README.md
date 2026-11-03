@@ -109,12 +109,12 @@ cp .env.example .env
 
 | Variabel | Default | Keterangan |
 | --- | --- | --- |
-| `KEYWORDS` | `inventory control,PPIC,...` | Daftar kata kunci, dipisah koma |
+| `KEYWORDS` | 14 kata kunci (inventory, PPIC, gudang, purchasing, ...) | Kata kunci pencarian di JobStreet, dipisah koma |
 | `LOCATIONS` | kosong | Daftar lokasi dipisah koma, mis. `Bandung,Jakarta,Tangerang` |
 | `LOCATION` | `Bandung` | Dipakai hanya bila `LOCATIONS` kosong |
 | `ALLOW_REMOTE` | `false` | `true` = lowongan "Remote" juga diterima saat `STRICT_LOCATION` aktif |
 | `REQUIRE_KEYWORD_MATCH` | `true` | Hanya lamar lowongan yang judulnya cocok dengan minat |
-| `TITLE_KEYWORDS` | kosong | Kata kunci untuk mencocokkan judul (kosong = ikut `KEYWORDS`) |
+| `TITLE_KEYWORDS` | 43 kata kunci (inventory, gudang, ppic, logistik, ...) | Kata kunci pencocok **judul**; kosong = ikut `KEYWORDS` |
 | `MIN_SALARY` | `0` | Gaji minimum (0 = tanpa filter) |
 | `MAX_EXPERIENCE_YEARS` | `5` | Tolak lowongan yang minta pengalaman lebih dari ini |
 | `EXCLUDE_KEYWORDS` | `principal,director,head,senior,lead` | Kata yang membuat judul otomatis ditolak |
@@ -168,6 +168,9 @@ python cli.py blacklist "PT Contoh" --reason "tidak sesuai"
 
 # 5. Rapikan data lama
 python cli.py repair
+
+# 5b. Samakan kata kunci di .env dengan daftar terbaru (cadangan: .env.bak)
+python cli.py perbarui-env
 
 # 6. Uji alur lamaran pada satu lowongan (tanpa pencarian/filter)
 python cli.py uji-lamar --url "https://id.jobstreet.com/job/95549275"
@@ -259,17 +262,40 @@ digabung dan diurutkan dari yang terbaru. Karena itu:
 ### Hanya melamar yang Anda minati
 
 Secara default program **hanya melamar lowongan yang judulnya memuat salah
-satu `KEYWORDS`** (mis. mengandung "PPIC", "inventory control", "stock
-controller"). Judul yang nyasar di hasil pencarian — misalnya "Marketing
-Staff" — otomatis dilewati, tidak dilamar.
+satu `TITLE_KEYWORDS`**. Judul yang nyasar di hasil pencarian — misalnya
+"Sales Executive" atau "Staff Accounting" — otomatis dilewati, tidak dilamar.
 
-Bila ada istilah lain yang juga Anda minati, tambahkan sinonim:
+Ada dua daftar yang dipakai:
 
+| Pengaturan | Fungsi | Pengaruh ke waktu |
+| --- | --- | --- |
+| `KEYWORDS` | query yang diketik ke pencarian JobStreet | **menambah** waktu (dijalankan per lokasi, per halaman) |
+| `TITLE_KEYWORDS` | hanya mencocokkan judul hasil pencarian | tidak menambah waktu sama sekali |
+
+Karena itu daftar bawaan dibuat dua lapis: `KEYWORDS` 14 istilah pencarian,
+`TITLE_KEYWORDS` 43 istilah pencocok judul yang disusun dari pengalaman
+PPIC/inventory, gudang, material/pengadaan, dan supply chain — termasuk versi
+bahasa Indonesia (`staf gudang`, `admin inventory`, `persediaan`,
+`perencanaan produksi`, `pengadaan`, `logistik`, ...). Contoh judul yang lolos:
+*Staff PPIC*, *Staf Gudang*, *Warehouse Supervisor*, *Production Planner*,
+*Material Control Staff*, *Purchasing Staff*, *Demand Planner*,
+*Project Control*. Yang tetap ditolak: *Operator Produksi*,
+*Financial Planner*, *Media Buyer*, *Quantity Surveyor*.
+
+Setelah `git pull`, samakan kata kunci di `.env` Anda dengan daftar terbaru:
+
+```bash
+python cli.py perbarui-env
 ```
-TITLE_KEYWORDS=inventory control,inventory controller,PPIC,production planner,material planner,material controller,stock controller,inventory analyst,gudang,stok,production planning
-```
 
-Ingin mematikan filter ini (lamar semua yang muncul)? `REQUIRE_KEYWORD_MATCH=false`.
+Perintah itu hanya mengganti baris `KEYWORDS` dan `TITLE_KEYWORDS` di `.env`
+(cadangan otomatis di `.env.bak`); cover letter, path CV, token Telegram, dan
+isian lain tidak disentuh. Setelah itu jalankan ulang program.
+
+Ingin menambah sendiri? Tambahkan istilah dipisah koma, mis.
+`TITLE_KEYWORDS=...,staf gudang,admin produksi,persediaan`.
+Ingin mematikan filter ini (lamar semua yang muncul)?
+`REQUIRE_KEYWORD_MATCH=false`.
 
 ### Isian lamaran otomatis
 
@@ -405,7 +431,8 @@ program tidak pernah menanyakan email/password.
 
 **Lowongan yang menurut saya relevan malah dilewati.**
 Judulnya tidak memuat kata kunci minat. Tambahkan istilahnya ke
-`TITLE_KEYWORDS` di `.env` (mis. `gudang`, `stok`, `production planning`),
+`TITLE_KEYWORDS` di `.env` (mis. `gudang`, `stok`, `production planning`) —
+atau jalankan `python cli.py perbarui-env` untuk memakai daftar terbaru,
 atau set `REQUIRE_KEYWORD_MATCH=false`.
 
 **Lowongan yang sudah saya lamar masih muncul.**

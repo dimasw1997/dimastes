@@ -1,5 +1,6 @@
 # Salin .env.example menjadi .env; file .env hanya untuk mesin Anda.
 .env
+.env.bak
 
 # Python
 __pycache__/

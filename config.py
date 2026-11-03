@@ -50,7 +50,10 @@ class Config:
 
     keywords: list[str] = field(default_factory=lambda: _list_setting(
         "KEYWORDS",
-        "inventory control,PPIC,production planner,material planner"
+        "inventory control,inventory controller,inventory staff,"
+        "stock controller,PPIC,production planning,production planner,"
+        "material control,material planner,warehouse,staff gudang,"
+        "purchasing,procurement,supply chain",
     ))
     # Lokasi utama (dipertahankan untuk kompatibilitas).
     location: str = os.getenv("LOCATION", "Bandung")
@@ -75,8 +78,22 @@ class Config:
     # Hanya lamar lowongan yang judulnya cocok dengan minat.
     require_keyword_match: bool = _bool_setting("REQUIRE_KEYWORD_MATCH", True)
     # Kata kunci untuk mencocokkan judul. Kosong = pakai KEYWORDS.
+    # Daftar bawaan disusun dari pengalaman CV (PPIC/inventory, gudang,
+    # material/pengadaan, supply chain) dan lebih lebar dari KEYWORDS karena
+    # hanya dipakai saat mencocokkan judul, bukan saat mencari.
     title_keywords: list[str] = field(default_factory=lambda: _list_setting(
-        "TITLE_KEYWORDS", ""
+        "TITLE_KEYWORDS",
+        "inventory,stock,stok,persediaan,gudang,warehouse,ppic,"
+        "production planning,production planner,production control,"
+        "production admin,admin produksi,staf produksi,staff produksi,"
+        "perencanaan produksi,demand planning,demand planner,"
+        "capacity planning,material control,material planner,"
+        "material controller,material handling,material management,"
+        "bahan baku,pengadaan,purchasing,procurement,pembelian,"
+        "supply chain,rantai pasok,logistik,logistics,distribusi,"
+        "distribution,inventory analyst,inventory admin,"
+        "inventory officer,admin inventory,stock opname,mrp,"
+        "cycle count,project control",
     ))
 
     # Urutkan hasil pencarian dari yang paling baru (ListedDate).

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 import job_filter as job_filter_module
@@ -216,3 +218,67 @@ def test_kata_kunci_judul_bisa_ditambah(filter_baru, monkeypatch):
 
     assert filter_baru.should_apply(make_job(title="Staff Gudang"))[0] is True
     assert filter_baru.should_apply(make_job(title="Staff PPIC"))[0] is False
+
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def _kata_kunci_judul() -> list:
+    """Daftar TITLE_KEYWORDS bawaan, dibaca dari .env.example."""
+    from env_tools import baca_baku
+
+    isi = baca_baku((ROOT / ".env.example").read_text(encoding="utf-8"))
+    return [
+        item.strip()
+        for item in isi.get("TITLE_KEYWORDS", "").split(",")
+        if item.strip()
+    ]
+
+
+@pytest.mark.parametrize(
+    "judul",
+    [
+        "Inventory Control Staff",
+        "Staf Inventory",
+        "Stock Controller",
+        "Staf Gudang",
+        "Admin Gudang",
+        "Warehouse Supervisor",
+        "Staff PPIC",
+        "Production Planning & Inventory Control",
+        "Production Planner",
+        "Staf Produksi",
+        "Material Control Staff",
+        "Material Planner",
+        "Purchasing Staff",
+        "Procurement Officer",
+        "Supply Chain Staff",
+        "Logistik Staff",
+        "Demand Planner",
+        "Inventory Analyst",
+        "Project Control",
+    ],
+)
+def test_judul_sesuai_pengalaman_cv_lolos(monkeypatch, judul):
+    monkeypatch.setattr(config, "title_keywords", _kata_kunci_judul())
+
+    assert JobFilter._matches_interest(judul.lower()) is True
+
+
+@pytest.mark.parametrize(
+    "judul",
+    [
+        "Staff Accounting",
+        "Sales Executive",
+        "Operator Produksi",
+        "Financial Planner",
+        "Media Buyer",
+        "Quantity Surveyor",
+        "Income Auditor",
+        "IT Support & Asset Management",
+    ],
+)
+def test_judul_di_luar_pengalaman_cv_tetap_ditolak(monkeypatch, judul):
+    monkeypatch.setattr(config, "title_keywords", _kata_kunci_judul())
+
+    assert JobFilter._matches_interest(judul.lower()) is False

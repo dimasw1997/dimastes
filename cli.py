@@ -75,6 +75,37 @@ def uji_lamar(url: str):
         )
 
 
+def perbarui_env():
+    """Samakan KEYWORDS/TITLE_KEYWORDS di .env dengan daftar terbaru."""
+    from pathlib import Path
+
+    from env_tools import perbarui_env as jalan
+
+    hasil = jalan(Path(".env"), Path(".env.example"))
+
+    if hasil["status"] == "contoh_tidak_ada":
+        console.print("[bold red].env.example tidak ditemukan.[/]")
+        return
+
+    if hasil["status"] == "tidak_ada_kunci":
+        console.print("[bold red].env.example tidak memuat KEYWORDS.[/]")
+        return
+
+    if hasil["status"] == "sudah_terbaru":
+        console.print("[green].env sudah memakai daftar kata kunci terbaru.[/]")
+        return
+
+    console.print(
+        "[bold green]Kata kunci di .env diperbarui:[/] "
+        + ", ".join(hasil["perubahan"])
+    )
+    if hasil["backup"]:
+        console.print(f"[dim]Cadangan file lama: {hasil['backup']}[/]")
+    console.print(
+        "[dim]Jalankan ulang program agar nilai baru terpakai.[/]"
+    )
+
+
 def show_config():
     table = Table(title="Konfigurasi")
     table.add_column("Pengaturan", style="cyan")
@@ -87,7 +118,11 @@ def show_config():
     )
     table.add_row(
         "Filter judul minat",
-        "Aktif" if config.require_keyword_match else "Tidak aktif",
+        (
+            f"Aktif ({len(config.title_keywords)} kata kunci)"
+            if config.require_keyword_match
+            else "Tidak aktif"
+        ),
     )
     table.add_row(
         "Filter lokasi ketat",
@@ -236,6 +271,10 @@ if __name__ == "__main__":
     subparsers.add_parser("stats", help="Tampilkan statistik")
     subparsers.add_parser("config", help="Tampilkan konfigurasi aktif")
     subparsers.add_parser("repair", help="Rapikan data lama di database")
+    subparsers.add_parser(
+        "perbarui-env",
+        help="Perbarui KEYWORDS/TITLE_KEYWORDS di .env dari .env.example",
+    )
 
     history_parser = subparsers.add_parser(
         "history", help="Tampilkan riwayat lamaran"
@@ -298,6 +337,8 @@ if __name__ == "__main__":
         show_config()
     elif args.command == "repair":
         repair_data()
+    elif args.command == "perbarui-env":
+        perbarui_env()
     elif args.command == "history":
         show_applications(args.limit)
     elif args.command == "uji-lamar":
