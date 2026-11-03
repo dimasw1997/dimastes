@@ -591,6 +591,11 @@ class AutoApplier:
                     deadline = max(
                         deadline, time.time() + self.submit_timeout
                     )
+                    console.print(
+                        '[dim]   halaman "Review and submit" terdeteksi; '
+                        f"menunggu tombol kirim s.d. {self.submit_timeout} "
+                        "detik[/]"
+                    )
 
                 # Isi otomatis cover letter / unggah CV bila dikonfigurasi.
                 self._autofill()
@@ -621,6 +626,11 @@ class AutoApplier:
                                 "error",
                                 "Tombol kirim lamaran gagal diklik",
                             )
+                        console.print(
+                            "[dim]   klik tombol kirim "
+                            f'"{self._text(submit_button) or "tanpa teks"}"'
+                            f" (percobaan {percobaan_kirim + 1})[/]"
+                        )
                         sudah_klik_kirim = True
                         percobaan_kirim += 1
                         kirim_terakhir = time.time()
@@ -632,6 +642,10 @@ class AutoApplier:
                     CONTINUE_SELECTORS, CONTINUE_TEXTS
                 )
                 if continue_button is not None:
+                    console.print(
+                        "[dim]   klik lanjut "
+                        f'"{self._text(continue_button) or "tanpa teks"}"[/]'
+                    )
                     if not self._click(continue_button):
                         return ApplyResult(
                             False, "error", "Tombol lanjut gagal diklik"

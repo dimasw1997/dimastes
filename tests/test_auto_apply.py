@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from selenium.common.exceptions import NoSuchElementException
 
@@ -5,6 +7,13 @@ import auto_apply
 import scraper
 from auto_apply import APPLY_SELECTORS, SUBMIT_SELECTORS, AutoApplier
 from config import config
+
+
+@pytest.fixture(autouse=True)
+def _bersihkan(monkeypatch, tmp_path):
+    """Test tidak boleh menulis folder debug/ atau database di repo."""
+    monkeypatch.setattr(config, "auto_apply_debug", False)
+    monkeypatch.chdir(tmp_path)
 
 
 class FakeElement:
@@ -492,3 +501,16 @@ def test_halaman_review_tombol_kirim_tanpa_penanda():
     )
 
     assert hasil.applied is True
+
+
+def test_dump_debug_menyimpan_berkas(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "auto_apply_debug", True)
+
+    driver = FakeDriver()
+    driver.page_source = "<html></html>"
+    driver.save_screenshot = lambda path: Path(path).write_bytes(b"x")
+
+    AutoApplier(driver)._dump_debug({"job_id": "123", "title": "Staff PPIC"})
+
+    berkas = sorted(item.suffix for item in (tmp_path / "debug").iterdir())
+    assert berkas == [".html", ".png", ".txt"]

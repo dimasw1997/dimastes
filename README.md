@@ -168,7 +168,17 @@ python cli.py blacklist "PT Contoh" --reason "tidak sesuai"
 
 # 5. Rapikan data lama
 python cli.py repair
+
+# 6. Uji alur lamaran pada satu lowongan (tanpa pencarian/filter)
+python cli.py uji-lamar --url "https://id.jobstreet.com/job/95549275"
 ```
+
+`uji-lamar` membuka satu lowongan, menjalankan alur lamaran otomatis, lalu
+mencetak setiap langkah (tombol yang diklik, deteksi halaman "Review and
+submit", status akhir). Berguna untuk memastikan lamaran benar-benar terkirim
+tanpa harus menunggu ada lowongan baru yang lolos filter. Baris **Versi kode
+(commit)** di `python cli.py config` menunjukkan versi kode yang sedang
+dijalankan — samakan dengan commit terakhir di GitHub.
 
 Saat `run` berjalan:
 

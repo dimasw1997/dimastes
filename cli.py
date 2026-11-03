@@ -1,4 +1,5 @@
 import argparse
+import subprocess
 
 from rich.console import Console
 from rich.table import Table
@@ -7,6 +8,22 @@ from config import config
 from database import db
 
 console = Console()
+
+
+def versi_kode() -> str:
+    """Commit yang sedang dijalankan — untuk memastikan kode sudah terbaru."""
+    try:
+        hasil = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if hasil.returncode == 0:
+            return hasil.stdout.strip() or "-"
+    except Exception:
+        pass
+    return "-"
 
 
 def show_stats():
@@ -19,6 +36,43 @@ def show_stats():
         table.add_row(key.replace("_", " ").title(), str(value))
 
     console.print(table)
+
+
+def uji_lamar(url: str):
+    """Uji alur lamaran untuk satu lowongan, tanpa pencarian/filter."""
+    from auto_apply import AutoApplier
+    from scraper import JobStreetBot
+
+    console.print(f"[cyan]Versi kode:[/] {versi_kode()}")
+    console.print(f"[cyan]Lowongan uji:[/] {url}")
+
+    bot = JobStreetBot()
+    try:
+        bot.init_browser()
+        if not bot.login():
+            console.print("[bold red]Login belum selesai. Uji dibatalkan.[/]")
+            return
+
+        hasil = AutoApplier(bot.driver, bot.wait).apply(
+            {"url": url, "title": "lowongan uji"}
+        )
+    finally:
+        try:
+            bot.close()
+        except Exception:
+            pass
+
+    warna = "green" if hasil.applied else "yellow"
+    console.print(
+        f"\n[bold {warna}]Status:[/] {hasil.status} — {hasil.reason}"
+    )
+    if hasil.applied:
+        console.print("[bold green]Lamaran terkirim otomatis.[/]")
+    else:
+        console.print(
+            "[dim]Bila perlu, kirim file di folder debug/ (png + txt) untuk "
+            "perbaikan selector.[/]"
+        )
 
 
 def show_config():
@@ -68,6 +122,7 @@ def show_config():
             "Waktu kirim di halaman review",
             f"{config.auto_apply_submit_timeout} detik",
         )
+    table.add_row("Versi kode (commit)", versi_kode())
     table.add_row("File database", config.db_path)
     table.add_row(
         "Notifikasi Telegram",
@@ -189,6 +244,12 @@ if __name__ == "__main__":
         "--limit", type=int, default=50, help="Jumlah baris (default 50)"
     )
 
+    uji_parser = subparsers.add_parser(
+        "uji-lamar",
+        help="Uji alur lamaran untuk satu URL lowongan (tanpa filter)",
+    )
+    uji_parser.add_argument("--url", required=True, help="URL lowongan JobStreet")
+
     bl_parser = subparsers.add_parser("blacklist", help="Blacklist company")
     bl_parser.add_argument("company", help="Nama company")
     bl_parser.add_argument("--reason", default="", help="Alasan")
@@ -239,6 +300,8 @@ if __name__ == "__main__":
         repair_data()
     elif args.command == "history":
         show_applications(args.limit)
+    elif args.command == "uji-lamar":
+        uji_lamar(args.url)
     elif args.command == "blacklist":
         blacklist_company(args.company, args.reason)
     else:
