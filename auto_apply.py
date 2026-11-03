@@ -355,7 +355,7 @@ class AutoApplier:
 
         try:
             self.driver.get(url)
-            time.sleep(2)
+            time.sleep(0.8)
 
             if self._is_login_page():
                 return ApplyResult(
@@ -378,7 +378,15 @@ class AutoApplier:
                     "Lowongan menggunakan 'Lamar di situs perusahaan'",
                 )
 
+            # Tunggu tombol Lamar muncul, maksimal sepanjang batas waktu.
             apply_button = self._find_clickable(APPLY_SELECTORS, APPLY_TEXTS)
+            batas_tombol = time.time() + self.step_timeout
+
+            while apply_button is None and time.time() < batas_tombol:
+                time.sleep(0.3)
+                apply_button = self._find_clickable(
+                    APPLY_SELECTORS, APPLY_TEXTS
+                )
 
             if apply_button is None:
                 return ApplyResult(
@@ -389,16 +397,17 @@ class AutoApplier:
 
             handles_before = set(self.driver.window_handles)
             self._click(apply_button)
-            time.sleep(1.5)
+            time.sleep(0.5)
 
             external_reason = self._handle_new_window(handles_before)
             if external_reason:
                 return ApplyResult(False, "manual_required", external_reason)
 
             deadline = time.time() + self.step_timeout
+            sudah_klik_kirim = False
 
             while time.time() < deadline:
-                time.sleep(1.2)
+                time.sleep(0.4)
 
                 if self._is_success():
                     return ApplyResult(True, "applied", "Terkirim otomatis")
@@ -418,6 +427,7 @@ class AutoApplier:
                         return ApplyResult(
                             False, "error", "Tombol kirim lamaran gagal diklik"
                         )
+                    sudah_klik_kirim = True
                     deadline = time.time() + self.step_timeout
                     continue
 
@@ -435,10 +445,19 @@ class AutoApplier:
             if self._is_success():
                 return ApplyResult(True, "applied", "Terkirim otomatis")
 
+            if sudah_klik_kirim:
+                return ApplyResult(
+                    False,
+                    "manual_required",
+                    "Tombol Kirim sudah diklik, tetapi konfirmasi tidak "
+                    f"muncul dalam {self.step_timeout} detik "
+                    "(periksa riwayat lamaran di JobStreet)",
+                )
+
             return ApplyResult(
                 False,
                 "manual_required",
-                "Alur lamaran tidak dikenali dalam batas waktu",
+                f"Alur lamaran tidak dikenali dalam {self.step_timeout} detik",
             )
 
         except (KeyboardInterrupt, SystemExit):

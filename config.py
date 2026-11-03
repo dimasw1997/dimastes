@@ -117,8 +117,10 @@ class Config:
     auto_apply_max_per_session: int = max(
         1, _int_setting("AUTO_APPLY_MAX_PER_SESSION", 25)
     )
+    # Batas waktu mengenali tiap langkah alur lamaran. Bila terlampaui,
+    # lowongan dilewati dan lanjut ke berikutnya.
     auto_apply_step_timeout: int = max(
-        5, _int_setting("AUTO_APPLY_STEP_TIMEOUT", 30)
+        1, _int_setting("AUTO_APPLY_STEP_TIMEOUT", 3)
     )
 
     base_url: str = "https://id.jobstreet.com"

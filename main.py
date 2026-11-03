@@ -257,9 +257,11 @@ class AutoApplyEngine:
                 else:
                     self.session_stats["skipped"] += 1
 
+                # Jeda hanya untuk lamaran yang benar-benar diproses;
+                # lowongan yang dilewati langsung lanjut ke berikutnya.
                 delay = max(0, int(config.delay_between_apply))
 
-                if delay:
+                if delay and (hasil.applied or hasil.status == "error"):
                     console.print(
                         f"[dim]Jeda {delay} detik sebelum lowongan berikutnya...[/]"
                     )

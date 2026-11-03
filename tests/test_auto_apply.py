@@ -147,7 +147,9 @@ def test_auto_apply_sukses():
     assert hasil.status == "applied"
 
 
-def test_auto_apply_tombol_tidak_ada():
+def test_auto_apply_tombol_tidak_ada(monkeypatch):
+    monkeypatch.setattr(config, "auto_apply_step_timeout", 0)
+
     hasil = AutoApplier(FakeDriver()).apply({"url": "https://id.jobstreet.com/job/1"})
 
     assert hasil.applied is False
@@ -319,3 +321,25 @@ def test_auto_apply_tanpa_konfigurasi_tetap_berhenti_aman(monkeypatch):
     assert hasil.applied is False
     assert hasil.status == "manual_required"
     assert "RESUME_PATH" in hasil.reason
+
+
+def test_auto_apply_lewati_setelah_batas_waktu(monkeypatch):
+    """Alur tidak dikenali dalam 3 detik -> dilewati, lanjut lowongan berikutnya."""
+    monkeypatch.setattr(config, "auto_apply_step_timeout", 3)
+
+    jam = {"t": 100.0}
+    monkeypatch.setattr(auto_apply.time, "time", lambda: jam["t"])
+    monkeypatch.setattr(
+        auto_apply.time,
+        "sleep",
+        lambda detik=0: jam.__setitem__("t", jam["t"] + detik),
+    )
+
+    driver = FakeDriver()
+    driver.elements = {APPLY_SELECTORS[0]: [FakeElement(text="Lamar")]}
+
+    hasil = AutoApplier(driver).apply({"url": "https://id.jobstreet.com/job/1"})
+
+    assert hasil.applied is False
+    assert hasil.status == "manual_required"
+    assert "3 detik" in hasil.reason

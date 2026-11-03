@@ -136,7 +136,7 @@ cp .env.example .env
 | `COVER_LETTER` | kosong | Teks cover letter/pesan yang diisi otomatis |
 | `RESUME_PATH` | kosong | Path berkas CV untuk unggah otomatis |
 | `AUTO_APPLY_MAX_PER_SESSION` | `25` | Batas lamaran otomatis per sesi |
-| `AUTO_APPLY_STEP_TIMEOUT` | `30` | Detik maksimal menunggu tiap langkah alur lamaran |
+| `AUTO_APPLY_STEP_TIMEOUT` | `3` | Batas detik mengenali tiap langkah; lewat itu lowongan dilewati |
 | `DB_PATH` | `jobstreet_auto.db` | Lokasi file database |
 
 ## Cara pakai
@@ -289,7 +289,8 @@ meninjau sendiri.
 4. Bot berhenti dan menyerahkan ke Anda bila:
    - lowongan memakai **"Lamar di situs perusahaan"** (ATS eksternal),
    - alur meminta **unggah berkas/cover letter** atau ada **pertanyaan wajib**,
-   - alur tidak dikenali dalam `AUTO_APPLY_STEP_TIMEOUT` detik.
+   - alur tidak dikenali dalam `AUTO_APPLY_STEP_TIMEOUT` detik (default **3**);
+     lowongan itu langsung dilewati, tanpa jeda, dan lanjut ke berikutnya.
 5. Di akhir sesi muncul daftar **"Lowongan yang perlu Anda lamar manual"**
    lengkap dengan tautannya.
 
@@ -398,6 +399,10 @@ Lowongan yang sudah tercatat di database tetap dilewati walau tanpa label.
 Sesi belum ada dan login tidak terdeteksi. Jalankan lagi, login di Chrome, dan
 biarkan jendela Chrome terbuka — program melanjutkan sendiri. Bila Anda memang
 tidak ingin menunggu, set `LOGIN_WAIT=false`.
+
+**Terlalu banyak lowongan dilewati dengan alasan "alur tidak dikenali".**
+Koneksi/laman JobStreet bisa lambat. Naikkan batasnya, mis. `AUTO_APPLY_STEP_TIMEOUT=8`
+di `.env`, lalu jalankan lagi.
 
 **Program masih menunggu Enter saat lowongan dibuka.**
 Berarti mode manual aktif. Pastikan `AUTO_APPLY=true` di `.env` (atau jalankan
