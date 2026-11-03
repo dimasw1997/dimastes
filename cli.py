@@ -128,6 +128,16 @@ def show_config():
         "Filter lokasi ketat",
         "Aktif" if config.strict_location else "Tidak aktif",
     )
+    table.add_row(
+        "Pertanyaan pilihan otomatis",
+        (
+            "Aktif "
+            f"(S1, {config.years_experience:g} th, gaji "
+            f"{config.expected_salary or 'tidak dijawab'})"
+            if config.auto_answer_questions
+            else "Tidak aktif"
+        ),
+    )
     table.add_row("Gaji minimum", f"Rp {config.min_salary:,}")
     table.add_row("Batas pengalaman", f"{config.max_experience} tahun")
     table.add_row(

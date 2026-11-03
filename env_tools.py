@@ -7,6 +7,15 @@ from pathlib import Path
 # pernah disentuh.
 KUNCI_KATA_KUNCI = ("KEYWORDS", "TITLE_KEYWORDS")
 
+# Kunci baru yang ditambahkan hanya bila belum ada di .env, sehingga isian
+# yang sudah Anda sesuaikan sendiri tidak pernah tertimpa.
+KUNCI_TAMBAHAN = (
+    "AUTO_ANSWER_QUESTIONS",
+    "EXPECTED_SALARY",
+    "YEARS_EXPERIENCE",
+    "EDUCATION_LEVEL",
+)
+
 
 def baca_baku(teks: str) -> dict:
     """Ambil pasangan KUNCI=nilai dari isi .env."""
@@ -22,7 +31,7 @@ def baca_baku(teks: str) -> dict:
     return hasil
 
 
-def perbarui_nilai(teks_env: str, nilai_baru: dict) -> tuple:
+def perbarui_nilai(teks_env: str, nilai_baru: dict, hanya_tambah=()) -> tuple:
     """Ganti nilai kunci tertentu di isi .env.
 
     Kembalikan (teks_baru, daftar_perubahan). Baris lain, komentar, urutan,
@@ -42,12 +51,17 @@ def perbarui_nilai(teks_env: str, nilai_baru: dict) -> tuple:
             nilai_lama = nilai_lama.strip()
 
             if kunci in nilai_baru:
-                nilai_target = str(nilai_baru[kunci]).strip()
                 sudah.add(kunci)
+
+                # Kunci pelengkap: jangan pernah menimpa isian pengguna.
+                if kunci in hanya_tambah:
+                    baris_baru.append(baris)
+                    continue
+
+                nilai_target = str(nilai_baru[kunci]).strip()
                 if nilai_lama != nilai_target:
                     perubahan.append(kunci)
-                baris = f"{kunci}={nilai_target}"
-                baris_baru.append(baris)
+                baris_baru.append(f"{kunci}={nilai_target}")
                 continue
 
         baris_baru.append(baris)
@@ -67,7 +81,10 @@ def perbarui_nilai(teks_env: str, nilai_baru: dict) -> tuple:
 
 
 def perbarui_env(
-    path_env: Path, path_contoh: Path, kunci=KUNCI_KATA_KUNCI
+    path_env: Path,
+    path_contoh: Path,
+    kunci=KUNCI_KATA_KUNCI,
+    kunci_tambahan=KUNCI_TAMBAHAN,
 ) -> dict:
     """Perbarui kunci kata kunci di .env dari .env.example.
 
@@ -82,6 +99,9 @@ def perbarui_env(
 
     contoh = baca_baku(path_contoh.read_text(encoding="utf-8"))
     nilai_baru = {k: contoh[k] for k in kunci if k in contoh}
+    nilai_baru.update(
+        {k: contoh[k] for k in kunci_tambahan if k in contoh}
+    )
 
     if not nilai_baru:
         return {"status": "tidak_ada_kunci", "perubahan": [], "backup": None}
@@ -94,7 +114,9 @@ def perbarui_env(
         teks_lama = ""
         backup = None
 
-    teks_baru, perubahan = perbarui_nilai(teks_lama, nilai_baru)
+    teks_baru, perubahan = perbarui_nilai(
+        teks_lama, nilai_baru, hanya_tambah=tuple(kunci_tambahan)
+    )
     path_env.write_text(teks_baru, encoding="utf-8")
 
     return {

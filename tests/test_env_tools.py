@@ -50,3 +50,25 @@ def test_perbarui_env_membuat_cadangan(tmp_path):
     assert env.read_text(encoding="utf-8") == (
         "KEYWORDS=baru\nCOVER_LETTER=hai\nTITLE_KEYWORDS=judul\n"
     )
+
+
+def test_perbarui_env_tidak_menimpa_isian_pengguna(tmp_path):
+    contoh = tmp_path / ".env.example"
+    contoh.write_text(
+        "KEYWORDS=baru\nAUTO_ANSWER_QUESTIONS=true\n"
+        "EXPECTED_SALARY=5000000\nYEARS_EXPERIENCE=3\n",
+        encoding="utf-8",
+    )
+
+    env = tmp_path / ".env"
+    env.write_text(
+        "KEYWORDS=lama\nEXPECTED_SALARY=7000000\n", encoding="utf-8"
+    )
+
+    perbarui_env(env, contoh)
+    isi = env.read_text(encoding="utf-8")
+
+    assert "KEYWORDS=baru" in isi
+    assert "EXPECTED_SALARY=7000000" in isi
+    assert "AUTO_ANSWER_QUESTIONS=true" in isi
+    assert "YEARS_EXPERIENCE=3" in isi

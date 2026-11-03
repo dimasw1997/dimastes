@@ -25,8 +25,12 @@ class FakeElement:
         enabled=True,
         selected=False,
         on_click=None,
+        options=None,
+        parent=None,
     ):
         self.text = text
+        self.options = options or []
+        self.parent = parent
         self._attrs = attrs or {}
         self._visible = visible
         self._enabled = enabled
@@ -52,6 +56,29 @@ class FakeElement:
     def send_keys(self, value):
         self._attrs["value"] = value
         self.text = str(value)
+
+    def find_elements(self, by, selector):
+        if selector == "option":
+            return list(self.options)
+        return []
+
+    def find_element(self, by, selector):
+        if selector == ".." and self.parent is not None:
+            return self.parent
+        raise NoSuchElementException(selector)
+
+
+class FakeSelect:
+    """Pengganti selenium Select untuk elemen palsu."""
+
+    def __init__(self, element):
+        self.element = element
+
+    def select_by_visible_text(self, text):
+        pilihan = [item.text for item in getattr(self.element, "options", [])]
+        if text not in pilihan:
+            raise ValueError(text)
+        self.element._attrs["value"] = text
 
 
 class FakeDriver:
@@ -514,3 +541,92 @@ def test_dump_debug_menyimpan_berkas(monkeypatch, tmp_path):
 
     berkas = sorted(item.suffix for item in (tmp_path / "debug").iterdir())
     assert berkas == [".html", ".png", ".txt"]
+
+
+def _select(pertanyaan, opsi):
+    element = FakeElement(text="", attrs={"aria-label": pertanyaan, "value": ""})
+    element.options = [FakeElement(text=teks) for teks in opsi]
+    return element
+
+
+def test_jawab_pertanyaan_otomatis(monkeypatch):
+    monkeypatch.setattr(auto_apply, "Select", FakeSelect)
+    monkeypatch.setattr(config, "expected_salary", "5000000")
+    monkeypatch.setattr(config, "years_experience", 3.0)
+    monkeypatch.setattr(config, "education_level", "S1")
+
+    gaji = _select(
+        "Berapa gaji bulanan yang kamu inginkan?",
+        ["Rp 4 Jt", "Rp 5 Jt", "Rp 6 Jt"],
+    )
+    pengalaman = _select(
+        "How many years' experience do you have as an Inventory Controller?",
+        ["0 years", "2 years", "3 years", "More than 5 years"],
+    )
+    kepala = _select(
+        "Berapa tahun pengalaman kerjamu sebagai Kepala PPIC?",
+        ["0 years", "1 year", "2 years"],
+    )
+
+    driver = FakeDriver(elements={"select": [gaji, pengalaman, kepala]})
+    gagal = AutoApplier(driver).jawab_pertanyaan()
+
+    assert gagal == []
+    assert gaji.get_attribute("value") == "Rp 5 Jt"
+    assert pengalaman.get_attribute("value") == "3 years"
+    # Bukan jabatan yang pernah dipegang -> jawab 0 tahun, jangan mengarang.
+    assert kepala.get_attribute("value") == "0 years"
+
+
+def test_pertanyaan_tak_dikenal_tidak_dijawab():
+    aneh = _select("Warna favorit kamu?", ["Merah", "Biru"])
+    driver = FakeDriver(elements={"select": [aneh]})
+
+    gagal = AutoApplier(driver).jawab_pertanyaan()
+
+    assert gagal == ["Warna favorit kamu?"]
+    assert aneh.get_attribute("value") == ""
+
+
+def test_auto_answer_bisa_dimatikan(monkeypatch):
+    monkeypatch.setattr(config, "auto_answer_questions", False)
+
+    gaji = _select("Berapa gaji yang diharapkan?", ["Rp 5 Jt"])
+    driver = FakeDriver(elements={"select": [gaji]})
+
+    assert AutoApplier(driver).jawab_pertanyaan() == []
+    assert gaji.get_attribute("value") == ""
+
+
+def test_lanjut_tidak_diklik_berulang(monkeypatch):
+    jam = {"t": 100.0}
+    monkeypatch.setattr(auto_apply.time, "time", lambda: jam["t"])
+    monkeypatch.setattr(
+        auto_apply.time,
+        "sleep",
+        lambda detik=0: jam.__setitem__("t", jam["t"] + detik),
+    )
+
+    jumlah = {"klik": 0}
+
+    def klik():
+        jumlah["klik"] += 1
+
+    lanjut = FakeElement(text="Continue", on_click=klik)
+
+    driver = FakeDriver(
+        elements={
+            APPLY_SELECTORS[0]: [FakeElement(text="Lamar")],
+            "button": [lanjut],
+        },
+        body="Before you can continue with the application, please address "
+        "the following issues: Berapa tahun pengalaman kerjamu sebagai "
+        "Kepala PPIC? - Please make a selection",
+    )
+
+    hasil = AutoApplier(driver).apply({"url": "https://id.jobstreet.com/job/1"})
+
+    assert hasil.applied is False
+    assert hasil.status == "manual_required"
+    assert jumlah["klik"] <= 2
+    assert "please address" in hasil.reason.lower()

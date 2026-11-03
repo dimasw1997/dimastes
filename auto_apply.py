@@ -9,6 +9,7 @@ yang harus dijawab), proses dihentikan dan lowongan dikembalikan sebagai
 "manual_required" supaya Anda yang menyelesaikan sendiri.
 """
 
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +19,7 @@ from urllib.parse import urlparse
 from rich.console import Console
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import Select
 
 from config import config
 
@@ -74,6 +76,174 @@ ALREADY_TEXTS = (
     "you have already applied",
     "application submitted",
 )
+
+# Pesan validasi JobStreet saat formulir belum lengkap.
+VALIDATION_TEXTS = (
+    "please address the following issues",
+    "please make a selection",
+    "harap lengkapi",
+    "wajib dipilih",
+    "wajib diisi",
+    "harus dipilih",
+)
+
+GAJI_KATA = ("gaji", "salary", "upah", "pendapatan", "remunerasi")
+PENGALAMAN_KATA = ("pengalaman", "experience", "tahun", "years", "year")
+PENDIDIKAN_KATA = (
+    "kualifikasi", "pendidikan", "education", "ijazah", "jenjang",
+    "degree", "qualification",
+)
+LEVEL_ATAS_KATA = (
+    "kepala", "head", "manager", "manajer", "supervisor", "spv", "lead",
+    "chief",
+)
+NOL_KATA = (
+    "no experience", "belum", "tanpa pengalaman", "fresh", "none",
+    "kurang dari 1", "less than 1",
+)
+
+
+def _norm(teks: str) -> str:
+    return " ".join(str(teks or "").lower().split())
+
+
+def parse_gaji_juta(teks: str) -> Optional[float]:
+    """Ubah teks gaji menjadi angka juta (mis. "Rp 5 Jt" -> 5.0)."""
+    teks = _norm(teks).replace(".", "").replace(",", ".")
+    angka = re.findall(r"\d+(?:\.\d+)?", teks)
+
+    if not angka:
+        return None
+
+    nilai = float(angka[0])
+    if "jt" in teks or "juta" in teks or "million" in teks:
+        return nilai
+    if nilai >= 100_000:
+        return nilai / 1_000_000
+    return nilai
+
+
+def parse_tahun(teks: str) -> Optional[tuple]:
+    """Baca rentang pengalaman dari teks opsi (tahun)."""
+    teks_awal = _norm(teks)
+
+    if any(kata in teks_awal for kata in NOL_KATA):
+        return (0.0, 0.99)
+
+    angka = [float(item.replace(",", ".")) for item in
+             re.findall(r"\d+(?:[.,]\d+)?", teks_awal.replace(".", ""))]
+
+    if not angka:
+        return None
+
+    if len(angka) >= 2 and re.search(r"\d\s*(?:-|–|to|s/d|sampai)\s*\d", teks_awal):
+        return (min(angka[0], angka[1]), max(angka[0], angka[1]))
+
+    if any(tanda in teks_awal for tanda in ("more than", "lebih dari", "+")):
+        return (angka[0], 99.0)
+
+    return (angka[0], angka[0])
+
+
+def klasifikasi_pertanyaan(teks: str) -> str:
+    """Tentukan jenis pertanyaan: gaji / pengalaman / pendidikan."""
+    teks = _norm(teks)
+
+    if any(kata in teks for kata in PENDIDIKAN_KATA):
+        return "pendidikan"
+
+    if any(kata in teks for kata in GAJI_KATA):
+        return "gaji"
+
+    if any(kata in teks for kata in PENGALAMAN_KATA):
+        return "pengalaman"
+
+    return ""
+
+
+def _pilih_gaji(opsi, target: float) -> str:
+    terbaik = ""
+    selisih = None
+
+    for item in opsi:
+        nilai = parse_gaji_juta(item)
+        if nilai is None:
+            continue
+        beda = abs(nilai - target)
+        if selisih is None or beda < selisih:
+            terbaik, selisih = item, beda
+
+    return terbaik
+
+
+def _pilih_tahun(opsi, tahun: float) -> str:
+    rentang = [(item, parse_tahun(item)) for item in opsi]
+    rentang = [(item, nilai) for item, nilai in rentang if nilai]
+
+    if not rentang:
+        return ""
+
+    for item, (bawah, atas) in rentang:
+        if bawah <= tahun <= atas:
+            return item
+
+    dibawah = [(item, nilai[1]) for item, nilai in rentang if nilai[1] <= tahun]
+    if dibawah:
+        return max(dibawah, key=lambda pasangan: pasangan[1])[0]
+
+    return min(rentang, key=lambda pasangan: pasangan[1][0])[0]
+
+
+def _pilih_pendidikan(opsi, level: str) -> str:
+    level = _norm(level).replace("-", "").replace(" ", "")
+
+    padanan = {
+        "s1": ("s1", "sarjana", "bachelor", "strata 1"),
+        "s2": ("s2", "magister", "master"),
+        "d3": ("d3", "diploma 3", "ahli madya"),
+        "sma": ("sma", "smk", "senior high"),
+    }
+
+    kunci = padanan.get(level, (level,))
+
+    for item in opsi:
+        teks = _norm(item).replace("-", "")
+        if any(kata in teks for kata in kunci if kata):
+            return item
+
+    return ""
+
+
+def pilih_jawaban(pertanyaan: str, opsi, cfg=None) -> str:
+    """Pilih teks opsi yang aman untuk sebuah pertanyaan ('' = tidak dijawab)."""
+    cfg = cfg or config
+    opsi = [item for item in (opsi or []) if _norm(item)]
+
+    if not opsi:
+        return ""
+
+    jenis = klasifikasi_pertanyaan(pertanyaan)
+
+    if jenis == "pendidikan":
+        return _pilih_pendidikan(opsi, getattr(cfg, "education_level", ""))
+
+    if jenis == "gaji":
+        target = parse_gaji_juta(getattr(cfg, "expected_salary", "") or "")
+        if target is None:
+            return ""
+        return _pilih_gaji(opsi, target)
+
+    if jenis == "pengalaman":
+        teks = _norm(pertanyaan)
+        tahun = (
+            0.0
+            if any(kata in teks for kata in LEVEL_ATAS_KATA)
+            else float(getattr(cfg, "years_experience", 0) or 0)
+        )
+        return _pilih_tahun(opsi, tahun)
+
+    return ""
+
 
 ALREADY_SELECTORS = (
     "[data-automation='job-detail-applied-badge']",
@@ -132,6 +302,12 @@ class AutoApplier:
         except Exception:
             value = ""
         return " ".join(str(value).split()).strip().lower()
+
+    def _url(self) -> str:
+        try:
+            return str(self.driver.current_url or "")
+        except Exception:
+            return ""
 
     def _body_text(self) -> str:
         try:
@@ -371,6 +547,110 @@ class AutoApplier:
 
         return terisi
 
+    def _pertanyaan(self, element) -> str:
+        """Label/teks pertanyaan untuk sebuah dropdown."""
+        for atribut in ("aria-label", "name", "id"):
+            try:
+                nilai = (element.get_attribute(atribut) or "").strip()
+            except Exception:
+                nilai = ""
+            if nilai:
+                return nilai
+
+        try:
+            induk = element.find_element(By.XPATH, "..")
+            teks = " ".join((induk.text or "").split())
+            if teks:
+                return teks
+        except Exception:
+            pass
+
+        return ""
+
+    @staticmethod
+    def _teks_opsi(element) -> list:
+        try:
+            opsi = element.find_elements(By.TAG_NAME, "option")
+        except Exception:
+            return []
+
+        hasil = []
+        for item in opsi:
+            try:
+                teks = " ".join((item.text or "").split())
+            except Exception:
+                continue
+            if teks and teks.lower() not in (
+                "pilih", "select", "please select", "-", "--",
+            ):
+                hasil.append(teks)
+
+        return hasil
+
+    def _pilih_opsi(self, element, teks: str) -> bool:
+        try:
+            Select(element).select_by_visible_text(teks)
+            return True
+        except Exception:
+            pass
+
+        try:
+            for item in element.find_elements(By.TAG_NAME, "option"):
+                if " ".join((item.text or "").split()) == teks:
+                    return self._click(item)
+        except Exception:
+            pass
+
+        return False
+
+    def jawab_pertanyaan(self) -> list:
+        """Jawab pertanyaan pilihan yang polanya dikenali.
+
+        Kembalikan daftar pertanyaan yang belum bisa dijawab otomatis.
+        """
+        if not config.auto_answer_questions:
+            return []
+
+        gagal = []
+
+        for element in self._find_all("select"):
+            if not self._visible(element) or not self._enabled(element):
+                continue
+
+            try:
+                terisi = (element.get_attribute("value") or "").strip()
+            except Exception:
+                terisi = ""
+
+            if terisi:
+                continue
+
+            pertanyaan = self._pertanyaan(element)
+            opsi = self._teks_opsi(element)
+            pilihan = pilih_jawaban(pertanyaan, opsi)
+
+            if pilihan and self._pilih_opsi(element, pilihan):
+                console.print(
+                    f'[dim]   jawab "{pilihan}"'
+                    f' untuk: {pertanyaan[:60] or "pertanyaan"}[/]'
+                )
+            else:
+                gagal.append(pertanyaan or "pertanyaan tanpa label")
+
+        return gagal
+
+    def _validation_error(self) -> str:
+        """Teks peringatan validasi formulir lamaran ('' bila tidak ada)."""
+        body = self._body_text()
+
+        for tanda in VALIDATION_TEXTS:
+            posisi = body.find(tanda)
+            if posisi >= 0:
+                potong = " ".join(body[posisi:posisi + 220].split())
+                return potong
+
+        return ""
+
     @staticmethod
     def _is_required(element) -> bool:
         """True bila elemen benar-benar wajib (termasuk `required` kosong)."""
@@ -569,6 +849,8 @@ class AutoApplier:
             sudah_klik_kirim = False
             percobaan_kirim = 0
             kirim_terakhir = 0.0
+            jejak_lanjut = ""
+            klik_lanjut = 0
 
             while time.time() < deadline:
                 time.sleep(0.4)
@@ -601,6 +883,22 @@ class AutoApplier:
                 self._autofill()
 
                 if not review_page:
+                    belum_terjawab = self.jawab_pertanyaan()
+
+                    galat = self._validation_error()
+                    if galat and belum_terjawab:
+                        console.print(
+                            "[dim]   pertanyaan belum bisa dijawab: "
+                            f"{belum_terjawab[0][:60]}[/]"
+                        )
+                        self._dump_debug(job)
+                        return ApplyResult(
+                            False,
+                            "manual_required",
+                            "Formulir meminta isian yang belum bisa dijawab "
+                            f"otomatis ({belum_terjawab[0][:60]}) — dilewati",
+                        )
+
                     blocker = self._blocker()
                     if blocker:
                         # Pastikan bukan halaman yang masih memuat.
@@ -642,6 +940,26 @@ class AutoApplier:
                     CONTINUE_SELECTORS, CONTINUE_TEXTS
                 )
                 if continue_button is not None:
+                    jejak = (
+                        f"{self._url()}|{len(self._body_text())}"
+                    )
+                    if jejak == jejak_lanjut:
+                        klik_lanjut += 1
+                    else:
+                        jejak_lanjut = jejak
+                        klik_lanjut = 1
+
+                    if klik_lanjut > 2:
+                        galat = self._validation_error()
+                        self._dump_debug(job)
+                        return ApplyResult(
+                            False,
+                            "manual_required",
+                            galat
+                            or "Halaman tidak maju setelah tombol Lanjut "
+                            "diklik 3 kali — dilewati",
+                        )
+
                     console.print(
                         "[dim]   klik lanjut "
                         f'"{self._text(continue_button) or "tanpa teks"}"[/]'

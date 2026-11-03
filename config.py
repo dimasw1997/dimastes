@@ -33,6 +33,14 @@ def _int_setting(name: str, default: int) -> int:
         return default
 
 
+def _float_setting(name: str, default: float) -> float:
+    try:
+        teks = str(os.getenv(name, str(default))).strip().replace(",", ".")
+        return float(teks)
+    except (TypeError, ValueError):
+        return default
+
+
 def _bool_setting(name: str, default: bool = False) -> bool:
     value = str(os.getenv(name, str(default))).strip().lower()
     return value in ("1", "true", "yes", "y", "ya")
@@ -146,6 +154,19 @@ class Config:
     )
     # Simpan HTML + screenshot saat alur tidak dikenali (maks 5 berkas).
     auto_apply_debug: bool = _bool_setting("AUTO_APPLY_DEBUG", True)
+
+    # Jawab otomatis pertanyaan pilihan (dropdown) dari perusahaan bila
+    # polanya dikenali: pengalaman, gaji yang diharapkan, pendidikan.
+    auto_answer_questions: bool = _bool_setting(
+        "AUTO_ANSWER_QUESTIONS", True
+    )
+    # Target gaji dalam rupiah/juta, mis. "5000000" atau "5". Kosong = tidak
+    # dijawab otomatis (pertanyaan gaji membuat lowongan dilewati).
+    expected_salary: str = os.getenv("EXPECTED_SALARY", "").strip()
+    # Total pengalaman kerja (tahun) untuk pertanyaan "berapa tahun ...".
+    years_experience: float = _float_setting("YEARS_EXPERIENCE", 3.0)
+    # Jenjang pendidikan, mis. "S1".
+    education_level: str = os.getenv("EDUCATION_LEVEL", "S1").strip()
 
     base_url: str = "https://id.jobstreet.com"
     login_url: str = "https://id.jobstreet.com"

@@ -137,6 +137,10 @@ cp .env.example .env
 | `RESUME_PATH` | kosong | Path berkas CV untuk unggah otomatis |
 | `AUTO_APPLY_MAX_PER_SESSION` | `25` | Batas lamaran otomatis per sesi |
 | `AUTO_APPLY_STEP_TIMEOUT` | `3` | Batas detik mengenali tiap langkah; lewat itu lowongan dilewati |
+| `AUTO_ANSWER_QUESTIONS` | `true` | Jawab otomatis pertanyaan dropdown (pengalaman, gaji, pendidikan) |
+| `EXPECTED_SALARY` | `5000000` | Gaji yang diharapkan (kosong = pertanyaan gaji dilewati) |
+| `YEARS_EXPERIENCE` | `3` | Total pengalaman kerja (tahun) untuk pertanyaan pengalaman |
+| `EDUCATION_LEVEL` | `S1` | Jenjang pendidikan untuk pertanyaan kualifikasi |
 | `AUTO_APPLY_SUBMIT_TIMEOUT` | `20` | Batas detik khusus halaman **Review and submit** (mengirim lamaran) |
 | `AUTO_APPLY_DEBUG` | `true` | Simpan HTML + screenshot halaman yang tak dikenali ke folder `debug/` |
 | `DB_PATH` | `jobstreet_auto.db` | Lokasi file database |
@@ -297,6 +301,32 @@ Ingin menambah sendiri? Tambahkan istilah dipisah koma, mis.
 Ingin mematikan filter ini (lamar semua yang muncul)?
 `REQUIRE_KEYWORD_MATCH=false`.
 
+### Pertanyaan pilihan dari perusahaan
+
+Banyak lowongan menambahkan pertanyaan wajib berupa dropdown, misalnya:
+
+- *Berapa tahun pengalaman kerjamu sebagai Kepala PPIC?*
+- *Berapa gaji bulanan yang kamu inginkan?*
+- *Kualifikasi mana yang kamu miliki?*
+
+Bot menjawabnya otomatis dengan aturan yang **tidak mengarang pengalaman**:
+
+| Pertanyaan | Jawaban bot |
+| --- | --- |
+| Gaji | opsi terdekat dengan `EXPECTED_SALARY` |
+| Pengalaman untuk jabatan yang pernah Anda pegang (staff, inventory controller, PPIC, planner) | opsi yang memuat `YEARS_EXPERIENCE` |
+| Pengalaman untuk jabatan **lebih tinggi** dari pengalaman Anda (Kepala/Head/Manager/Supervisor) | opsi 0 tahun / belum ada pengalaman |
+| Kualifikasi/pendidikan | opsi yang cocok dengan `EDUCATION_LEVEL` (mis. *Sarjana (S1)*) |
+| Pertanyaan lain yang polanya tidak dikenali | **tidak** dijawab — lowongan langsung dilewati |
+
+Setiap jawaban tercetak di terminal (`jawab "3 years" untuk: ...`), jadi Anda
+bisa memeriksa apa yang dipilih bot. Bila formulir tetap ditolak, bot berhenti
+setelah 2 kali klik **Lanjutkan** di halaman yang sama (tidak lagi mengklik
+terus-menerus) dan menampilkan pesan validasi dari JobStreet.
+
+Matikan dengan `AUTO_ANSWER_QUESTIONS=false` bila ingin semua pertanyaan
+dilewati.
+
 ### Isian lamaran otomatis
 
 Bila formulir meminta cover letter atau berkas CV, isi dulu di `.env`:
@@ -332,8 +362,9 @@ meninjau sendiri.
      "Lamar di situs perusahaan", tab baru, maupun tab yang sama berpindah
      domain ke ATS perusahaan (Workday, Lever, dll.);
    - alur tidak dikenali dalam `AUTO_APPLY_STEP_TIMEOUT` detik (default **3**);
-   - formulir meminta unggah berkas **wajib** (`required`) atau pertanyaan
-     wajib yang belum diisi otomatis (`COVER_LETTER`/`RESUME_PATH` kosong),
+   - formulir meminta unggah berkas **wajib** (`required`), pertanyaan pilihan
+     yang polanya tidak dikenali (lihat *Pertanyaan pilihan dari perusahaan*),
+     atau pertanyaan wajib yang belum diisi otomatis (`COVER_LETTER`/`RESUME_PATH` kosong),
      atau pertanyaan pilihan dari perusahaan yang jawabannya tidak boleh
      ditebak. Bagian "Documents included" yang sifatnya opsional tidak
      menghalangi pengiriman.
