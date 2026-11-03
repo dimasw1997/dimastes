@@ -22,9 +22,11 @@ class AutoApplyEngine:
             "found": 0,
             "new": 0,
             "applied": 0,
+            "manual": 0,
             "skipped": 0,
             "errors": 0,
         }
+        self.manual_jobs = []
 
     def run(self):
         self._print_banner()
@@ -83,6 +85,7 @@ class AutoApplyEngine:
 
             # Lewati hasil duplikat atau yang tidak memiliki judul/URL/ID.
             new_jobs = []
+            baru_di_database = 0
 
             for job in jobs:
                 title = (job.get("title") or "").strip()
@@ -111,6 +114,7 @@ class AutoApplyEngine:
                 # kembali; yang benar-benar baru dihitung terpisah.
                 if db.add_job(job):
                     self.session_stats["new"] += 1
+                    baru_di_database += 1
 
                 new_jobs.append(job)
 
@@ -118,6 +122,16 @@ class AutoApplyEngine:
 
             if not new_jobs:
                 continue
+
+            # Hasil sudah diurutkan dari yang terbaru: begitu satu halaman
+            # tidak memuat lowongan baru sama sekali, halaman berikutnya
+            # pasti lebih lama dan sudah pernah diproses.
+            if page > 1 and baru_di_database == 0 and config.sort_mode:
+                console.print(
+                    "[dim]Halaman ini tidak memuat lowongan baru; "
+                    "berhenti karena hasil diurutkan dari yang terbaru.[/]"
+                )
+                break
 
             eligible_jobs = []
 
@@ -154,27 +168,44 @@ class AutoApplyEngine:
                     )
                     return
 
+                if (
+                    config.auto_apply
+                    and self.session_stats["applied"]
+                    >= config.auto_apply_max_per_session
+                ):
+                    console.print(
+                        "[bold yellow]Batas lamaran otomatis per sesi "
+                        f"({config.auto_apply_max_per_session}) tercapai. "
+                        "Sisa lowongan dilewati.[/]"
+                    )
+                    return
+
                 title = (job.get("title") or "").strip()
 
                 try:
-                    # Versi scraper manual membuka lowongan untuk Anda tinjau.
-                    # True hanya jika Anda mengonfirmasi lamaran sudah dikirim.
-                    confirmed = self.bot.apply_job(job)
+                    # Mode otomatis: bot mengirim lamaran sendiri.
+                    # Mode manual: halaman dibuka untuk Anda tinjau.
+                    hasil = self.bot.apply_job(job)
 
                 except KeyboardInterrupt:
                     raise
 
                 except Exception as exc:
                     console.print(
-                        f"[bold red]Error saat membuka lowongan "
+                        f"[bold red]Error saat memproses lowongan "
                         f"'{title}': {exc}[/]"
                     )
                     self.session_stats["errors"] += 1
                     continue
 
-                if confirmed:
+                if hasil.applied:
                     self.session_stats["applied"] += 1
                     notifier.send_apply_success(job)
+
+                elif hasil.status == "manual_required":
+                    self.session_stats["manual"] += 1
+                    self.manual_jobs.append((job, hasil.reason))
+
                 else:
                     self.session_stats["skipped"] += 1
 
@@ -207,6 +238,16 @@ class AutoApplyEngine:
         )
         table.add_row("Gaji minimum", f"Rp {config.min_salary:,}")
         table.add_row("Batas pengalaman", f"{config.max_experience} tahun")
+        table.add_row(
+            "Urutan hasil",
+            f"Dari yang terbaru ({config.sort_mode})"
+            if config.sort_mode else "Relevansi JobStreet",
+        )
+        table.add_row(
+            "Hanya lowongan baru",
+            f"Maksimal {config.max_age_days} hari"
+            if config.max_age_days > 0 else "Tanpa batas umur",
+        )
         table.add_row("Halaman per kata kunci", str(config.max_pages))
         table.add_row("Batas lamaran per hari", str(config.max_apply_per_day))
         table.add_row("Jeda antar-lowongan", f"{config.delay_between_apply} detik")
@@ -214,7 +255,16 @@ class AutoApplyEngine:
             "Mode browser",
             "Headless" if config.headless else "Terlihat",
         )
-        table.add_row("Mode", "Tinjau dan kirim secara manual")
+        table.add_row(
+            "Mode lamaran",
+            "Otomatis" if config.auto_apply
+            else "Tinjau dan kirim secara manual",
+        )
+        if config.auto_apply:
+            table.add_row(
+                "Batas lamaran otomatis/sesi",
+                str(config.auto_apply_max_per_session),
+            )
         table.add_row(
             "Notifikasi Telegram",
             "Aktif" if notifier.enabled else "Tidak aktif",
@@ -238,6 +288,9 @@ class AutoApplyEngine:
             "Lamaran dikonfirmasi terkirim", str(self.session_stats["applied"])
         )
         table.add_row(
+            "Perlu dilamar manual", str(self.session_stats["manual"])
+        )
+        table.add_row(
             "Dilewati / tidak dikonfirmasi", str(self.session_stats["skipped"])
         )
         table.add_row("Error", str(self.session_stats["errors"]))
@@ -253,6 +306,16 @@ class AutoApplyEngine:
             console.print(f"[yellow]Statistik database tidak tersedia: {exc}[/]")
 
         console.print(table)
+
+        if self.manual_jobs:
+            console.print(
+                "\n[bold yellow]Lowongan yang perlu Anda lamar manual:[/]"
+            )
+            for job, reason in self.manual_jobs:
+                console.print(
+                    f"  • {job.get('title')} — {job.get('company', '')}"
+                )
+                console.print(f"    {job.get('url')}  [dim]({reason})[/]")
 
 
 def main():

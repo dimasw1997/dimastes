@@ -44,6 +44,16 @@ class JobFilter:
             if keyword in title_lower:
                 return False, f"Posisi terlalu senior: '{keyword}'"
 
+        age_days = job.get("age_days")
+        if (
+            config.max_age_days > 0
+            and isinstance(age_days, int)
+            and age_days > config.max_age_days
+        ):
+            return False, (
+                f"Lowongan lebih lama dari {config.max_age_days} hari"
+            )
+
         if config.strict_location and config.location and location:
             target = config.location.lower()
             if target not in location.lower():
@@ -128,14 +138,31 @@ class JobFilter:
 
         return min_years
 
-    def rank_jobs(self, jobs: List[Dict]) -> List[Dict]:
+    def rank_jobs(
+        self, jobs: List[Dict], prefer_newest: Optional[bool] = None
+    ) -> List[Dict]:
+        """Urutkan lowongan. Bila prefer_newest, yang paling baru didahulukan."""
+        if prefer_newest is None:
+            prefer_newest = config.prefer_newest and bool(config.sort_mode)
+
         scored_jobs = []
 
         for job in jobs:
             job["_score"] = self._calculate_score(job)
             scored_jobs.append(job)
 
-        scored_jobs.sort(key=lambda item: item["_score"], reverse=True)
+        if prefer_newest:
+            # Lowongan tanpa info umur ditaruh paling akhir.
+            scored_jobs.sort(
+                key=lambda item: (
+                    item.get("age_days") is None,
+                    item.get("age_days") or 0,
+                    -item["_score"],
+                )
+            )
+        else:
+            scored_jobs.sort(key=lambda item: item["_score"], reverse=True)
+
         return scored_jobs
 
     def _calculate_score(self, job: Dict) -> int:

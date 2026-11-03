@@ -34,10 +34,29 @@ def show_config():
     )
     table.add_row("Gaji minimum", f"Rp {config.min_salary:,}")
     table.add_row("Batas pengalaman", f"{config.max_experience} tahun")
+    table.add_row(
+        "Urutan hasil",
+        f"Dari yang terbaru ({config.sort_mode})"
+        if config.sort_mode else "Relevansi JobStreet",
+    )
+    table.add_row(
+        "Hanya lowongan baru",
+        f"Maksimal {config.max_age_days} hari"
+        if config.max_age_days > 0 else "Tanpa batas umur",
+    )
     table.add_row("Halaman per kata kunci", str(config.max_pages))
     table.add_row("Batas lamaran per hari", str(config.max_apply_per_day))
     table.add_row("Jeda antar-lowongan", f"{config.delay_between_apply} detik")
     table.add_row("Mode browser", "Headless" if config.headless else "Terlihat")
+    table.add_row(
+        "Mode lamaran",
+        "Otomatis" if config.auto_apply else "Tinjau dan kirim manual",
+    )
+    if config.auto_apply:
+        table.add_row(
+            "Batas lamaran otomatis/sesi",
+            str(config.auto_apply_max_per_session),
+        )
     table.add_row("File database", config.db_path)
     table.add_row(
         "Notifikasi Telegram",
@@ -99,7 +118,35 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="JobStreet Auto-Apply CLI")
     subparsers = parser.add_subparsers(dest="command")
 
-    subparsers.add_parser("run", help="Jalankan auto-apply")
+    run_parser = subparsers.add_parser("run", help="Jalankan pencarian lowongan")
+    run_mode = run_parser.add_mutually_exclusive_group()
+    run_mode.add_argument(
+        "--auto",
+        action="store_true",
+        help="Kirim lamaran otomatis (tanpa klik manual)",
+    )
+    run_mode.add_argument(
+        "--manual",
+        action="store_true",
+        help="Buka lowongan untuk ditinjau dan dikirim manual (default)",
+    )
+    run_parser.add_argument(
+        "--max-age-days",
+        type=int,
+        default=None,
+        help="Hanya lowongan yang diposting dalam N hari terakhir",
+    )
+    run_parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=None,
+        help="Jumlah halaman hasil pencarian per kata kunci",
+    )
+    run_parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Jalankan Chrome tanpa jendela",
+    )
     subparsers.add_parser("stats", help="Tampilkan statistik")
     subparsers.add_parser("config", help="Tampilkan konfigurasi aktif")
     subparsers.add_parser("repair", help="Rapikan data lama di database")
@@ -118,6 +165,20 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.command == "run":
+        if args.auto:
+            config.auto_apply = True
+        elif args.manual:
+            config.auto_apply = False
+
+        if args.max_age_days is not None:
+            config.max_age_days = max(0, args.max_age_days)
+
+        if args.max_pages is not None:
+            config.max_pages = max(1, args.max_pages)
+
+        if args.headless:
+            config.headless = True
+
         from main import main
 
         main()

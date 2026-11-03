@@ -22,6 +22,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from rich.console import Console
 
+from auto_apply import ApplyResult, AutoApplier
 from config import config
 from database import db
 
@@ -138,6 +139,13 @@ class JobStreetBot:
 
             if config.location:
                 params["where"] = config.location
+
+            # ListedDate = urutkan dari lowongan yang paling baru diposting.
+            if config.sort_mode:
+                params["sortmode"] = config.sort_mode
+
+            if config.max_age_days > 0:
+                params["daterange"] = str(config.max_age_days)
 
             if page > 1:
                 params["page"] = str(page)
@@ -270,7 +278,43 @@ class JobStreetBot:
             "description": description,
             "url": job_url,
             "date_posted": date_posted,
+            "age_days": self._parse_listing_age(date_posted),
         }
+
+    @staticmethod
+    def _parse_listing_age(text: str) -> Optional[int]:
+        """Mengubah label tanggal ("Hari ini", "3 hari yang lalu") jadi umur hari."""
+        value = " ".join(str(text or "").split()).lower()
+
+        if not value:
+            return None
+
+        if any(word in value for word in ("hari ini", "today", "baru", "just now")):
+            return 0
+
+        if any(word in value for word in ("kemarin", "yesterday")):
+            return 1
+
+        if "+" in value and any(word in value for word in ("hari", "day")):
+            return 30
+
+        match = re.search(r"(\d+)\s*(?:jam|hour|h)\b", value)
+        if match:
+            return 0
+
+        match = re.search(r"(\d+)\s*(?:hari|day|d)\b", value)
+        if match:
+            return int(match.group(1))
+
+        match = re.search(r"(\d+)\s*(?:minggu|week|w)\b", value)
+        if match:
+            return int(match.group(1)) * 7
+
+        match = re.search(r"(\d+)\s*(?:bulan|month|mo)\b", value)
+        if match:
+            return int(match.group(1)) * 30
+
+        return None
 
     @staticmethod
     def _collect_job_links(card) -> list:
@@ -376,11 +420,8 @@ class JobStreetBot:
         )
         return any(marker in page_text for marker in markers)
 
-    def apply_job(self, job: Dict) -> bool:
-        """
-        Membuka halaman lowongan untuk ditinjau.
-        Pengguna sendiri yang menekan Apply dan Submit di browser.
-        """
+    def apply_job(self, job: Dict) -> ApplyResult:
+        """Melamar satu lowongan: otomatis bila AUTO_APPLY aktif, atau manual."""
         title = (job.get("title") or "").strip()
         job_url = (job.get("url") or "").strip()
         job_id = str(job.get("job_id") or "").strip()
@@ -389,14 +430,60 @@ class JobStreetBot:
             console.print(
                 "[yellow]Lowongan dilewati karena judul atau URL tidak terbaca.[/]"
             )
-            return False
+            return ApplyResult(False, "error", "Judul atau URL tidak terbaca")
 
         if not job_id:
             job_id = self._extract_job_id(job_url)
+            job["job_id"] = job_id
 
         if db.is_already_applied(job_id):
             console.print(f"[yellow]Sudah tercatat sebagai dilamar: {title}[/]")
-            return False
+            return ApplyResult(False, "already_applied", "Sudah tercatat dilamar")
+
+        if config.auto_apply:
+            return self._apply_automatically(job, job_id)
+
+        return self._apply_manually(job, job_id)
+
+    @staticmethod
+    def _record(job_id: str, status: str, notes: str):
+        try:
+            db.record_application(job_id, status, notes)
+        except Exception as exc:
+            console.print(f"[yellow]Gagal mencatat lamaran: {exc}[/]")
+
+    def _apply_automatically(self, job: Dict, job_id: str) -> ApplyResult:
+        title = (job.get("title") or "").strip()
+        console.print(f"\n[bold magenta]{title}[/] [cyan](otomatis)[/]")
+
+        result = AutoApplier(self.driver, self.wait).apply(job)
+
+        if result.status == "applied":
+            self._record(job_id, "applied", result.reason or "Dikirim otomatis")
+            console.print("[bold green]Lamaran terkirim otomatis.[/]")
+
+        elif result.status == "already_applied":
+            self._record(job_id, "already_applied", result.reason)
+            console.print(f"[yellow]{result.reason}. Dicatat dan dilewati.[/]")
+
+        elif result.status == "manual_required":
+            self._record(job_id, "manual_required", result.reason)
+            console.print(
+                f"[yellow]Perlu dilamar manual: {result.reason}[/]"
+            )
+
+        else:
+            self._record(job_id, "error", result.reason)
+            console.print(
+                f"[bold red]Gagal melamar otomatis: {result.reason}[/]"
+            )
+
+        return result
+
+    def _apply_manually(self, job: Dict, job_id: str) -> ApplyResult:
+        """Membuka halaman lowongan agar pengguna melamar sendiri."""
+        title = (job.get("title") or "").strip()
+        job_url = (job.get("url") or "").strip()
 
         try:
             self.driver.get(job_url)
@@ -406,7 +493,7 @@ class JobStreetBot:
             time.sleep(2)
 
             if self._is_already_applied_page():
-                db.record_application(
+                self._record(
                     job_id,
                     "already_applied",
                     "Halaman menandai lowongan ini sudah pernah dilamar",
@@ -415,7 +502,7 @@ class JobStreetBot:
                     f"[yellow]JobStreet menandai '{title}' sudah pernah "
                     "dilamar. Dicatat dan dilewati.[/]"
                 )
-                return False
+                return ApplyResult(False, "already_applied", "Sudah pernah dilamar")
 
             console.print(f"\n[bold magenta]{title}[/]")
             console.print(f"Perusahaan: {job.get('company', 'Tidak diketahui')}")
@@ -431,37 +518,32 @@ class JobStreetBot:
             ).strip().lower()
 
             if answer in ("y", "ya", "yes"):
-                db.record_application(
+                self._record(
                     job_id,
                     "applied",
                     "Dikirim manual dan dikonfirmasi pengguna",
                 )
                 console.print("[bold green]Lamaran dicatat sebagai terkirim.[/]")
-                return True
+                return ApplyResult(True, "applied", "Dikonfirmasi manual")
 
-            db.record_application(
+            self._record(
                 job_id,
                 "skipped",
                 "Tidak dikonfirmasi sebagai lamaran terkirim",
             )
             console.print("[yellow]Tidak dicatat sebagai lamaran terkirim.[/]")
-            return False
+            return ApplyResult(False, "skipped", "Tidak dikonfirmasi")
 
         except (EOFError, KeyboardInterrupt):
             console.print(
                 "\n[yellow]Tinjauan dibatalkan; lamaran tidak dicatat.[/]"
             )
-            return False
+            return ApplyResult(False, "skipped", "Dibatalkan")
 
         except Exception as exc:
             console.print(f"[bold red]Gagal membuka lowongan: {exc}[/]")
-
-            try:
-                db.record_application(job_id, "error", str(exc))
-            except Exception:
-                pass
-
-            return False
+            self._record(job_id, "error", str(exc))
+            return ApplyResult(False, "error", str(exc))
 
     def close(self):
         if self.driver:

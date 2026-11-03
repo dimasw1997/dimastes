@@ -57,10 +57,28 @@ class Config:
     # Tolak lowongan yang lokasinya jelas di luar LOCATION.
     strict_location: bool = _bool_setting("STRICT_LOCATION", False)
 
+    # Urutkan hasil pencarian dari yang paling baru (ListedDate).
+    # Kosongkan SORT_MODE untuk kembali ke urutan relevansi JobStreet.
+    sort_mode: str = os.getenv("SORT_MODE", "ListedDate").strip()
+    prefer_newest: bool = _bool_setting("PREFER_NEWEST", True)
+
+    # 0 = tanpa batas umur. Nilai yang didukung JobStreet: 1, 3, 7, 14, 31.
+    max_age_days: int = _int_setting("MAX_AGE_DAYS", 0)
+
     max_apply_per_day: int = _int_setting("MAX_APPLY_PER_DAY", 5)
     delay_between_apply: int = _int_setting("DELAY_BETWEEN_APPLY", 3)
     max_pages: int = _MAX_PAGES
     headless: bool = _bool_setting("HEADLESS_MODE", False)
+
+    # --- Lamaran otomatis ---
+    # Default mati; nyalakan lewat AUTO_APPLY=true di .env atau `run --auto`.
+    auto_apply: bool = _bool_setting("AUTO_APPLY", False)
+    auto_apply_max_per_session: int = max(
+        1, _int_setting("AUTO_APPLY_MAX_PER_SESSION", 25)
+    )
+    auto_apply_step_timeout: int = max(
+        5, _int_setting("AUTO_APPLY_STEP_TIMEOUT", 30)
+    )
 
     base_url: str = "https://id.jobstreet.com"
     login_url: str = "https://id.jobstreet.com"

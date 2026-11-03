@@ -1,12 +1,23 @@
 # dimastes — JobStreet Job Review Assistant
 
 Alat bantu (Bahasa Indonesia) untuk mencari lowongan di
-[id.jobstreet.com](https://id.jobstreet.com), menyaringnya sesuai kriteria
-Anda, lalu membuka setiap lowongan yang lolos agar **Anda** tinjau dan kirim
-lamarannya sendiri di browser.
+[id.jobstreet.com](https://id.jobstreet.com) **mulai dari yang paling baru
+diposting**, menyaringnya sesuai kriteria Anda, lalu:
 
-Program ini **tidak** mengirim lamaran otomatis dan **tidak** menyimpan
-password JobStreet. Login dan penekanan tombol Apply/Submit tetap manual.
+- **mode manual** — setiap lowongan dibuka di Chrome agar Anda tinjau dan
+  kirim lamarannya sendiri, atau
+- **mode otomatis** — bot menekan Lamar/Lanjutkan/Kirim lamaran sendiri.
+  Bila alur tidak bisa dipastikan (lamaran lewat situs perusahaan, perlu
+  unggah berkas, ada pertanyaan wajib), lowongan dikembalikan ke Anda
+  sebagai daftar "perlu dilamar manual".
+
+Program tidak menyimpan password JobStreet; login tetap Anda lakukan sendiri
+di browser.
+
+> **Penting:** melamar otomatis berarti mengirim lamaran tanpa Anda baca
+> dulu. Pastikan CV dan profil JobStreet sudah benar, gunakan batas harian
+> yang wajar, dan sadari bahwa otomatisasi dapat melanggar ketentuan layanan
+> JobStreet (risiko akun dibatasi). Gunakan dengan tanggung jawab sendiri.
 
 ## Fitur
 
@@ -14,8 +25,12 @@ password JobStreet. Login dan penekanan tombol Apply/Submit tetap manual.
 - Menyimpan lowongan ke SQLite agar tidak diproses dua kali.
 - Menyaring lowongan: kata kunci terlarang, posisi terlalu senior, gaji
   minimum, batas pengalaman, dan (opsional) lokasi.
-- Memeringkat lowongan yang paling relevan.
-- Mode tinjau manual: halaman lowongan dibuka di Chrome, Anda yang melamar.
+- Hasil pencarian diurutkan **dari yang terbaru** (`sortmode=ListedDate`),
+  dengan opsi hanya mengambil lowongan N hari terakhir.
+- Memeringkat lowongan: yang terbaru didahulukan, lalu skor relevansi.
+- Mode manual: halaman lowongan dibuka di Chrome, Anda yang melamar.
+- Mode otomatis (`run --auto`): klik Lamar → Lanjutkan → Kirim lamaran,
+  dengan pengaman dan batas per sesi.
 - Mencatat lamaran yang sudah dikirim beserta batas harian.
 - Blacklist perusahaan dan notifikasi Telegram (opsional).
 - Laporan singkat di akhir sesi: `python cli.py stats`, `history`, `config`.
@@ -92,6 +107,12 @@ cp .env.example .env
 | `HEADLESS_MODE` | `false` | `true` = Chrome tanpa jendela (tidak cocok untuk tinjau manual) |
 | `TELEGRAM_BOT_TOKEN` | kosong | Opsional, untuk notifikasi |
 | `TELEGRAM_CHAT_ID` | kosong | Opsional, untuk notifikasi |
+| `SORT_MODE` | `ListedDate` | Urutan hasil; `ListedDate` = terbaru dulu, `KeywordRelevance` = relevansi |
+| `PREFER_NEWEST` | `true` | Dahulukan lowongan paling baru saat antrean melamar |
+| `MAX_AGE_DAYS` | `0` | Hanya lowongan N hari terakhir (0 = semua). Nilai valid JobStreet: 1, 3, 7, 14, 31 |
+| `AUTO_APPLY` | `false` | `true` = kirim lamaran otomatis (bisa juga `run --auto`) |
+| `AUTO_APPLY_MAX_PER_SESSION` | `25` | Batas lamaran otomatis per sesi |
+| `AUTO_APPLY_STEP_TIMEOUT` | `30` | Detik maksimal menunggu tiap langkah alur lamaran |
 | `DB_PATH` | `jobstreet_auto.db` | Lokasi file database |
 
 ## Cara pakai
@@ -100,8 +121,14 @@ cp .env.example .env
 # 1. Lihat konfigurasi yang benar-benar terbaca
 python cli.py config
 
-# 2. Jalankan pencarian + tinjau lowongan
+# 2a. Jalankan pencarian + tinjau manual (default)
 python cli.py run
+
+# 2b. Jalankan pencarian + kirim lamaran otomatis
+python cli.py run --auto
+
+# Hanya lowongan 3 hari terakhir, 5 halaman per kata kunci
+python cli.py run --auto --max-age-days 3 --max-pages 5
 
 # 3. Lihat hasil
 python cli.py stats
@@ -121,6 +148,23 @@ Saat `run` berjalan:
 3. Tinjau di browser. Setelah selesai, kembali ke terminal:
    - tekan **Enter** saja jika lamaran **tidak** dikirim (dicatat `skipped`);
    - ketik **y** jika lamaran benar-benar sudah dikirim (dicatat `applied`).
+
+### Mode otomatis (`run --auto`)
+
+1. Bot membuka halaman lowongan, lalu mencari tombol **Lamar**.
+2. Bila muncul langkah berikutnya (**Lanjutkan/Kirim lamaran**), bot menekan
+   otomatis sampai muncul konfirmasi "lamaran telah dikirim".
+3. Lamaran hanya dicatat `applied` **setelah** konfirmasi itu terlihat.
+4. Bot berhenti dan menyerahkan ke Anda bila:
+   - lowongan memakai **"Lamar di situs perusahaan"** (ATS eksternal),
+   - alur meminta **unggah berkas/cover letter** atau ada **pertanyaan wajib**,
+   - alur tidak dikenali dalam `AUTO_APPLY_STEP_TIMEOUT` detik.
+5. Di akhir sesi muncul daftar **"Lowongan yang perlu Anda lamar manual"**
+   lengkap dengan tautannya.
+
+Batas pengaman: `MAX_APPLY_PER_DAY` (harian), `AUTO_APPLY_MAX_PER_SESSION`
+(per sesi), dan `DELAY_BETWEEN_APPLY` (jeda antar lamaran). Jangan
+menaikkannya terlalu tinggi.
 
 ### Versi ringan tanpa Selenium
 
@@ -142,6 +186,7 @@ dan menyiapkan `catatan_lamaran.csv` sebagai pelacak manual.
 | `main.py` | Alur sesi: login → cari → saring → tinjau |
 | `cli.py` | Perintah `run`, `stats`, `history`, `config`, `repair`, `blacklist` |
 | `notifier.py` | Notifikasi Telegram (opsional) |
+| `auto_apply.py` | Alur klik Lamar → Lanjutkan → Kirim + deteksi pengaman |
 | `buka_pencarian.py` | Pembuka tab pencarian tanpa Selenium |
 | `jalankan.bat` / `jalankan.sh` | Skrip bantu: siapkan `.venv`, pasang dependensi, jalankan CLI |
 | `tests/` | Unit test untuk filter dan database |
@@ -173,6 +218,20 @@ Itu data lama dari versi sebelumnya yang menyimpan judul kosong. Jalankan
 
 **Lowongan muncul tapi lokasinya bukan Kota Anda.**
 Aktifkan `STRICT_LOCATION=true` di `.env`.
+
+**Semua lowongan masuk "perlu dilamar manual".**
+Penyebab yang paling sering: lowongan memakai "Lamar di situs perusahaan",
+meminta unggah berkas, atau punya pertanyaan wajib. Bot sengaja tidak menebak
+jawaban. Selesaikan lewat tautan di daftar akhir sesi.
+
+**Ingin hanya lowongan yang baru tayang.**
+Tambahkan `--max-age-days 3` (atau `1`) saat menjalankan `run`, atau isi
+`MAX_AGE_DAYS` di `.env`. Hasil sudah otomatis diurutkan dari yang terbaru.
+
+**Tombol Lamar tidak ditemukan.**
+JobStreet memakai beberapa variasi tombol. Jalankan sekali dengan mode manual
+(`run --manual`) di jendela Chrome yang terlihat, lalu kirimkan potongan HTML
+tombol Lamar agar selector di `auto_apply.py` bisa disesuaikan.
 
 **Lamaran tidak bertambah padahal sudah melamar.**
 Pastikan Anda mengetik `y` saat terminal bertanya, bukan hanya Enter. Lamaran
