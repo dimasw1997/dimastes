@@ -1,26 +1,40 @@
+"""Pembacaan konfigurasi dari file .env.
+
+Semua nilai punya default yang aman sehingga program tetap berjalan
+walaupun file .env belum dibuat.
+"""
+
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# Path absolut supaya .env dan database tetap ditemukan walaupun program
+# dijalankan dari folder lain (misalnya `python /path/ke/dimastes/cli.py`).
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 
 
 def _list_setting(name: str, default: str) -> list[str]:
-    value = os.getenv(name, default)
+    value = os.getenv(name, default) or default
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
 def _int_setting(name: str, default: int) -> int:
     try:
-        return int(os.getenv(name, str(default)).strip())
+        return int(str(os.getenv(name, str(default))).strip())
     except (TypeError, ValueError):
         return default
 
 
 def _bool_setting(name: str, default: bool = False) -> bool:
-    value = os.getenv(name, str(default)).strip().lower()
+    value = str(os.getenv(name, str(default))).strip().lower()
     return value in ("1", "true", "yes", "y", "ya")
+
+
+# Minimal satu halaman supaya perulangan pencarian tidak kosong.
+_MAX_PAGES = max(1, _int_setting("MAX_PAGES", 3))
 
 
 @dataclass
@@ -40,8 +54,12 @@ class Config:
         "principal,director,head,senior,lead"
     ))
 
+    # Tolak lowongan yang lokasinya jelas di luar LOCATION.
+    strict_location: bool = _bool_setting("STRICT_LOCATION", False)
+
     max_apply_per_day: int = _int_setting("MAX_APPLY_PER_DAY", 5)
     delay_between_apply: int = _int_setting("DELAY_BETWEEN_APPLY", 3)
+    max_pages: int = _MAX_PAGES
     headless: bool = _bool_setting("HEADLESS_MODE", False)
 
     base_url: str = "https://id.jobstreet.com"
@@ -50,6 +68,8 @@ class Config:
 
     telegram_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
     telegram_chat_id: str = os.getenv("TELEGRAM_CHAT_ID", "")
+
+    db_path: str = os.getenv("DB_PATH", str(BASE_DIR / "jobstreet_auto.db"))
 
 
 # Baris ini yang dibutuhkan oleh: from config import config

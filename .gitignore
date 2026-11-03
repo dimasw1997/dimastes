@@ -1,0 +1,23 @@
+# Salin .env.example menjadi .env; file .env hanya untuk mesin Anda.
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# SQLite sementara (file utama tetap disimpan bila memang diinginkan)
+*.db-wal
+*.db-shm
+*.db-journal
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

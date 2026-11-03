@@ -1,14 +1,14 @@
 import time
 
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
+from rich.table import Table
 
 from config import config
 from database import db
-from scraper import JobStreetBot
 from job_filter import job_filter
 from notifier import notifier
+from scraper import JobStreetBot
 
 
 console = Console()
@@ -20,6 +20,7 @@ class AutoApplyEngine:
         self.seen_job_ids = set()
         self.session_stats = {
             "found": 0,
+            "new": 0,
             "applied": 0,
             "skipped": 0,
             "errors": 0,
@@ -48,8 +49,6 @@ class AutoApplyEngine:
 
                 self._process_keyword(keyword)
 
-            notifier.send_daily_report(db.get_stats())
-
         except KeyboardInterrupt:
             console.print("\n[bold yellow]Proses dihentikan.[/]")
 
@@ -61,10 +60,13 @@ class AutoApplyEngine:
             self.bot.close()
             self._print_results()
 
-    def _process_keyword(self, keyword: str):
-        max_pages = 3
+            try:
+                notifier.send_daily_report(db.get_stats())
+            except Exception as exc:
+                console.print(f"[yellow]Laporan harian gagal dikirim: {exc}[/]")
 
-        for page in range(1, max_pages + 1):
+    def _process_keyword(self, keyword: str):
+        for page in range(1, config.max_pages + 1):
             if db.get_today_apply_count() >= config.max_apply_per_day:
                 console.print(
                     f"[bold yellow]Batas harian tercapai "
@@ -87,6 +89,12 @@ class AutoApplyEngine:
                 job_id = str(job.get("job_id") or "").strip()
 
                 if not title or not url or not job_id:
+                    # Tandai supaya lowongan rusak yang sama tidak dihitung
+                    # berkali-kali untuk setiap kata kunci.
+                    kunci = job_id or url
+                    if kunci:
+                        self.seen_job_ids.add(kunci)
+
                     console.print(
                         "[yellow]Lowongan dilewati: judul, URL, atau ID tidak terbaca.[/]"
                     )
@@ -97,7 +105,12 @@ class AutoApplyEngine:
                     continue
 
                 self.seen_job_ids.add(job_id)
-                db.add_job(job)
+
+                # Lowongan lama yang belum pernah dilamar tetap ditinjau
+                # kembali; yang benar-benar baru dihitung terpisah.
+                if db.add_job(job):
+                    self.session_stats["new"] += 1
+
                 new_jobs.append(job)
 
             self.session_stats["found"] += len(new_jobs)
@@ -187,10 +200,19 @@ class AutoApplyEngine:
 
         table.add_row("Kata kunci", ", ".join(config.keywords))
         table.add_row("Lokasi", config.location)
+        table.add_row(
+            "Filter lokasi ketat",
+            "Aktif" if config.strict_location else "Tidak aktif",
+        )
         table.add_row("Gaji minimum", f"Rp {config.min_salary:,}")
         table.add_row("Batas pengalaman", f"{config.max_experience} tahun")
+        table.add_row("Halaman per kata kunci", str(config.max_pages))
         table.add_row("Batas lamaran per hari", str(config.max_apply_per_day))
         table.add_row("Jeda antar-lowongan", f"{config.delay_between_apply} detik")
+        table.add_row(
+            "Mode browser",
+            "Headless" if config.headless else "Terlihat",
+        )
         table.add_row("Mode", "Tinjau dan kirim secara manual")
         table.add_row(
             "Notifikasi Telegram",
@@ -207,14 +229,23 @@ class AutoApplyEngine:
         table.add_column("Keterangan", style="cyan")
         table.add_column("Jumlah", style="green", justify="right")
 
-        table.add_row("Lowongan baru terbaca", str(self.session_stats["found"]))
-        table.add_row("Lamaran dikonfirmasi terkirim", str(self.session_stats["applied"]))
-        table.add_row("Dilewati / tidak dikonfirmasi", str(self.session_stats["skipped"]))
+        table.add_row("Lowongan diproses", str(self.session_stats["found"]))
+        table.add_row(
+            "Lowongan baru di database", str(self.session_stats["new"])
+        )
+        table.add_row(
+            "Lamaran dikonfirmasi terkirim", str(self.session_stats["applied"])
+        )
+        table.add_row(
+            "Dilewati / tidak dikonfirmasi", str(self.session_stats["skipped"])
+        )
         table.add_row("Error", str(self.session_stats["errors"]))
 
         try:
             stats = db.get_stats()
-            table.add_row("Total lowongan di database", str(stats["total_jobs_found"]))
+            table.add_row(
+                "Total lowongan di database", str(stats["total_jobs_found"])
+            )
             table.add_row("Total lamaran tercatat", str(stats["total_applied"]))
             table.add_row("Lamaran tercatat hari ini", str(stats["today_applied"]))
         except Exception as exc:

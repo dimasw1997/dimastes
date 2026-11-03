@@ -1,17 +1,25 @@
+"""Pembungkus Selenium untuk membuka JobStreet dan membaca kartu lowongan.
+
+Program ini tidak mengirim lamaran otomatis: halaman lowongan hanya dibuka
+agar pengguna meninjau dan mengirim lamaran sendiri di browser.
+"""
+
 import hashlib
 import re
 import time
 from typing import Dict, List, Optional
-from urllib.parse import urlencode, urljoin
+from urllib.parse import urldefrag, urlencode, urljoin
 
 from selenium import webdriver
-from selenium.webdriver.common.by import By
+from selenium.common.exceptions import (
+    NoSuchElementException,
+    TimeoutException,
+)
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.common.exceptions import NoSuchElementException
-from webdriver_manager.chrome import ChromeDriverManager
 from rich.console import Console
 
 from config import config
@@ -19,49 +27,111 @@ from database import db
 
 console = Console()
 
+CARD_SELECTORS = (
+    "article",
+    "[data-automation='normalJob']",
+    "[data-testid='job-card']",
+)
+
+ALREADY_APPLIED_MARKERS = (
+    "[data-automation='job-detail-applied-badge']",
+    "[data-automation='appliedBadge']",
+    "[data-testid='applied-badge']",
+)
+
 
 class JobStreetBot:
     def __init__(self):
         self.driver = None
         self.wait = None
 
+    # ------------------------------------------------------------------
+    # Browser
+    # ------------------------------------------------------------------
     def init_browser(self):
-        """Membuka Chrome yang terlihat agar pengguna bisa login dan meninjau lowongan."""
+        """Membuka Chrome. Mode headless mengikuti HEADLESS_MODE di .env."""
         console.print("[bold blue]Membuka Chrome...[/]")
 
         options = Options()
-        options.add_argument("--start-maximized")
         options.add_argument("--window-size=1400,900")
+        options.add_argument("--disable-blink-features=AutomationControlled")
 
-        service = Service(ChromeDriverManager().install())
-        self.driver = webdriver.Chrome(service=service, options=options)
+        if config.headless:
+            options.add_argument("--headless=new")
+            options.add_argument("--disable-gpu")
+        else:
+            options.add_argument("--start-maximized")
+
+        try:
+            # Selenium 4.6+ sudah punya Selenium Manager, jadi tidak wajib
+            # menyiapkan chromedriver secara manual.
+            self.driver = webdriver.Chrome(options=options)
+        except Exception as first_error:
+            console.print(
+                f"[yellow]ChromeDriver otomatis gagal ({first_error}). "
+                "Mencoba webdriver-manager...[/]"
+            )
+            try:
+                from webdriver_manager.chrome import ChromeDriverManager
+
+                service = Service(ChromeDriverManager().install())
+                self.driver = webdriver.Chrome(
+                    service=service, options=options
+                )
+            except Exception as second_error:
+                raise RuntimeError(
+                    "Chrome tidak bisa dibuka. Pastikan Google Chrome sudah "
+                    "terpasang, lalu jalankan ulang program. "
+                    f"Detail: {second_error}"
+                ) from first_error
+
         self.wait = WebDriverWait(self.driver, 20)
-
         console.print("[bold green]Chrome siap.[/]")
 
     def login(self) -> bool:
-        """
-        Login dilakukan sendiri oleh pengguna di browser.
-        Tidak menyimpan atau mengetikkan password secara otomatis.
-        """
+        """Login dilakukan sendiri oleh pengguna di browser."""
+        if not self.driver:
+            console.print("[bold red]Browser belum dibuka.[/]")
+            return False
+
         try:
             self.driver.get(config.base_url)
             time.sleep(2)
 
             console.print("\n[bold cyan]Silakan login secara manual di jendela Chrome.[/]")
+
+            if config.headless:
+                console.print(
+                    "[yellow]HEADLESS_MODE aktif sehingga jendela Chrome "
+                    "tidak terlihat. Set HEADLESS_MODE=false untuk login "
+                    "dan meninjau lowongan secara manual.[/]"
+                )
+
             console.print("Buka tombol Sign in di halaman JobStreet dan selesaikan login.")
             input("Jika sudah selesai, kembali ke terminal lalu tekan Enter: ")
 
             return True
 
+        except (EOFError, KeyboardInterrupt):
+            console.print("\n[yellow]Login dibatalkan.[/]")
+            return False
+
         except Exception as exc:
             console.print(f"[bold red]Gagal membuka JobStreet: {exc}[/]")
             return False
 
+    # ------------------------------------------------------------------
+    # Pencarian
+    # ------------------------------------------------------------------
     def search_jobs(self, keyword: str, page: int = 1) -> List[Dict]:
         """Membuka hasil pencarian dan membaca lowongan yang dapat dikenali."""
         jobs: List[Dict] = []
         seen_urls = set()
+        seen_ids = set()
+
+        if not self.driver:
+            console.print("[bold red]Browser belum dibuka.[/]")
+            return jobs
 
         try:
             params = {"keywords": keyword}
@@ -76,18 +146,27 @@ class JobStreetBot:
 
             console.print(f"[bold cyan]Mencari: {keyword} — halaman {page}[/]")
             self.driver.get(url)
-            self.wait.until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
-            time.sleep(2)
 
-            cards = self.driver.find_elements(By.CSS_SELECTOR, "article")
-
-            if not cards:
-                cards = self.driver.find_elements(
-                    By.CSS_SELECTOR,
-                    "[data-automation='normalJob']"
+            try:
+                self.wait.until(
+                    EC.presence_of_element_located(
+                        (By.CSS_SELECTOR, ", ".join(CARD_SELECTORS))
+                    )
                 )
+            except TimeoutException:
+                console.print(
+                    "[yellow]Kartu lowongan tidak muncul dalam 20 detik. "
+                    "Mungkin halaman masih memuat atau struktur website "
+                    "berubah.[/]"
+                )
+
+            time.sleep(1)
+
+            cards = []
+            for selector in CARD_SELECTORS:
+                found = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                if found:
+                    cards.extend(found)
 
             for card in cards:
                 try:
@@ -95,10 +174,11 @@ class JobStreetBot:
                     if not job:
                         continue
 
-                    if job["url"] in seen_urls:
+                    if job["url"] in seen_urls or job["job_id"] in seen_ids:
                         continue
 
                     seen_urls.add(job["url"])
+                    seen_ids.add(job["job_id"])
                     jobs.append(job)
 
                 except Exception:
@@ -119,19 +199,8 @@ class JobStreetBot:
         return jobs
 
     def _parse_job_card(self, card) -> Optional[Dict]:
-        """Membaca satu kartu lowongan. Kartu tanpa judul atau URL akan dilewati."""
-        selectors = (
-            "a[data-automation*='jobTitle']",
-            "a[href*='/job/']",
-            "a[href*='/job-']",
-        )
-
-        links = []
-        for selector in selectors:
-            try:
-                links.extend(card.find_elements(By.CSS_SELECTOR, selector))
-            except Exception:
-                continue
+        """Membaca satu kartu lowongan. Kartu tanpa judul/URL dilewati."""
+        links = self._collect_job_links(card)
 
         title = ""
         job_url = ""
@@ -141,26 +210,15 @@ class JobStreetBot:
             if not href:
                 continue
 
-            possible_titles = [
-                link.text,
-                link.get_attribute("aria-label"),
-                link.get_attribute("title"),
-                link.get_attribute("textContent"),
-            ]
+            candidate_title = self._read_link_title(link)
+            if not candidate_title:
+                continue
 
-            candidate_title = next(
-                (
-                    value.strip()
-                    for value in possible_titles
-                    if value and value.strip()
-                ),
-                "",
-            )
-
-            if candidate_title:
-                title = candidate_title
-                job_url = urljoin(self.driver.current_url, href)
-                break
+            title = candidate_title
+            job_url = urldefrag(
+                urljoin(self.driver.current_url, href)
+            )[0]
+            break
 
         # Jangan membuat atau memproses lowongan dengan judul kosong.
         if not title or not job_url:
@@ -215,11 +273,60 @@ class JobStreetBot:
         }
 
     @staticmethod
+    def _collect_job_links(card) -> list:
+        selectors = (
+            "a[data-automation='jobTitle']",
+            "a[data-automation*='jobTitle']",
+            "h3 a",
+            "a[href*='/job/']",
+            "a[href*='/job-']",
+        )
+
+        links = []
+        seen = set()
+
+        for selector in selectors:
+            try:
+                elements = card.find_elements(By.CSS_SELECTOR, selector)
+            except Exception:
+                continue
+
+            for element in elements:
+                if element.id in seen:
+                    continue
+                seen.add(element.id)
+                links.append(element)
+
+        return links
+
+    @staticmethod
+    def _read_link_title(link) -> str:
+        candidates = [
+            link.text,
+            link.get_attribute("aria-label"),
+            link.get_attribute("title"),
+            link.get_attribute("textContent"),
+        ]
+
+        return next(
+            (
+                value.strip()
+                for value in candidates
+                if value and value.strip()
+            ),
+            "",
+        )
+
+    @staticmethod
     def _read_card_value(card, selectors: List[str]) -> str:
         for selector in selectors:
             try:
                 element = card.find_element(By.CSS_SELECTOR, selector)
-                value = element.text or element.get_attribute("textContent") or ""
+                value = (
+                    element.text
+                    or element.get_attribute("textContent")
+                    or ""
+                )
                 value = value.strip()
                 if value:
                     return value
@@ -232,14 +339,42 @@ class JobStreetBot:
 
     @staticmethod
     def _extract_job_id(url: str) -> str:
-        """Membuat ID stabil agar lowongan yang sama tidak berubah ID tiap dijalankan."""
+        """Membuat ID stabil agar lowongan yang sama tidak berubah ID."""
         match = re.search(r"/job(?:/|-)(\d+)", url, re.IGNORECASE)
 
         if match:
             return match.group(1)
 
+        query_id = re.search(r"[?&]id=(\d+)", url)
+        if query_id:
+            return query_id.group(1)
+
         clean_url = url.split("?", 1)[0].rstrip("/")
         return hashlib.sha256(clean_url.encode("utf-8")).hexdigest()[:24]
+
+    # ------------------------------------------------------------------
+    # Meninjau / mencatat lamaran
+    # ------------------------------------------------------------------
+    def _is_already_applied_page(self) -> bool:
+        for selector in ALREADY_APPLIED_MARKERS:
+            try:
+                if self.driver.find_elements(By.CSS_SELECTOR, selector):
+                    return True
+            except Exception:
+                continue
+
+        try:
+            page_text = (self.driver.find_element(By.TAG_NAME, "body").text or "").lower()
+        except Exception:
+            return False
+
+        markers = (
+            "anda sudah melamar",
+            "sudah pernah melamar",
+            "you have already applied",
+            "application submitted",
+        )
+        return any(marker in page_text for marker in markers)
 
     def apply_job(self, job: Dict) -> bool:
         """
@@ -248,7 +383,7 @@ class JobStreetBot:
         """
         title = (job.get("title") or "").strip()
         job_url = (job.get("url") or "").strip()
-        job_id = (job.get("job_id") or "").strip()
+        job_id = str(job.get("job_id") or "").strip()
 
         if not title or not job_url:
             console.print(
@@ -270,6 +405,18 @@ class JobStreetBot:
             )
             time.sleep(2)
 
+            if self._is_already_applied_page():
+                db.record_application(
+                    job_id,
+                    "already_applied",
+                    "Halaman menandai lowongan ini sudah pernah dilamar",
+                )
+                console.print(
+                    f"[yellow]JobStreet menandai '{title}' sudah pernah "
+                    "dilamar. Dicatat dan dilewati.[/]"
+                )
+                return False
+
             console.print(f"\n[bold magenta]{title}[/]")
             console.print(f"Perusahaan: {job.get('company', 'Tidak diketahui')}")
             console.print(f"URL: {job_url}")
@@ -278,12 +425,12 @@ class JobStreetBot:
                 "Jika cocok, lakukan Apply dan Submit sendiri.[/]"
             )
 
-            input("Setelah selesai meninjau halaman, tekan Enter di terminal: ")
-            submitted = input(
-                "Apakah Anda benar-benar sudah mengirim lamaran? [y/N]: "
+            answer = input(
+                "Setelah selesai meninjau, tekan Enter "
+                "(ketik y bila lamaran sudah terkirim): "
             ).strip().lower()
 
-            if submitted in ("y", "ya"):
+            if answer in ("y", "ya", "yes"):
                 db.record_application(
                     job_id,
                     "applied",
@@ -298,6 +445,12 @@ class JobStreetBot:
                 "Tidak dikonfirmasi sebagai lamaran terkirim",
             )
             console.print("[yellow]Tidak dicatat sebagai lamaran terkirim.[/]")
+            return False
+
+        except (EOFError, KeyboardInterrupt):
+            console.print(
+                "\n[yellow]Tinjauan dibatalkan; lamaran tidak dicatat.[/]"
+            )
             return False
 
         except Exception as exc:
@@ -316,5 +469,8 @@ class JobStreetBot:
                 self.driver.quit()
             except Exception:
                 pass
+            finally:
+                self.driver = None
+                self.wait = None
 
             console.print("[blue]Chrome ditutup.[/]")
