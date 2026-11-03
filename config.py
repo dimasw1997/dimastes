@@ -13,7 +13,12 @@ from dotenv import load_dotenv
 # Path absolut supaya .env dan database tetap ditemukan walaupun program
 # dijalankan dari folder lain (misalnya `python /path/ke/dimastes/cli.py`).
 BASE_DIR = Path(__file__).resolve().parent
-load_dotenv(BASE_DIR / ".env")
+
+# Nilai default diambil dari .env.example lebih dulu, lalu .env menimpanya.
+# Dengan begitu kunci baru pada versi terbaru tetap terpakai walau .env lama
+# (dari versi sebelumnya) belum memuat kunci tersebut.
+load_dotenv(BASE_DIR / ".env.example")
+load_dotenv(BASE_DIR / ".env", override=True)
 
 
 def _list_setting(name: str, default: str) -> list[str]:

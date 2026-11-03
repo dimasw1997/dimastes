@@ -94,7 +94,10 @@ pip install -r requirements.txt
 
 ## Konfigurasi
 
-Semua pengaturan dibaca dari file `.env` di folder proyek. Mulai dari contoh:
+Semua pengaturan dibaca dari file `.env` di folder proyek. Kunci yang belum
+ada di `.env` (misalnya setelah pembaruan versi) otomatis memakai nilai dari
+`.env.example`, jadi Anda tidak perlu menyalin ulang file contoh. Mulai dari
+contoh:
 
 ```bash
 cp .env.example .env

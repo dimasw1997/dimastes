@@ -112,6 +112,7 @@ def test_tolak_gaji_di_bawah_minimum(filter_baru, monkeypatch):
 def test_strict_location(filter_baru, monkeypatch):
     monkeypatch.setattr(config, "strict_location", True)
     monkeypatch.setattr(config, "location", "Bandung")
+    monkeypatch.setattr(config, "locations", ["Bandung"])
 
     lolos, alasan = filter_baru.should_apply(
         make_job(location="Jakarta Selatan")
