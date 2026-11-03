@@ -106,6 +106,14 @@ def perbarui_env():
     )
 
 
+def simulasi():
+    """Uji alur lamaran dengan halaman palsu (tanpa Chrome/internet)."""
+    from simulasi import jalankan
+
+    if not jalankan():
+        raise SystemExit(1)
+
+
 def show_config():
     table = Table(title="Konfigurasi")
     table.add_column("Pengaturan", style="cyan")
@@ -282,6 +290,10 @@ if __name__ == "__main__":
     subparsers.add_parser("config", help="Tampilkan konfigurasi aktif")
     subparsers.add_parser("repair", help="Rapikan data lama di database")
     subparsers.add_parser(
+        "simulasi",
+        help="Uji alur lamaran dengan halaman palsu (tanpa Chrome)",
+    )
+    subparsers.add_parser(
         "perbarui-env",
         help="Perbarui KEYWORDS/TITLE_KEYWORDS di .env dari .env.example",
     )
@@ -349,6 +361,8 @@ if __name__ == "__main__":
         repair_data()
     elif args.command == "perbarui-env":
         perbarui_env()
+    elif args.command == "simulasi":
+        simulasi()
     elif args.command == "history":
         show_applications(args.limit)
     elif args.command == "uji-lamar":

@@ -176,7 +176,10 @@ python cli.py repair
 # 5b. Samakan kata kunci di .env dengan daftar terbaru (cadangan: .env.bak)
 python cli.py perbarui-env
 
-# 6. Uji alur lamaran pada satu lowongan (tanpa pencarian/filter)
+# 6. Uji alur lamaran dengan halaman palsu (tanpa Chrome, tanpa internet)
+python cli.py simulasi
+
+# 7. Uji alur lamaran pada satu lowongan (tanpa pencarian/filter)
 python cli.py uji-lamar --url "https://id.jobstreet.com/job/95549275"
 ```
 
@@ -195,6 +198,17 @@ Saat `run` berjalan:
 3. Tinjau di browser. Setelah selesai, kembali ke terminal:
    - tekan **Enter** saja jika lamaran **tidak** dikirim (dicatat `skipped`);
    - ketik **y** jika lamaran benar-benar sudah dikirim (dicatat `applied`).
+
+### Uji cepat tanpa Chrome
+
+`python cli.py simulasi` menjalankan enam skenario halaman JobStreet palsu:
+lamaran sederhana, pertanyaan pilihan (gaji/pengalaman/pendidikan), langkah
+terakhir *Review and submit*, pengalihan ke situs perusahaan, pertanyaan yang
+tidak dikenal, dan alur yang tidak dikenali. Hasilnya berupa tabel OK/GAGAL,
+selesai dalam hitungan detik, tanpa membuka Chrome dan tanpa internet.
+
+Gunakan ini untuk memastikan pembaruan kode berjalan benar sebelum sesi
+lamaran sungguhan.
 
 ### Login sekali saja (sesi tersimpan)
 
