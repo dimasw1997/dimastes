@@ -351,3 +351,25 @@ def test_tombol_lamar_hanya_aplikasi_tidak_dipilih():
     driver.elements = {"button": [Elemen(text="Lamar 1x tap di aplikasi")]}
 
     assert GlintsApplier(driver)._cari_tombol_lamar() is None
+
+
+def test_tombol_kirim_pesan_bukan_kirim_lamaran():
+    """Tombol "Kirim pesan" di Glints tidak boleh dianggap kirim lamaran."""
+    driver = Driver(body="Lamar pekerjaan ini")
+    driver.elements = {
+        "button[type='submit']": [Elemen(text="Kirim pesan")],
+    }
+
+    assert GlintsApplier(driver)._find_submit_button() is None
+
+
+def test_tombol_kirim_lamaran_tetap_ditemukan():
+    driver = Driver(body="Lamar pekerjaan ini")
+    driver.elements = {
+        "button[type='submit']": [Elemen(text="Kirim")],
+    }
+
+    tombol = GlintsApplier(driver)._find_submit_button()
+
+    assert tombol is not None
+    assert tombol.text == "Kirim"

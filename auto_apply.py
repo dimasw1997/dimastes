@@ -97,6 +97,23 @@ MAKS_KLIK_KIRIM = 2
 # Jeda sebelum klik Kirim pertama supaya formulir selesai dimuat.
 JEDA_SEBELUM_KIRIM = 1.5
 
+# Jeda sebelum boleh menekan Kirim lagi. Terlalu cepat = lamaran bisa terkirim
+# dua kali (kejadian nyata di Glints: tombol "Kirim" diklik dua kali).
+JEDA_KLIK_ULANG = 4.0
+
+# Selama teks ini tampil, halaman masih memproses: jangan klik ulang dulu.
+PROSES_TEXTS = (
+    "mengirim",
+    "memproses",
+    "sedang diproses",
+    "harap tunggu",
+    "mohon tunggu",
+    "please wait",
+    "processing",
+    "submitting",
+    "loading",
+)
+
 ALREADY_TEXTS = (
     "anda sudah melamar",
     "sudah pernah melamar",
@@ -552,6 +569,12 @@ class AutoApplier:
     def _cari_tombol_lamar(self):
         """Tombol untuk masuk ke alur lamaran."""
         return self._find_clickable(self.apply_selectors, self.apply_texts)
+
+    def _sedang_memproses(self) -> bool:
+        """True bila halaman menampilkan penanda "sedang dikirim"."""
+        gabungan = f"{self._body_text()} {self._teks_modal()}"
+
+        return any(tanda in gabungan for tanda in PROSES_TEXTS)
 
     def _pesan_alur_tidak_dikenali(self) -> str:
         """Pesan saat alur lamaran tidak bisa dilanjutkan otomatis."""
@@ -1399,7 +1422,10 @@ class AutoApplier:
                     # lagi bila tombol masih terlihat (halaman lambat).
                     boleh_klik = (
                         not sudah_klik_kirim
-                        or time.time() - kirim_terakhir >= 2
+                        or (
+                            time.time() - kirim_terakhir >= JEDA_KLIK_ULANG
+                            and not self._sedang_memproses()
+                        )
                     )
                     if boleh_klik and percobaan_kirim < MAKS_KLIK_KIRIM:
                         if percobaan_kirim == 0:

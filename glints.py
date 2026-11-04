@@ -389,6 +389,31 @@ class GlintsApplier(AutoApplier):
 
         return None
 
+    # Label tombol yang bukan pengiriman lamaran (mis. kirim pesan/chat).
+    _label_bukan_kirim = ("pesan", "chat", "obrolan", "tanya", "follow")
+
+    def _find_submit_button(self, review_page: bool = False):
+        """Jangan pernah menganggap "Kirim pesan" sebagai kirim lamaran."""
+        tombol = super()._find_submit_button(review_page)
+        if tombol is None:
+            return None
+
+        label = self._text(tombol)
+        if any(kata in label for kata in self._label_bukan_kirim):
+            # Cari kandidat lain yang bukan tombol chat.
+            kandidat = self._find_clickable(self.submit_selectors, ())
+
+            if kandidat is not None:
+                label_kandidat = self._text(kandidat)
+                if not any(
+                    kata in label_kandidat for kata in self._label_bukan_kirim
+                ):
+                    return kandidat
+
+            return None
+
+        return tombol
+
     def _blocker(self) -> str:
         """Penghalang khas Glints (profil/CV/login) sebelum menyerah."""
         alasan = super()._blocker()

@@ -169,7 +169,8 @@ def uji_glints_otomatis(keywords: str = "", max_pages: int = 1):
         return
 
     if job:
-        console.print(f"[cyan]URL:[/] {job.get('url', '')}")
+        console.print("[cyan]URL[/]", end=" ")
+        console.print(str(job.get("url") or ""), soft_wrap=True)
 
     warna = "green" if hasil.applied else "yellow"
     console.print(f"\n[bold {warna}]Status:[/] {hasil.status} — {hasil.reason}")

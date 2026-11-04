@@ -973,3 +973,82 @@ def test_galat_server_sebelum_klik_dimuat_ulang(monkeypatch):
     assert hasil.applied is True
     assert jumlah["muat_ulang"] == 1
     assert jumlah["klik"] == 1
+
+
+def test_tidak_klik_kirim_dua_kali_saat_masih_memproses(monkeypatch):
+    """Selama halaman menampilkan "mengirim", tombol Kirim tidak ditekan lagi."""
+    monkeypatch.setattr(auto_apply, "Select", FakeSelect)
+
+    jam = {"t": 500.0}
+    driver = FakeDriver()
+    jumlah = {"klik": 0}
+
+    def jam_sekarang():
+        # Setelah 6 detik, halaman menyatakan lamaran terkirim.
+        if jam["t"] >= 506.0:
+            driver.body = "Your application has been sent"
+        return jam["t"]
+
+    def tidur(detik=0):
+        jam["t"] += detik
+
+    monkeypatch.setattr(auto_apply.time, "time", jam_sekarang)
+    monkeypatch.setattr(auto_apply.time, "sleep", tidur)
+
+    def kirim():
+        jumlah["klik"] += 1
+        driver.body = "Mengirim lamaran, harap tunggu..."
+
+    def ke_review():
+        driver.current_url = "https://id.jobstreet.com/job/9/apply/review"
+
+    driver.elements = {
+        APPLY_SELECTORS[0]: [FakeElement(text="Lamar", on_click=ke_review)],
+        "button[type='submit']": [
+            FakeElement(text="Submit application", on_click=kirim)
+        ],
+    }
+
+    hasil = AutoApplier(driver).apply(
+        {"url": "https://id.jobstreet.com/job/9"}
+    )
+
+    assert hasil.applied is True
+    assert jumlah["klik"] == 1
+
+
+def test_klik_ulang_dibatasi_dua_kali(monkeypatch):
+    """Bila tidak ada kemajuan, kirim hanya dicoba dua kali lalu berhenti."""
+    monkeypatch.setattr(auto_apply, "Select", FakeSelect)
+
+    jam = {"t": 700.0}
+    driver = FakeDriver()
+    jumlah = {"klik": 0}
+
+    monkeypatch.setattr(auto_apply.time, "time", lambda: jam["t"])
+    monkeypatch.setattr(
+        auto_apply.time,
+        "sleep",
+        lambda detik=0: jam.__setitem__("t", jam["t"] + detik),
+    )
+
+    def kirim():
+        jumlah["klik"] += 1
+
+    def ke_review():
+        driver.current_url = "https://id.jobstreet.com/job/10/apply/review"
+
+    driver.elements = {
+        APPLY_SELECTORS[0]: [FakeElement(text="Lamar", on_click=ke_review)],
+        "button[type='submit']": [
+            FakeElement(text="Submit application", on_click=kirim)
+        ],
+    }
+
+    hasil = AutoApplier(driver).apply(
+        {"url": "https://id.jobstreet.com/job/10"}
+    )
+
+    assert hasil.applied is False
+    assert jumlah["klik"] == 2
+    assert "konfirmasi tidak muncul" in hasil.reason.lower()
