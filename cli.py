@@ -104,6 +104,13 @@ def jalankan_glints(max_pages: int = 0, keywords: str = "", batas: int = 0):
     )
 
 
+def simulasi_glints():
+    """Simulasi alur lamaran Glints tanpa Chrome."""
+    from simulasi_glints import jalankan
+
+    console.print(f"[cyan]Versi kode:[/] {versi_kode()}")
+    jalankan()
+
 def uji_glints(url: str):
     """Uji alur lamaran pada satu lowongan Glints."""
     from glints import uji_glints as _uji
@@ -446,6 +453,10 @@ if __name__ == "__main__":
     )
     glints_uji.add_argument("--url", required=True, help="URL lowongan Glints")
 
+    glints_sub.add_parser(
+        "simulasi", help="Simulasi alur lamaran Glints (tanpa Chrome)"
+    )
+
     bl_parser = subparsers.add_parser("blacklist", help="Blacklist company")
     bl_parser.add_argument("company", help="Nama company")
     bl_parser.add_argument("--reason", default="", help="Alasan")
@@ -509,6 +520,8 @@ if __name__ == "__main__":
             jalankan_glints(args.max_pages, args.keywords, args.limit)
         elif args.glints_command == "uji":
             uji_glints(args.url)
+        elif args.glints_command == "simulasi":
+            simulasi_glints()
         else:
             glints_parser.print_help()
     elif args.command == "blacklist":

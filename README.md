@@ -453,7 +453,8 @@ sendiri: pencarian `/id/opportunities/jobs/explore`, tautan lowongan
 Sekarang**, dan urutan **Baru Ditambahkan** untuk lowongan terbaru.
 
 ```bash
-python cli.py glints run                    # semua kata kunci di .env
+python cli.py glints simulasi                # uji alur tanpa Chrome (7 skenario)
+python cli.py glints run                     # semua kata kunci di .env
 python cli.py glints run --keywords "warehouse,PPIC" --max-pages 1
 python cli.py glints run --limit 10         # batasi 10 lamaran sesi ini
 python cli.py glints uji --url "https://glints.com/id/opportunities/jobs/admin-warehouse/b5f8d754-afd9-4f0c-a618-360afe12248c"
@@ -514,6 +515,7 @@ python buka_pencarian.py --locations "Bandung,Jakarta,Bekasi" --max-tabs 12
 | `notifier.py` | Notifikasi Telegram (opsional) |
 | `auto_apply.py` | Alur klik Lamar → Lanjutkan → Kirim + deteksi pengaman |
 | `glints.py` | Situs Glints: pencarian, kartu lowongan, dan pelamaran |
+| `simulasi_glints.py` | Simulasi alur lamaran Glints tanpa Chrome |
 | `buka_pencarian.py` | Pembuka tab pencarian tanpa Selenium |
 | `jalankan.bat` / `jalankan.sh` | Skrip bantu: siapkan `.venv`, pasang dependensi, jalankan CLI |
 | `tests/` | Unit test untuk filter dan database |

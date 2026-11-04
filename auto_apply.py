@@ -407,6 +407,7 @@ class ApplyResult:
 class AutoApplier:
     # Situs yang dilayani (ditimpa subclass untuk situs lain, mis. Glints).
     situs_host = JOBSTREET_DOMAIN
+    nama_situs = "JobStreet"
 
     # Daftar selector/teks diambil dari konstanta modul agar subclass bisa
     # menggantinya tanpa menyentuh logika alur.
@@ -616,6 +617,7 @@ class AutoApplier:
                 f"Job: {job.get('title') or '-'}\n"
                 f"Modal: {self._teks_modal()[:300]}\n"
                 f"Galat server: {self._galat_situs() or '-'}\n"
+                f"Cuplikan halaman: {self._body_text()[:400]}\n"
                 f"Tombol terlihat: {tombol}\n",
                 encoding="utf-8",
             )
@@ -1191,7 +1193,7 @@ class AutoApplier:
                 return ApplyResult(
                     False,
                     "login_required",
-                    "Sesi login JobStreet sudah habis",
+                    f"Sesi login {self.nama_situs} sudah habis",
                 )
 
             if self._is_external_page():
@@ -1206,7 +1208,8 @@ class AutoApplier:
                 return ApplyResult(
                     False,
                     "already_applied",
-                    "JobStreet menandai lowongan ini sudah pernah dilamar",
+                    f"{self.nama_situs} menandai lowongan ini sudah "
+                    "pernah dilamar",
                 )
 
             alasan = self._alasan_lewati()
@@ -1337,8 +1340,9 @@ class AutoApplier:
                             sudah_klik_kirim = False
                             deadline = time.time() + self.submit_timeout
                             console.print(
-                                f'[dim]   JobStreet: "{galat_situs}" — '
-                                "halaman dimuat ulang, coba kirim sekali lagi[/]"
+                                f'[dim]   {self.nama_situs}: "{galat_situs}"'
+                                " — halaman dimuat ulang, coba kirim sekali "
+                                "lagi[/]"
                             )
                             continue
 
@@ -1346,7 +1350,8 @@ class AutoApplier:
                         return ApplyResult(
                             False,
                             "manual_required",
-                            f'JobStreet menolak kirim: "{galat_situs}" '
+                            f'{self.nama_situs} menolak kirim: '
+                            f'"{galat_situs}" '
                             f"(dicoba {percobaan_kirim}x, halaman dimuat "
                             "ulang) — dilewati",
                         )
@@ -1383,7 +1388,8 @@ class AutoApplier:
                         return ApplyResult(
                             False,
                             "manual_required",
-                            f'Halaman review menampilkan galat JobStreet: '
+                            f"Halaman review menampilkan galat "
+                            f"{self.nama_situs}: "
                             f'"{galat_situs}" — dilewati',
                         )
 
@@ -1468,7 +1474,8 @@ class AutoApplier:
                     return ApplyResult(
                         False,
                         "manual_required",
-                        f'JobStreet: "{galat_situs}" setelah Kirim diklik '
+                        f'{self.nama_situs}: "{galat_situs}" setelah '
+                        "Kirim diklik "
                         f"{percobaan_kirim}x — dilewati "
                         "(periksa riwayat lamaran)",
                     )
@@ -1477,7 +1484,7 @@ class AutoApplier:
                     "manual_required",
                     "Tombol Kirim sudah diklik, tetapi konfirmasi tidak "
                     f"muncul dalam {self.submit_timeout} detik "
-                    "(periksa riwayat lamaran di JobStreet)",
+                    f"(periksa riwayat lamaran di {self.nama_situs})",
                 )
 
             if review_page:

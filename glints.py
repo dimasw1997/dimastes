@@ -138,7 +138,8 @@ tautan.forEach(function (a) {
     );
     if (!cocok) { return; }
     const url = (a.href || "").split("?")[0];
-    if (terlihat.has(url)) { return; }
+    const id = cocok[0].split("/").pop();
+    if (terlihat.has(id)) { return; }
     const judul = (a.textContent || "").replace(/\s+/g, " ").trim();
     if (judul.length < 3) { return; }
 
@@ -150,7 +151,9 @@ tautan.forEach(function (a) {
         if (wadah.querySelector("a[href*='/companies/']")) { break; }
     }
 
-    const teks = wadah ? (wadah.innerText || "") : "";
+    const teks = wadah
+        ? (wadah.innerText || wadah.textContent || "")
+        : "";
     const perusahaan = wadah
         ? wadah.querySelector("a[href*='/companies/']")
         : null;
@@ -161,7 +164,7 @@ tautan.forEach(function (a) {
         /Rp\s?[\d.,]+(?:\s?(-|–)\s?[\d.,]+)?\s?(jt|juta|rb|ribu)?/i;
     const gaji = (teks.match(polaGaji) || [""])[0];
 
-    terlihat.add(url);
+    terlihat.add(id);
     hasil.push({
         url: url,
         title: judul,
@@ -280,6 +283,7 @@ class GlintsApplier(AutoApplier):
     """AutoApplier yang mengenali tombol serta teks khas Glints."""
 
     situs_host = DOMAIN
+    nama_situs = "Glints"
 
     apply_selectors = (
         "button[data-testid='apply-button']",
