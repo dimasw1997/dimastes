@@ -75,9 +75,19 @@ SUDAH_DILAMAR_TEXTS = (
 
 # Glints punya lowongan yang hanya bisa dilamar lewat aplikasi mobile.
 KHUSUS_APLIKASI_TEXTS = (
+    "lamar 1x tap di aplikasi",
+    "1x tap di aplikasi",
+    "tap di aplikasi",
+    "lamar di aplikasi",
+    "hanya bisa dilamar di aplikasi",
+)
+
+# Badge ini juga muncul pada lowongan yang tetap bisa dilamar di web, jadi
+# TIDAK dipakai untuk melewati lowongan.
+BADGE_APLIKASI = (
     "lamar & chat di aplikasi",
     "lamar dan chat di aplikasi",
-    "hanya di aplikasi",
+    "chat di aplikasi",
 )
 
 # Teks yang menandakan lamaran benar-benar terkirim di Glints.
@@ -204,8 +214,19 @@ def rapikan_kartu(data: dict) -> Optional[Dict]:
         "age_days": None,
         "source": "glints",
         "sudah_dilamar": any(tanda in teks for tanda in SUDAH_DILAMAR_TEXTS),
+        "khusus_aplikasi": bool(khusus_aplikasi(teks)),
     }
 
+
+def khusus_aplikasi(teks: str) -> str:
+    """Penanda Glints yang ditemukan ('' bila lowongan bisa dilamar di web)."""
+    isi = " ".join(str(teks or "").lower().split())
+
+    for tanda in KHUSUS_APLIKASI_TEXTS:
+        if tanda in isi:
+            return tanda
+
+    return ""
 
 def lokasi_cocok(lokasi: str, daftar: List[str]) -> bool:
     """True bila teks lokasi kartu cocok dengan salah satu lokasi dicari."""
@@ -311,6 +332,32 @@ class GlintsApplier(AutoApplier):
         self.step_timeout = max(self.step_timeout, 12)
         self.submit_timeout = max(self.submit_timeout, 30)
 
+    # Label yang berarti CTA "buka aplikasi", bukan lamar di web.
+    _label_aplikasi = ("aplikasi", "app", "unduh", "download")
+
+    def _cari_tombol_lamar(self):
+        """Utamakan tombol berlabel tepat "Lamar", bukan "Lamar di aplikasi"."""
+        for selector in self.apply_selectors:
+            for element in self._find_all(selector):
+                if self._visible(element) and self._enabled(element):
+                    return element
+
+        for selector in ("button", "a", "[role='button']"):
+            for element in self._find_all(selector):
+                if not self._visible(element) or not self._enabled(element):
+                    continue
+
+                label = self._text(element)
+                if label not in ("lamar", "apply", "apply now", "lamar sekarang"):
+                    continue
+
+                if any(kata in label for kata in self._label_aplikasi):
+                    continue
+
+                return element
+
+        return None
+
     def _blocker(self) -> str:
         """Penghalang khas Glints (profil/CV/login) sebelum menyerah."""
         alasan = super()._blocker()
@@ -321,6 +368,14 @@ class GlintsApplier(AutoApplier):
         for tanda, pesan in PENGHALANG_GLINTS:
             if tanda in body:
                 return pesan
+
+        # Tombol Lamar di Glints kadang hanya mengarahkan ke aplikasi mobile.
+        tanda = khusus_aplikasi(f"{body} {self._teks_modal()}")
+        if tanda:
+            return (
+                "Lowongan Glints hanya bisa dilamar lewat aplikasi mobile "
+                f'(tertulis "{tanda}") — dilewati'
+            )
 
         return ""
 
@@ -344,13 +399,6 @@ class GlintsApplier(AutoApplier):
     def _alasan_lewati(self) -> str:
         """Lowongan Glints yang hanya bisa dilamar dari aplikasi mobile."""
         body = self._body_text()
-
-        for tanda in KHUSUS_APLIKASI_TEXTS:
-            if tanda in body:
-                return (
-                    "Lowongan Glints hanya bisa dilamar lewat aplikasi "
-                    "mobile — dilewati"
-                )
 
         if "halaman ini tidak tersedia" in body or "job not found" in body:
             return "Lowongan Glints tidak lagi tersedia — dilewati"
@@ -589,6 +637,7 @@ def jalankan_glints(max_pages: int = 0, keywords: Optional[List[str]] = None,
     laporan = {
         "dibaca": 0, "baru": 0, "dilamar": 0, "sudah": 0,
         "dilewati": 0, "gagal": 0, "perlu_manual": 0,
+        "khusus_aplikasi": 0,
     }
 
     try:
@@ -623,6 +672,17 @@ def jalankan_glints(max_pages: int = 0, keywords: Optional[List[str]] = None,
             if _batas_harian_tercapai():
                 console.print("[yellow]Batas lamaran harian tercapai.[/]")
                 break
+
+            if job.get("khusus_aplikasi"):
+                # Glints menandai lowongan "Lamar 1x tap di aplikasi"; tidak
+                # ada formulir web, jadi jangan buka halamannya sama sekali.
+                laporan["khusus_aplikasi"] += 1
+                laporan["dilewati"] += 1
+                console.print(
+                    f"[dim]Lewati: {job['title']} — hanya bisa dilamar lewat "
+                    "aplikasi Glints[/]"
+                )
+                continue
 
             if job.get("sudah_dilamar"):
                 laporan["sudah"] += 1

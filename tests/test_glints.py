@@ -3,6 +3,7 @@
 import pytest
 from selenium.common.exceptions import NoSuchElementException
 
+import auto_apply
 import glints
 from auto_apply import AutoApplier
 from glints import GlintsApplier, id_dari_url, lokasi_cocok, rapikan_kartu
@@ -66,7 +67,16 @@ URL_UJI = (
 
 @pytest.fixture(autouse=True)
 def tanpa_jeda(monkeypatch):
+    """Jangan benar-benar menunggu: waktu di mesin lamaran dibuat palsu."""
     monkeypatch.setattr(glints.time, "sleep", lambda *_: None)
+
+    jam = {"t": 100.0}
+    monkeypatch.setattr(auto_apply.time, "time", lambda: jam["t"])
+    monkeypatch.setattr(
+        auto_apply.time,
+        "sleep",
+        lambda detik=0: jam.__setitem__("t", jam["t"] + detik),
+    )
 
 
 # ----------------------------------------------------------------------
@@ -160,7 +170,7 @@ def test_auto_applier_bawaan_tetap_jobstreet():
 
 
 def test_lowongan_khusus_aplikasi_dilewati():
-    driver = Driver(body="LAMAR & CHAT DI APLIKASI")
+    driver = Driver(body="Lamar 1x tap di aplikasi")
     hasil = GlintsApplier(driver).apply({"url": URL_UJI, "title": "Warehouse"})
 
     assert hasil.applied is False
@@ -259,3 +269,85 @@ def test_chrome_tertutup_jadi_pesan_jelas():
 
     with pytest.raises(glints.ChromeTertutup):
         bot.lamar({"url": URL_UJI, "title": "Uji"})
+
+
+# ----------------------------------------------------------------------
+# Lowongan yang hanya bisa dilamar lewat aplikasi Glints
+# ----------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "teks, expected",
+    [
+        # Badge "Lamar & chat di aplikasi" juga muncul pada lowongan yang
+        # bisa dilamar di web, jadi BUKAN alasan melewati lowongan.
+        ("LAMAR & CHAT DI APLIKASI", ""),
+        ("Lamar 1x tap di aplikasi", "lamar 1x tap di aplikasi"),
+        ("1x tap di aplikasi", "1x tap di aplikasi"),
+        ("Lamar", ""),
+        ("", ""),
+    ],
+)
+def test_khusus_aplikasi(teks, expected):
+    assert glints.khusus_aplikasi(teks) == expected
+
+
+def test_kartu_menandai_lowongan_khusus_aplikasi():
+    job = rapikan_kartu(
+        {
+            "url": URL_UJI,
+            "title": "Admin Warehouse",
+            "text": "Admin Warehouse Rp 2-3jt Lamar 1x tap di aplikasi",
+        }
+    )
+
+    assert job["khusus_aplikasi"] is True
+
+
+def test_kartu_biasa_tidak_ditandai():
+    job = rapikan_kartu(
+        {
+            "url": URL_UJI,
+            "title": "Admin Warehouse",
+            "text": "Admin Warehouse Rp 5-6jt Lamar",
+        }
+    )
+
+    assert job["khusus_aplikasi"] is False
+
+
+def test_lowongan_hanya_aplikasi_dilewati(monkeypatch):
+    """Halaman yang hanya menawarkan lamar lewat aplikasi -> dilewati jelas."""
+    jam = {"t": 200.0}
+    monkeypatch.setattr(
+        auto_apply.time, "time", lambda: jam["t"]
+    )
+    monkeypatch.setattr(
+        auto_apply.time,
+        "sleep",
+        lambda detik=0: jam.__setitem__("t", jam["t"] + detik),
+    )
+
+    driver = Driver(body="Lamar 1x tap di aplikasi")
+    hasil = GlintsApplier(driver).apply({"url": URL_UJI, "title": "Warehouse"})
+
+    assert hasil.applied is False
+    assert "aplikasi mobile" in hasil.reason.lower()
+    assert "1x tap" in hasil.reason.lower()
+
+
+def test_tombol_lamar_dipilih_yang_persis():
+    """"Lamar 1x tap di aplikasi" bukan tombol lamar di web."""
+    driver = Driver()
+    aplikasi = Elemen(text="Lamar 1x tap di aplikasi")
+    biasa = Elemen(text="Lamar")
+    driver.elements = {"button": [aplikasi, biasa]}
+
+    tombol = GlintsApplier(driver)._cari_tombol_lamar()
+
+    assert tombol is biasa
+
+
+def test_tombol_lamar_hanya_aplikasi_tidak_dipilih():
+    driver = Driver()
+    driver.elements = {"button": [Elemen(text="Lamar 1x tap di aplikasi")]}
+
+    assert GlintsApplier(driver)._cari_tombol_lamar() is None

@@ -99,7 +99,8 @@ def jalankan_glints(max_pages: int = 0, keywords: str = "", batas: int = 0):
         f"{laporan['dibaca']} terbaca · {laporan['baru']} baru · "
         f"{laporan['dilamar']} terkirim · {laporan['sudah']} sudah dilamar · "
         f"{laporan['perlu_manual']} perlu manual · "
-        f"{laporan['dilewati']} dilewati · {laporan['gagal']} gagal"
+        f"{laporan['dilewati']} dilewati · {laporan['gagal']} gagal · "
+        f"{laporan['khusus_aplikasi']} hanya via aplikasi"
     )
 
 

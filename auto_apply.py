@@ -548,6 +548,10 @@ class AutoApplier:
         except Exception:
             return ""
 
+    def _cari_tombol_lamar(self):
+        """Tombol untuk masuk ke alur lamaran."""
+        return self._find_clickable(self.apply_selectors, self.apply_texts)
+
     def _pesan_alur_tidak_dikenali(self) -> str:
         """Pesan saat alur lamaran tidak bisa dilanjutkan otomatis."""
         return (
@@ -1217,22 +1221,22 @@ class AutoApplier:
                 )
 
             # Tunggu tombol Lamar muncul, maksimal sepanjang batas waktu.
-            apply_button = self._find_clickable(
-                self.apply_selectors, self.apply_texts
-            )
+            apply_button = self._cari_tombol_lamar()
             batas_tombol = time.time() + self.step_timeout
 
             while apply_button is None and time.time() < batas_tombol:
                 time.sleep(0.3)
-                apply_button = self._find_clickable(
-                    self.apply_selectors, self.apply_texts
-                )
+                apply_button = self._cari_tombol_lamar()
 
             if apply_button is None:
+                # Bisa jadi halaman memang tidak menawarkan lamar di web
+                # (mis. Glints "Lamar 1x tap di aplikasi").
+                alasan = self._blocker()
+
                 return ApplyResult(
                     False,
                     "manual_required",
-                    "Tombol Lamar tidak ditemukan di halaman",
+                    alasan or "Tombol Lamar tidak ditemukan di halaman",
                 )
 
             handles_before = set(self.driver.window_handles)
