@@ -443,6 +443,42 @@ menghentikannya (Ctrl+C). Untuk memasang batas lagi:
 python cli.py set-env MAX_APPLY_PER_DAY=100 AUTO_APPLY_MAX_PER_SESSION=50
 ```
 
+### Glints (glints.com)
+
+Versi Glints memakai mesin lamaran yang sama, tetapi dengan peta situsnya
+sendiri: pencarian `/id/opportunities/jobs/explore`, tautan lowongan
+`/id/opportunities/jobs/<slug>/<uuid>`, tombol **Lamar** lalu **Lamar
+Sekarang**, dan urutan **Baru Ditambahkan** untuk lowongan terbaru.
+
+```bash
+python cli.py glints run                    # semua kata kunci di .env
+python cli.py glints run --keywords "warehouse,PPIC" --max-pages 1
+python cli.py glints run --limit 10         # batasi 10 lamaran sesi ini
+python cli.py glints uji --url "https://glints.com/id/opportunities/jobs/admin-warehouse/b5f8d754-afd9-4f0c-a618-360afe12248c"
+```
+
+Lewat skrip bantu: `jalankan.bat glints run` (Windows) atau
+`./jalankan.sh glints run`.
+
+Yang dipakai bersama dengan versi JobStreet: `LOCATIONS`, `KEYWORDS`,
+`TITLE_KEYWORDS`, `EXCLUDE_KEYWORDS`, blacklist, `MIN_SALARY`, `COVER_LETTER`,
+`RESUME_PATH`, `DELAY_BETWEEN_APPLY`, `MAX_APPLY_PER_DAY`,
+`AUTO_APPLY_MAX_PER_SESSION`, dan folder `debug/`. Riwayat lamaran masuk ke
+database yang sama dengan awalan ID `glints:`, jadi lowongan yang sudah
+dilamar tidak akan dilamar dua kali.
+
+Perbedaan yang perlu diketahui:
+
+| Hal | JobStreet | Glints |
+| --- | --- | --- |
+| Filter lokasi | lewat pencarian situs | disaring dari teks lokasi kartu |
+| Urutan terbaru | parameter `sortmode=ListedDate` | klik tombol *Baru Ditambahkan* |
+| Umur lowongan | terbaca ("3 hari yang lalu") | tidak ditampilkan Glints |
+| Lowongan khusus HP | — | *"Lamar & chat di aplikasi"* dilewati otomatis |
+
+Karena Glints tidak menampilkan tanggal tayang di kartu, urutan "terbaru"
+mengandalkan urutan situs, bukan `MAX_AGE_DAYS`.
+
 ### Versi ringan tanpa Selenium
 
 ```bash
@@ -469,6 +505,7 @@ python buka_pencarian.py --locations "Bandung,Jakarta,Bekasi" --max-tabs 12
 | `cli.py` | Perintah `run`, `stats`, `history`, `config`, `repair`, `blacklist` |
 | `notifier.py` | Notifikasi Telegram (opsional) |
 | `auto_apply.py` | Alur klik Lamar → Lanjutkan → Kirim + deteksi pengaman |
+| `glints.py` | Situs Glints: pencarian, kartu lowongan, dan pelamaran |
 | `buka_pencarian.py` | Pembuka tab pencarian tanpa Selenium |
 | `jalankan.bat` / `jalankan.sh` | Skrip bantu: siapkan `.venv`, pasang dependensi, jalankan CLI |
 | `tests/` | Unit test untuk filter dan database |

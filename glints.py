@@ -1,0 +1,554 @@
+"""Pencarian dan pelamaran otomatis di Glints (glints.com).
+
+Modul ini memakai mesin yang sama dengan versi JobStreet (``auto_apply``),
+tetapi dengan peta situs Glints sendiri:
+
+* pencarian  : ``/id/opportunities/jobs/explore?keyword=...&countryCode=ID``
+* lowongan   : ``/id/opportunities/jobs/<slug>/<uuid>``
+* tombol     : "Lamar" lalu "Lamar Sekarang" di formulir lamaran
+* tombol urut: "Baru Ditambahkan" (setara *newest first*)
+
+Pengambilan kartu lowongan memakai satu skrip JavaScript yang membaca tautan
+lowongan, bukan nama kelas CSS (kelas Glints berubah-ubah). Dengan begitu
+perubahan tampilan tidak langsung mematahkan pembacaan.
+"""
+
+import contextlib
+import re
+import time
+from pathlib import Path
+from typing import Dict, List, Optional
+from urllib.parse import quote_plus
+
+from rich.console import Console
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+
+from auto_apply import ApplyResult, AutoApplier
+from config import config
+from database import db
+from job_filter import JobFilter
+from notifier import notifier
+
+console = Console()
+
+DOMAIN = "glints.com"
+BASE = "https://glints.com"
+SEARCH_URL = BASE + "/id/opportunities/jobs/explore?keyword={keyword}&countryCode=ID"
+LOGIN_URL = BASE + "/id/login"
+
+# Pola tautan lowongan Glints: /id/opportunities/jobs/<slug>/<uuid>
+TAUTAN_LOWONGAN = re.compile(
+    r"/opportunities/jobs/[^/?#]+/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"
+)
+
+# Teks tombol yang berarti "sudah pernah dilamar" pada kartu Glints.
+SUDAH_DILAMAR_TEXTS = (
+    "sudah dilamar",
+    "sudah melamar",
+    "lamaran terkirim",
+    "you applied",
+)
+
+# Glints punya lowongan yang hanya bisa dilamar lewat aplikasi mobile.
+KHUSUS_APLIKASI_TEXTS = (
+    "lamar & chat di aplikasi",
+    "lamar dan chat di aplikasi",
+    "hanya di aplikasi",
+)
+
+# Teks yang menandakan lamaran benar-benar terkirim di Glints.
+SUKSES_GLINTS = (
+    "lamaran berhasil dikirim",
+    "lamaran kamu berhasil dikirim",
+    "lamaran anda berhasil dikirim",
+    "lamaran berhasil",
+    "berhasil melamar",
+    "lamaran terkirim",
+    "lamaran kamu sudah terkirim",
+    "lamaran anda sudah terkirim",
+    "application submitted",
+    "application sent",
+    "you have successfully applied",
+)
+
+SIBUK_TEXTS = (
+    "sudah pernah melamar",
+    "kamu sudah melamar",
+    "anda sudah melamar",
+    "you have already applied",
+)
+
+# Skrip pembaca kartu. Dijalankan di halaman hasil pencarian Glints.
+SKRIP_KARTU = r"""
+const hasil = [];
+const terlihat = new Set();
+const tautan = document.querySelectorAll("a[href*='/opportunities/jobs/']");
+tautan.forEach(function (a) {
+    const cocok = (a.href || "").match(
+        /\/opportunities\/jobs\/[^\/?#]+\/[0-9a-fA-F-]{36}/
+    );
+    if (!cocok) { return; }
+    const url = (a.href || "").split("?")[0];
+    if (terlihat.has(url)) { return; }
+    const judul = (a.textContent || "").replace(/\s+/g, " ").trim();
+    if (judul.length < 3) { return; }
+
+    // Naik ke wadah yang memuat tautan perusahaan: struktur kartu Glints.
+    let wadah = a;
+    for (let i = 0; i < 8 && wadah; i += 1) {
+        wadah = wadah.parentElement;
+        if (!wadah) { break; }
+        if (wadah.querySelector("a[href*='/companies/']")) { break; }
+    }
+
+    const teks = wadah ? (wadah.innerText || "") : "";
+    const perusahaan = wadah
+        ? wadah.querySelector("a[href*='/companies/']")
+        : null;
+    const lokasi = wadah
+        ? Array.from(wadah.querySelectorAll("a[href*='/job-location/']"))
+        : [];
+    const polaGaji = /Rp\s?[\d.,]+\s?(-|–)\s?[\d.,]+\s?(jt|juta)?/i;
+    const gaji = (teks.match(polaGaji) || [""])[0];
+
+    terlihat.add(url);
+    hasil.push({
+        url: url,
+        title: judul,
+        company: perusahaan
+            ? (perusahaan.textContent || "").replace(/\s+/g, " ").trim()
+            : "",
+        location: lokasi
+            .map(function (x) { return (x.textContent || "").trim(); })
+            .join(", "),
+        salary: gaji,
+        text: teks.slice(0, 600)
+    });
+});
+return hasil;
+"""
+
+
+# ----------------------------------------------------------------------
+# Fungsi bantu (murni, mudah diuji)
+# ----------------------------------------------------------------------
+def id_dari_url(url: str) -> str:
+    """UUID lowongan Glints dari URL; "" bila bukan URL lowongan."""
+    cocok = TAUTAN_LOWONGAN.search(url or "")
+    return cocok.group(1) if cocok else ""
+
+
+def rapikan_kartu(data: dict) -> Optional[Dict]:
+    """Ubah hasil skrip kartu menjadi dict lowongan; None bila tidak layak."""
+    if not isinstance(data, dict):
+        return None
+
+    url = str(data.get("url") or "").strip()
+    job_id = id_dari_url(url)
+    judul = " ".join(str(data.get("title") or "").split())
+
+    if not job_id or not judul:
+        return None
+
+    teks = " ".join(str(data.get("text") or "").split()).lower()
+
+    return {
+        "job_id": f"glints:{job_id}",
+        "title": judul,
+        "company": " ".join(str(data.get("company") or "").split()),
+        "location": " ".join(str(data.get("location") or "").split()),
+        "salary": " ".join(str(data.get("salary") or "").split()),
+        "description": " ".join(str(data.get("text") or "").split())[:800],
+        "url": url,
+        "date_posted": "",
+        "age_days": None,
+        "source": "glints",
+        "sudah_dilamar": any(tanda in teks for tanda in SUDAH_DILAMAR_TEXTS),
+    }
+
+
+def lokasi_cocok(lokasi: str, daftar: List[str]) -> bool:
+    """True bila teks lokasi kartu cocok dengan salah satu lokasi dicari."""
+    if not daftar:
+        return True
+
+    teks = " ".join((lokasi or "").lower().split())
+    if not teks:
+        # Tanpa info lokasi, jangan langsung dibuang: biarkan filter lain.
+        return True
+
+    return any(item.lower().strip() in teks for item in daftar if item.strip())
+
+
+# ----------------------------------------------------------------------
+# Pelamar: mesin auto_apply dengan peta Glints
+# ----------------------------------------------------------------------
+class GlintsApplier(AutoApplier):
+    """AutoApplier yang mengenali tombol serta teks khas Glints."""
+
+    situs_host = DOMAIN
+
+    apply_selectors = (
+        "button[data-testid='apply-button']",
+        "a[data-testid='apply-button']",
+        "button[aria-label*='Lamar']",
+    )
+    apply_texts = ("lamar", "apply now", "apply")
+
+    submit_selectors = (
+        "button[data-testid='submit-application']",
+        "button[type='submit']",
+    )
+    submit_texts = (
+        "lamar sekarang",
+        "kirim lamaran",
+        "kirim aplikasi",
+        "submit application",
+        "apply now",
+    )
+
+    continue_selectors = ("button[data-testid='continue-application']",)
+    continue_texts = (
+        "lanjutkan",
+        "lanjut",
+        "continue",
+        "berikutnya",
+        "selanjutnya",
+        "next",
+    )
+
+    success_texts = SUKSES_GLINTS
+    already_texts = SIBUK_TEXTS
+
+    def _alasan_lewati(self) -> str:
+        """Lowongan Glints yang hanya bisa dilamar dari aplikasi mobile."""
+        body = self._body_text()
+
+        for tanda in KHUSUS_APLIKASI_TEXTS:
+            if tanda in body:
+                return (
+                    "Lowongan Glints hanya bisa dilamar lewat aplikasi "
+                    "mobile — dilewati"
+                )
+
+        if "halaman ini tidak tersedia" in body or "job not found" in body:
+            return "Lowongan Glints tidak lagi tersedia — dilewati"
+
+        return ""
+
+
+# ----------------------------------------------------------------------
+# Peramban Glints
+# ----------------------------------------------------------------------
+class GlintsBot:
+    def __init__(self):
+        self.driver = None
+        self.filters = JobFilter()
+
+    # ------------------------------ browser ---------------------------
+    def init_browser(self):
+        console.print("[bold blue]Membuka Chrome untuk Glints...[/]")
+
+        options = Options()
+        options.add_argument("--window-size=1400,900")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+
+        if config.use_profile:
+            profile_path = Path(config.profile_dir).expanduser()
+            with contextlib.suppress(Exception):
+                profile_path.mkdir(parents=True, exist_ok=True)
+                options.add_argument(f"--user-data-dir={profile_path}")
+                options.add_argument("--profile-directory=Default")
+
+        if config.headless:
+            options.add_argument("--headless=new")
+            options.add_argument("--disable-gpu")
+        else:
+            options.add_argument("--start-maximized")
+
+        try:
+            self.driver = webdriver.Chrome(options=options)
+        except Exception as pertama:
+            console.print(
+                f"[yellow]ChromeDriver otomatis gagal ({pertama}). "
+                "Mencoba webdriver-manager...[/]"
+            )
+            from webdriver_manager.chrome import ChromeDriverManager
+
+            service = Service(ChromeDriverManager().install())
+            self.driver = webdriver.Chrome(service=service, options=options)
+
+    def _teks_halaman(self) -> str:
+        try:
+            body = self.driver.find_element(By.TAG_NAME, "body")
+            return " ".join((body.text or "").split()).lower()
+        except Exception:
+            return ""
+
+    def _url(self) -> str:
+        try:
+            return str(self.driver.current_url or "")
+        except Exception:
+            return ""
+
+    # ------------------------------- login ----------------------------
+    def sudah_login(self) -> bool:
+        """Tebakan login: halaman bukan /login dan tidak ada tombol Masuk."""
+        url = self._url().lower()
+        if "/login" in url or "/signup" in url:
+            return False
+
+        teks = self._teks_halaman()
+        if not teks:
+            return False
+
+        # Tombol "Masuk" di header hanya ada saat belum login.
+        return not (
+            "masuk untuk" in teks
+            or "login untuk" in teks
+            or "masuk ke glints" in teks
+        )
+
+    def login(self) -> bool:
+        """Buka halaman login dan tunggu pengguna menyelesaikannya sendiri."""
+        self.driver.get(LOGIN_URL)
+        time.sleep(2)
+
+        if self.sudah_login():
+            console.print("[green]Sesi Glints sudah aktif.[/]")
+            return True
+
+        console.print(
+            "[yellow]Silakan login di Chrome (jendela yang terbuka). "
+            "Program menunggu otomatis — tidak perlu menekan apa pun.[/]"
+        )
+
+        batas = time.time() + (600 if config.login_wait else 30)
+        while time.time() < batas:
+            time.sleep(2)
+            if "/login" not in self._url().lower() and self.sudah_login():
+                console.print("[green]Login Glints terdeteksi.[/]")
+                return True
+
+        return False
+
+    # ----------------------------- pencarian --------------------------
+    def buka_pencarian(self, keyword: str) -> bool:
+        url = SEARCH_URL.format(keyword=quote_plus(keyword))
+        self.driver.get(url)
+        time.sleep(2.5)
+
+        teks = self._teks_halaman()
+        if "masuk" in teks and "lowongan" not in teks:
+            console.print("[yellow]Halaman Glints meminta login.[/]")
+            return False
+
+        return True
+
+    def urutkan_terbaru(self) -> bool:
+        """Klik tombol urut "Baru Ditambahkan" bila ada."""
+        kandidat = "button, a, div[role='button']"
+        for element in self.driver.find_elements(By.CSS_SELECTOR, kandidat):
+            with contextlib.suppress(Exception):
+                label = " ".join((element.text or "").split()).lower()
+                if label in ("baru ditambahkan", "terbaru", "newest"):
+                    element.click()
+                    time.sleep(2)
+                    return True
+        return False
+
+    def muat_lebih(self) -> bool:
+        """Klik "Muat lebih banyak" / "Lihat lebih banyak" bila tersedia."""
+        for element in self.driver.find_elements(By.CSS_SELECTOR, "button, a"):
+            with contextlib.suppress(Exception):
+                label = " ".join((element.text or "").split()).lower()
+                if label in (
+                    "muat lebih banyak",
+                    "lihat lebih banyak",
+                    "tampilkan lebih banyak",
+                    "load more",
+                    "show more",
+                ):
+                    element.click()
+                    time.sleep(2)
+                    return True
+        return False
+
+    def _kartu_mentah(self) -> list:
+        try:
+            hasil = self.driver.execute_script(SKRIP_KARTU)
+        except Exception:
+            return []
+
+        return hasil if isinstance(hasil, list) else []
+
+    def cari(self, keyword: str, halaman: int = 0) -> List[Dict]:
+        """Kembalikan daftar lowongan Glints untuk satu kata kunci."""
+        if not self.buka_pencarian(keyword):
+            return []
+
+        if halaman == 0 and config.prefer_newest:
+            self.urutkan_terbaru()
+
+        for _ in range(halaman):
+            if not self.muat_lebih():
+                # Tidak ada tombol: gulir untuk memicu pemuatan malas.
+                with contextlib.suppress(Exception):
+                    self.driver.execute_script(
+                        "window.scrollTo(0, document.body.scrollHeight);"
+                    )
+                    time.sleep(2)
+                break
+
+        lowongan = []
+        sudah_ada = set()
+
+        for mentah in self._kartu_mentah():
+            job = rapikan_kartu(mentah)
+            if not job or job["job_id"] in sudah_ada:
+                continue
+            sudah_ada.add(job["job_id"])
+            lowongan.append(job)
+
+        return lowongan
+
+    # ------------------------------ lamar -----------------------------
+    def lamar(self, job: dict) -> ApplyResult:
+        return GlintsApplier(self.driver).apply(job)
+
+    def tutup(self):
+        with contextlib.suppress(Exception):
+            self.driver.quit()
+
+
+# ----------------------------------------------------------------------
+# Alur utama
+# ----------------------------------------------------------------------
+def _batas_harian_tercapai() -> bool:
+    batas = int(getattr(config, "max_apply_per_day", 0) or 0)
+    if batas <= 0:
+        return False
+    return db.get_today_apply_count() >= batas
+
+
+def jalankan_glints(max_pages: int = 0, keywords: Optional[List[str]] = None,
+                    batas: int = 0) -> dict:
+    """Cari, saring, lalu lamar lowongan Glints secara otomatis."""
+    kata_kunci = list(keywords or config.keywords)
+    halaman = max_pages or config.max_pages
+
+    bot = GlintsBot()
+    laporan = {
+        "dibaca": 0, "baru": 0, "dilamar": 0, "sudah": 0,
+        "dilewati": 0, "gagal": 0, "perlu_manual": 0,
+    }
+
+    try:
+        bot.init_browser()
+
+        if not bot.login():
+            console.print("[red]Login Glints belum selesai — dihentikan.[/]")
+            return laporan
+
+        lowongan: List[Dict] = []
+        terlihat = set()
+
+        for keyword in kata_kunci:
+            for nomor in range(halaman):
+                console.print(
+                    f"[cyan]Glints: '{keyword}' halaman {nomor + 1}[/]"
+                )
+                for job in bot.cari(keyword, nomor):
+                    if job["job_id"] in terlihat:
+                        continue
+                    terlihat.add(job["job_id"])
+                    lowongan.append(job)
+
+        # Mulai dari lowongan yang tampil paling atas (urut "Baru Ditambahkan").
+        laporan["dibaca"] = len(lowongan)
+        console.print(f"[bold]Terbaca {len(lowongan)} lowongan Glints.[/]")
+
+        for job in lowongan:
+            if batas and laporan["dilamar"] >= batas:
+                console.print("[yellow]Batas lamaran sesi ini tercapai.[/]")
+                break
+            if _batas_harian_tercapai():
+                console.print("[yellow]Batas lamaran harian tercapai.[/]")
+                break
+
+            if job.get("sudah_dilamar"):
+                laporan["sudah"] += 1
+                console.print(f"[dim]Lewati: {job['title']} — sudah dilamar[/]")
+                continue
+
+            if not lokasi_cocok(job.get("location", ""), config.locations):
+                laporan["dilewati"] += 1
+                console.print(
+                    f"[dim]Lewati: {job['title']} — lokasi {job['location']}[/]"
+                )
+                continue
+
+            lolos, alasan = bot.filters.should_apply(job)
+            if not lolos:
+                laporan["dilewati"] += 1
+                console.print(f"[dim]Lewati: {job['title']} — {alasan}[/]")
+                continue
+
+            if db.add_job(job):
+                laporan["baru"] += 1
+
+            hasil = bot.lamar(job)
+
+            if hasil.applied:
+                laporan["dilamar"] += 1
+                db.record_application(
+                    job["job_id"], "applied", hasil.reason
+                )
+                notifier.send_apply_success(job)
+                console.print(f"[green]Terkirim: {job['title']}[/]")
+            elif hasil.status == "already_applied":
+                laporan["sudah"] += 1
+                db.record_application(
+                    job["job_id"], "already_applied", hasil.reason
+                )
+            elif hasil.status == "manual_required":
+                laporan["perlu_manual"] += 1
+                db.record_application(
+                    job["job_id"], "manual_required", hasil.reason
+                )
+                console.print(f"[yellow]Perlu manual: {job['title']}[/]")
+            else:
+                laporan["gagal"] += 1
+                db.record_application(job["job_id"], hasil.status, hasil.reason)
+                console.print(f"[red]Gagal: {job['title']} — {hasil.reason}[/]")
+
+            time.sleep(max(0.0, float(config.delay_between_apply or 0)))
+    finally:
+        bot.tutup()
+
+    return laporan
+
+
+def uji_glints(url: str) -> ApplyResult:
+    """Uji alur lamaran pada satu lowongan Glints (tanpa pencarian)."""
+    if not id_dari_url(url):
+        return ApplyResult(False, "error", "URL bukan halaman lowongan Glints")
+
+    bot = GlintsBot()
+    try:
+        bot.init_browser()
+        if not bot.login():
+            return ApplyResult(False, "login_required", "Login Glints belum selesai")
+
+        job = {
+            "job_id": f"glints:{id_dari_url(url)}",
+            "title": "uji-lamar",
+            "url": url,
+        }
+        return bot.lamar(job)
+    finally:
+        bot.tutup()

@@ -405,6 +405,21 @@ class ApplyResult:
 
 
 class AutoApplier:
+    # Situs yang dilayani (ditimpa subclass untuk situs lain, mis. Glints).
+    situs_host = JOBSTREET_DOMAIN
+
+    # Daftar selector/teks diambil dari konstanta modul agar subclass bisa
+    # menggantinya tanpa menyentuh logika alur.
+    apply_selectors = APPLY_SELECTORS
+    apply_texts = APPLY_TEXTS
+    submit_selectors = SUBMIT_SELECTORS
+    submit_texts = SUBMIT_TEXTS
+    continue_selectors = CONTINUE_SELECTORS
+    continue_texts = CONTINUE_TEXTS
+    success_texts = SUCCESS_TEXTS
+    already_texts = ALREADY_TEXTS
+    galat_situs_texts = GALAT_SITUS_TEXTS
+
     def __init__(self, driver, wait=None):
         self.driver = driver
         self.wait = wait
@@ -506,10 +521,9 @@ class AutoApplier:
                     return True
 
         body = self._body_text()
-        return any(text in body for text in ALREADY_TEXTS)
+        return any(text in body for text in self.already_texts)
 
-    @staticmethod
-    def _is_jobstreet_url(url: str) -> bool:
+    def _is_situs_url(self, url: str) -> bool:
         try:
             host = (urlparse(url or "").netloc or "").lower()
         except Exception:
@@ -518,7 +532,7 @@ class AutoApplier:
         if not host:
             return True
 
-        return JOBSTREET_DOMAIN in host
+        return self.situs_host in host
 
     def _is_external_page(self) -> bool:
         try:
@@ -526,13 +540,21 @@ class AutoApplier:
         except Exception:
             return False
 
-        return bool(url) and not self._is_jobstreet_url(url)
+        return bool(url) and not self._is_situs_url(url)
 
     def _external_host(self) -> str:
         try:
             return (urlparse(self.driver.current_url or "").netloc or "").lower()
         except Exception:
             return ""
+
+    def _alasan_lewati(self) -> str:
+        """Alasan lowongan harus dilewati sebelum menekan Lamar.
+
+        Subclass situs lain (mis. Glints) bisa menimpa: lowongan yang hanya
+        bisa dilamar lewat aplikasi mobile tidak mungkin diproses di sini.
+        """
+        return ""
 
     def _is_review_page(self) -> bool:
         """Halaman terakhir "Review and submit"."""
@@ -600,7 +622,7 @@ class AutoApplier:
 
     def _find_submit_button(self, review_page: bool = False):
         """Cari tombol kirim. Di halaman review, cakupannya lebih luas."""
-        button = self._find_clickable(SUBMIT_SELECTORS, SUBMIT_TEXTS)
+        button = self._find_clickable(self.submit_selectors, self.submit_texts)
         if button is not None:
             return button
 
@@ -674,11 +696,11 @@ class AutoApplier:
             return True
 
         body = self._body_text()
-        if any(text in body for text in SUCCESS_TEXTS):
+        if any(text in body for text in self.success_texts):
             return True
 
         modal = self._teks_modal()
-        return any(text in modal for text in SUCCESS_TEXTS)
+        return any(text in modal for text in self.success_texts)
 
     def _autofill(self) -> bool:
         """Isi cover letter dan unggah CV bila formulir memintanya.
@@ -1009,7 +1031,7 @@ class AutoApplier:
         """Banner galat server JobStreet ('' bila tidak ada)."""
         gabungan = f"{self._body_text()} {self._teks_modal()}"
 
-        for tanda in GALAT_SITUS_TEXTS:
+        for tanda in self.galat_situs_texts:
             if tanda in gabungan:
                 return tanda
 
@@ -1119,7 +1141,7 @@ class AutoApplier:
         except Exception:
             return "Gagal berpindah ke tab lamaran"
 
-        if self._is_jobstreet_url(url):
+        if self._is_situs_url(url):
             return ""
 
         # Simpan domain sebelum tab ditutup, agar pesannya tetap benar.
@@ -1176,6 +1198,10 @@ class AutoApplier:
                     "JobStreet menandai lowongan ini sudah pernah dilamar",
                 )
 
+            alasan = self._alasan_lewati()
+            if alasan:
+                return ApplyResult(False, "manual_required", alasan)
+
             if self._external_button_present():
                 return ApplyResult(
                     False,
@@ -1184,13 +1210,15 @@ class AutoApplier:
                 )
 
             # Tunggu tombol Lamar muncul, maksimal sepanjang batas waktu.
-            apply_button = self._find_clickable(APPLY_SELECTORS, APPLY_TEXTS)
+            apply_button = self._find_clickable(
+                self.apply_selectors, self.apply_texts
+            )
             batas_tombol = time.time() + self.step_timeout
 
             while apply_button is None and time.time() < batas_tombol:
                 time.sleep(0.3)
                 apply_button = self._find_clickable(
-                    APPLY_SELECTORS, APPLY_TEXTS
+                    self.apply_selectors, self.apply_texts
                 )
 
             if apply_button is None:
@@ -1384,7 +1412,7 @@ class AutoApplier:
                         continue
 
                 continue_button = self._find_clickable(
-                    CONTINUE_SELECTORS, CONTINUE_TEXTS
+                    self.continue_selectors, self.continue_texts
                 )
                 if continue_button is not None:
                     jejak = (

@@ -74,6 +74,48 @@ def uji_lamar(url: str):
         )
 
 
+def jalankan_glints(max_pages: int = 0, keywords: str = "", batas: int = 0):
+    """Cari, saring, lalu lamar lowongan di Glints."""
+    from glints import jalankan_glints as _jalankan
+
+    console.print(f"[cyan]Versi kode:[/] {versi_kode()}")
+    console.print("[cyan]Situs:[/] Glints (glints.com)")
+
+    daftar = [k.strip() for k in keywords.split(",") if k.strip()] or None
+    laporan = _jalankan(
+        max_pages=max(0, max_pages), keywords=daftar, batas=max(0, batas)
+    )
+
+    console.print()
+    console.print(
+        "[bold]Ringkasan Glints:[/] "
+        f"{laporan['dibaca']} terbaca · {laporan['baru']} baru · "
+        f"{laporan['dilamar']} terkirim · {laporan['sudah']} sudah dilamar · "
+        f"{laporan['perlu_manual']} perlu manual · "
+        f"{laporan['dilewati']} dilewati · {laporan['gagal']} gagal"
+    )
+
+
+def uji_glints(url: str):
+    """Uji alur lamaran pada satu lowongan Glints."""
+    from glints import uji_glints as _uji
+
+    console.print(f"[cyan]Versi kode:[/] {versi_kode()}")
+    console.print(f"[cyan]Lowongan uji:[/] {url}")
+
+    hasil = _uji(url)
+
+    warna = "green" if hasil.applied else "yellow"
+    console.print(f"\n[bold {warna}]Status:[/] {hasil.status} — {hasil.reason}")
+    if hasil.applied:
+        console.print("[bold green]Lamaran Glints terkirim otomatis.[/]")
+    else:
+        console.print(
+            "[dim]Bila perlu, kirim file di folder debug/ (png + txt) untuk "
+            "perbaikan selector.[/]"
+        )
+
+
 def perbarui_env():
     """Samakan KEYWORDS/TITLE_KEYWORDS di .env dengan daftar terbaru."""
     from pathlib import Path
@@ -371,6 +413,27 @@ if __name__ == "__main__":
         help="Satu atau beberapa KUNCI=nilai",
     )
 
+    glints_parser = subparsers.add_parser(
+        "glints", help="Cari & lamar lowongan di Glints"
+    )
+    glints_sub = glints_parser.add_subparsers(dest="glints_command")
+
+    glints_run = glints_sub.add_parser("run", help="Jalankan pencarian Glints")
+    glints_run.add_argument(
+        "--max-pages", type=int, default=0, help="Halaman per kata kunci (0=default)"
+    )
+    glints_run.add_argument(
+        "--keywords", default="", help="Kata kunci dipisah koma (0=bawaan .env)"
+    )
+    glints_run.add_argument(
+        "--limit", type=int, default=0, help="Batas lamaran sesi ini (0=tanpa batas)"
+    )
+
+    glints_uji = glints_sub.add_parser(
+        "uji", help="Uji alur lamaran satu lowongan Glints"
+    )
+    glints_uji.add_argument("--url", required=True, help="URL lowongan Glints")
+
     bl_parser = subparsers.add_parser("blacklist", help="Blacklist company")
     bl_parser.add_argument("company", help="Nama company")
     bl_parser.add_argument("--reason", default="", help="Alasan")
@@ -429,6 +492,13 @@ if __name__ == "__main__":
         show_applications(args.limit)
     elif args.command == "uji-lamar":
         uji_lamar(args.url)
+    elif args.command == "glints":
+        if args.glints_command == "run":
+            jalankan_glints(args.max_pages, args.keywords, args.limit)
+        elif args.glints_command == "uji":
+            uji_glints(args.url)
+        else:
+            glints_parser.print_help()
     elif args.command == "blacklist":
         blacklist_company(args.company, args.reason)
     else:
