@@ -310,10 +310,17 @@ class GlintsBot:
                 f"[yellow]ChromeDriver otomatis gagal ({pertama}). "
                 "Mencoba webdriver-manager...[/]"
             )
-            from webdriver_manager.chrome import ChromeDriverManager
+            try:
+                from webdriver_manager.chrome import ChromeDriverManager
 
-            service = Service(ChromeDriverManager().install())
-            self.driver = webdriver.Chrome(service=service, options=options)
+                service = Service(ChromeDriverManager().install())
+                self.driver = webdriver.Chrome(service=service, options=options)
+            except Exception as kedua:
+                raise RuntimeError(
+                    "Chrome tidak bisa dibuka. Pastikan Google Chrome "
+                    "terpasang dan komputer tersambung internet, lalu jalankan "
+                    f"ulang. Detail: {kedua}"
+                ) from pertama
 
     def _teks_halaman(self) -> str:
         try:

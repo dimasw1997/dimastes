@@ -82,9 +82,16 @@ def jalankan_glints(max_pages: int = 0, keywords: str = "", batas: int = 0):
     console.print("[cyan]Situs:[/] Glints (glints.com)")
 
     daftar = [k.strip() for k in keywords.split(",") if k.strip()] or None
-    laporan = _jalankan(
-        max_pages=max(0, max_pages), keywords=daftar, batas=max(0, batas)
-    )
+    try:
+        laporan = _jalankan(
+            max_pages=max(0, max_pages), keywords=daftar, batas=max(0, batas)
+        )
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Dihentikan oleh pengguna.[/]")
+        return
+    except Exception as exc:
+        console.print(f"[bold red]Gagal menjalankan Glints:[/] {exc}")
+        return
 
     console.print()
     console.print(
@@ -103,7 +110,11 @@ def uji_glints(url: str):
     console.print(f"[cyan]Versi kode:[/] {versi_kode()}")
     console.print(f"[cyan]Lowongan uji:[/] {url}")
 
-    hasil = _uji(url)
+    try:
+        hasil = _uji(url)
+    except Exception as exc:
+        console.print(f"[bold red]Gagal menguji lowongan:[/] {exc}")
+        return
 
     warna = "green" if hasil.applied else "yellow"
     console.print(f"\n[bold {warna}]Status:[/] {hasil.status} — {hasil.reason}")
