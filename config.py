@@ -181,6 +181,16 @@ class Config:
     # Jawab "Ya" untuk pertanyaan ya/tidak seputar kesediaan/pengalaman.
     # Pertanyaan ya/tidak lain tetap dilewati agar tidak mengarang jawaban.
     auto_answer_yes: bool = _bool_setting("AUTO_ANSWER_YES", True)
+    # Bidang pengalaman yang benar-benar Anda miliki. Pertanyaan pengalaman
+    # di luar daftar ini dijawab 0 / "belum ada pengalaman", bukan 3 tahun.
+    experience_roles: list[str] = field(default_factory=lambda: _list_setting(
+        "EXPERIENCE_ROLES",
+        "inventory,stock,stok,persediaan,gudang,warehouse,ppic,production,"
+        "produksi,material,perencanaan,planner,purchasing,procurement,"
+        "pembelian,supply chain,logistik,logistics,distribusi,distribution,"
+        "administrasi,admin,ekspor,impor,import,export,data,furniture,"
+        "furnitur,manufactur,project control,quality,audit",
+    ))
     education_level: str = os.getenv("EDUCATION_LEVEL", "S1").strip()
 
     base_url: str = "https://id.jobstreet.com"

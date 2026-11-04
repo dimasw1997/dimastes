@@ -68,6 +68,15 @@ SUCCESS_TEXTS = (
     "you have successfully applied",
     "successfully applied",
     "application sent",
+    "application has been sent",
+    "your application has been sent",
+    "application has been submitted",
+    "lamaran berhasil dikirim",
+    "berhasil melamar",
+    "lamaran kamu terkirim",
+    "thank you for applying",
+    "we have received your application",
+    "lamaran anda sudah kami terima",
 )
 
 ALREADY_TEXTS = (
@@ -275,7 +284,7 @@ def _pilih_gaji(opsi, target: float) -> str:
     return terbaik
 
 
-def _pilih_tahun(opsi, tahun: float) -> str:
+def _pilih_tahun(opsi, tahun: float, wajib_nol: bool = False) -> str:
     rentang = [(item, parse_tahun(item)) for item in opsi]
     rentang = [(item, nilai) for item, nilai in rentang if nilai]
 
@@ -285,6 +294,11 @@ def _pilih_tahun(opsi, tahun: float) -> str:
     for item, (bawah, atas) in rentang:
         if bawah <= tahun <= atas:
             return item
+
+    if wajib_nol:
+        # Tidak ada opsi yang menyatakan "belum berpengalaman": lebih baik
+        # lowongan dilewati daripada mengarang angka pengalaman.
+        return ""
 
     dibawah = [(item, nilai[1]) for item, nilai in rentang if nilai[1] <= tahun]
     if dibawah:
@@ -334,12 +348,15 @@ def pilih_jawaban(pertanyaan: str, opsi, cfg=None) -> str:
 
     if jenis == "pengalaman":
         teks = _norm(pertanyaan)
-        tahun = (
-            0.0
-            if any(kata in teks for kata in LEVEL_ATAS_KATA)
-            else float(getattr(cfg, "years_experience", 0) or 0)
-        )
-        return _pilih_tahun(opsi, tahun)
+        peran = getattr(cfg, "experience_roles", ()) or ()
+        cocok = any(_norm(kata) in teks for kata in peran if _norm(kata))
+
+        # Jabatan lebih tinggi (Kepala/Manager/Supervisor) atau bidang yang
+        # belum pernah dijalani tidak boleh diklaim "3 tahun".
+        nol = any(kata in teks for kata in LEVEL_ATAS_KATA) or not cocok
+
+        tahun = 0.0 if nol else float(getattr(cfg, "years_experience", 0) or 0)
+        return _pilih_tahun(opsi, tahun, wajib_nol=nol)
 
     return ""
 
@@ -534,8 +551,20 @@ class AutoApplier:
             except Exception:
                 url = ""
 
+            tombol = []
+            for selector in ("button", "a[role='button']", "[role='dialog']"):
+                for element in self._find_all(selector)[:25]:
+                    if not self._visible(element):
+                        continue
+                    label = self._raw_text(element)
+                    if label:
+                        tombol.append(label[:60])
+
             (dasar.with_suffix(".txt")).write_text(
-                f"URL: {url}\nJob: {job.get('title') or '-'}\n",
+                f"URL: {url}\n"
+                f"Job: {job.get('title') or '-'}\n"
+                f"Modal: {self._teks_modal()[:300]}\n"
+                f"Tombol terlihat: {tombol}\n",
                 encoding="utf-8",
             )
             (dasar.with_suffix(".html")).write_text(
@@ -596,17 +625,41 @@ class AutoApplier:
 
         return bool(self._find_all("input[type='password']"))
 
+    def _teks_modal(self) -> str:
+        """Teks dialog/modal yang tampil setelah klik Kirim."""
+        potongan = []
+        for selector in (
+            "[role='dialog']",
+            "[data-automation*='modal']",
+            "[data-automation*='confirmation']",
+        ):
+            for element in self._find_all(selector):
+                if not self._visible(element):
+                    continue
+                teks = self._raw_text(element)
+                if teks:
+                    potongan.append(teks)
+
+        return " ".join(potongan).lower()
+
     def _is_success(self) -> bool:
         try:
             url = (self.driver.current_url or "").lower()
         except Exception:
             url = ""
 
-        if "success" in url or "submitted" in url or "confirmation" in url:
+        if any(tanda in url for tanda in (
+            "success", "submitted", "confirmation", "my-application",
+            "application-submi",
+        )):
             return True
 
         body = self._body_text()
-        return any(text in body for text in SUCCESS_TEXTS)
+        if any(text in body for text in SUCCESS_TEXTS):
+            return True
+
+        modal = self._teks_modal()
+        return any(text in modal for text in SUCCESS_TEXTS)
 
     def _autofill(self) -> bool:
         """Isi cover letter dan unggah CV bila formulir memintanya.
@@ -1193,6 +1246,23 @@ class AutoApplier:
                             return ApplyResult(
                                 False, "manual_required", blocker
                             )
+
+                if sudah_klik_kirim:
+                    # Setelah Kirim ditekan, JobStreet bisa menolak karena
+                    # masih ada isian wajib. Berhenti, jangan klik berulang.
+                    galat = self._validation_error()
+                    if galat:
+                        rinci = pertanyaan_dari_galat(galat)
+                        console.print(
+                            f"[dim]   formulir menolak dikirim: {rinci}[/]"
+                        )
+                        self._dump_debug(job)
+                        return ApplyResult(
+                            False,
+                            "manual_required",
+                            "Formulir menolak dikirim karena isian wajib: "
+                            f"{rinci} — dilewati",
+                        )
 
                 submit_button = self._find_submit_button(review_page)
                 if submit_button is not None:

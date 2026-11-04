@@ -142,6 +142,7 @@ cp .env.example .env
 | `AUTO_ANSWER_QUESTIONS` | `true` | Jawab otomatis pertanyaan dropdown (pengalaman, gaji, pendidikan) |
 | `EXPECTED_SALARY` | `5000000` | Gaji yang diharapkan (kosong = pertanyaan gaji dilewati) |
 | `YEARS_EXPERIENCE` | `3` | Total pengalaman kerja (tahun) untuk pertanyaan pengalaman |
+| `EXPERIENCE_ROLES` | inventory, ppic, gudang, purchasing, ... | Bidang pengalaman Anda; di luar daftar ini dijawab 0 tahun |
 | `AUTO_ANSWER_YES` | `true` | Jawab **Ya** untuk pertanyaan ya/tidak seputar kesediaan/pengalaman |
 | `EDUCATION_LEVEL` | `S1` | Jenjang pendidikan untuk pertanyaan kualifikasi |
 | `AUTO_APPLY_SUBMIT_TIMEOUT` | `20` | Batas detik khusus halaman **Review and submit** (mengirim lamaran) |
@@ -200,7 +201,10 @@ Saat `run` berjalan:
 
 1. Chrome terbuka. Bila sesi belum ada, Anda login di Chrome — **tidak perlu
    menekan apa pun di terminal**, program mendeteksinya sendiri.
-2. Setiap lowongan yang lolos filter dibuka satu per satu.
+2. Setiap lowongan yang lolos filter dibuka satu per satu. Bila nama lokasi
+   tidak dikenali JobStreet (mis. *Jababeka* menghasilkan halaman kosong), bot
+   otomatis mencoba nama lain (*Cikarang*) dan melewati lokasi itu setelah 3
+   kata kunci tanpa hasil.
 3. Tinjau di browser. Setelah selesai, kembali ke terminal:
    - tekan **Enter** saja jika lamaran **tidak** dikirim (dicatat `skipped`);
    - ketik **y** jika lamaran benar-benar sudah dikirim (dicatat `applied`).
@@ -333,6 +337,7 @@ dari atribut `name` yang hanya berisi ID internal seperti
 | Gaji ("berapa gaji yang diharapkan?") | opsi/kolom terdekat dengan `EXPECTED_SALARY` |
 | Pengalaman pada jabatan yang pernah dipegang (staff, inventory controller, PPIC, planner) | opsi berisi `YEARS_EXPERIENCE`, atau angka itu pada kolom isian |
 | Pengalaman jabatan lebih tinggi (Kepala/Head/Manager/Supervisor) | 0 tahun / belum ada pengalaman |
+| Pengalaman di bidang di luar `EXPERIENCE_ROLES` (mis. *Pharmacist in Charge*, *Recruitment*) | 0 tahun / *No experience* — tidak diklaim 3 tahun |
 | Pendidikan/kualifikasi | opsi sesuai `EDUCATION_LEVEL` (mis. *Sarjana (S1)*) |
 | Ya/tidak seputar kesediaan atau pengalaman ("apakah kamu bersedia…", "have you…") | **Ya** (matikan dengan `AUTO_ANSWER_YES=false`) |
 | Pola lain | tidak ditebak — lowongan dilewati, alasannya ditulis apa adanya |

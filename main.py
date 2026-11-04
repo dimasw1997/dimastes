@@ -12,6 +12,14 @@ from scraper import JobStreetBot
 
 console = Console()
 
+# Nama lokasi yang tidak dikenali JobStreet -> nama lain yang hasilnya sama.
+# "Jababeka" sering menghasilkan halaman kosong; Cikarang adalah kawasan
+# industrinya dan hampir selalu punya hasil.
+ALIAS_PENCARIAN = {
+    "jababeka": "Cikarang",
+    "cikarang": "Bekasi",
+}
+
 
 class AutoApplyEngine:
     def __init__(self):
@@ -28,6 +36,8 @@ class AutoApplyEngine:
         }
         self.manual_jobs = []
         self.stop_requested = False
+        self.alias_lokasi = {}
+        self.gagal_lokasi = {}
 
     def run(self):
         self._print_banner()
@@ -166,6 +176,46 @@ class AutoApplyEngine:
 
         return eligible_jobs, len(jobs)
 
+    def _cari_dengan_alias(self, keyword: str, page: int, location: str):
+        """Cari satu halaman; bila lokasi tidak dikenali, coba aliasnya."""
+        lokasi = self.alias_lokasi.get(location, location)
+        eligible, terbaca = self._satu_halaman(keyword, page, lokasi)
+
+        if terbaca:
+            return eligible, terbaca
+
+        cadangan = ALIAS_PENCARIAN.get(location.strip().lower())
+
+        if cadangan and lokasi == location:
+            eligible, terbaca = self._satu_halaman(keyword, page, cadangan)
+            if terbaca:
+                self.alias_lokasi[location] = cadangan
+                console.print(
+                    f"[dim]Lokasi '{location}' tidak dikenali JobStreet; "
+                    f"memakai '{cadangan}'.[/]"
+                )
+
+        return eligible, terbaca
+
+    def _catat_lokasi(self, location: str, terbaca: int) -> bool:
+        """True bila lokasi sudah tidak layak dilanjutkan."""
+        if terbaca:
+            self.gagal_lokasi[location] = 0
+            return False
+
+        gagal = self.gagal_lokasi.get(location, 0) + 1
+        self.gagal_lokasi[location] = gagal
+
+        if gagal >= 3:
+            console.print(
+                f"[bold yellow]Lokasi '{location}' tidak memberi hasil di "
+                "3 kata kunci terakhir — dilewati. Coba nama lain di "
+                "LOCATIONS (mis. Cikarang, Bekasi).[/]"
+            )
+            return True
+
+        return False
+
     def _cari_keyword(self, keyword: str, location: str = "") -> list:
         """Cari & saring satu kata kunci (semua halaman)."""
         terkumpul = []
@@ -174,7 +224,9 @@ class AutoApplyEngine:
             if self._batas_harian_tercapai():
                 return terkumpul
 
-            eligible, terbaca = self._satu_halaman(keyword, page, location)
+            eligible, terbaca = self._cari_dengan_alias(
+                keyword, page, location
+            )
 
             if terbaca == 0:
                 break
@@ -285,9 +337,13 @@ class AutoApplyEngine:
         (lowongan paling baru), baru turun ke halaman 2 yang lebih lama.
         """
         selesai = set()
+        lokasi_mati = set()
 
         for page in range(1, config.max_pages + 1):
             for location in config.locations:
+                if location in lokasi_mati:
+                    continue
+
                 if page == 1:
                     console.print(f"\n[bold blue]{'#' * 60}[/]")
                     console.print(f"[bold blue]LOKASI: {location}[/]")
@@ -313,13 +369,18 @@ class AutoApplyEngine:
                         )
                         console.print(f"{'=' * 60}")
 
-                    eligible, terbaca = self._satu_halaman(
+                    eligible, terbaca = self._cari_dengan_alias(
                         keyword, page, location
                     )
 
                     if terbaca == 0:
                         selesai.add((keyword, location))
+                        if self._catat_lokasi(location, terbaca):
+                            lokasi_mati.add(location)
+                            break
                         continue
+
+                    self._catat_lokasi(location, terbaca)
 
                     if not eligible and page > 1 and config.sort_mode:
                         selesai.add((keyword, location))
@@ -331,8 +392,12 @@ class AutoApplyEngine:
     def _kumpulkan_lalu_lamar(self):
         """Kumpulkan semua kandidat, urutkan dari posting terbaru, lalu lamar."""
         kandidat = []
+        lokasi_mati = set()
 
         for location in config.locations:
+            if location in lokasi_mati:
+                continue
+
             console.print(f"\n[bold blue]{'#' * 60}[/]")
             console.print(f"[bold blue]LOKASI: {location}[/]")
             console.print(f"[bold blue]{'#' * 60}[/]")

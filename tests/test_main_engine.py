@@ -147,3 +147,44 @@ def test_lowongan_sama_tidak_dilamar_dua_kali(siapkan, monkeypatch):
     siapkan._streaming_halaman()
 
     assert siapkan.bot.dilamar == ["X"]
+
+
+def test_lokasi_tidak_dikenal_pakai_alias(siapkan, monkeypatch):
+    monkeypatch.setattr(config, "collect_before_apply", False)
+    monkeypatch.setattr(config, "locations", ["Jababeka"])
+
+    diminta = []
+
+    def cari(keyword, page=1, location=""):
+        diminta.append(location)
+        if location.lower() == "jababeka":
+            return []
+        return [lowongan("Z", 0)]
+
+    monkeypatch.setattr(siapkan.bot, "search_jobs", cari)
+
+    siapkan._streaming_halaman()
+
+    assert "Cikarang" in diminta
+    assert siapkan.bot.dilamar == ["Z"]
+
+
+def test_lokasi_kosong_dilewati_setelah_tiga_kata_kunci(siapkan, monkeypatch):
+    monkeypatch.setattr(config, "collect_before_apply", False)
+    monkeypatch.setattr(config, "locations", ["Jababeka"])
+    monkeypatch.setattr(config, "keywords", ["satu", "dua", "tiga", "empat"])
+    monkeypatch.setattr(config, "max_pages", 2)
+
+    diminta = []
+
+    def cari(keyword, page=1, location=""):
+        diminta.append(keyword)
+        return []
+
+    monkeypatch.setattr(siapkan.bot, "search_jobs", cari)
+
+    siapkan._streaming_halaman()
+
+    # Alias ikut dicoba, jadi tiap kata kunci bisa 2 permintaan; setelah 3
+    # kata kunci gagal, lokasi dihentikan (kata kunci keempat tidak dicari).
+    assert "empat" not in diminta

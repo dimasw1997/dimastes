@@ -751,3 +751,105 @@ def test_kolom_teks_gaji_diisi(monkeypatch):
     AutoApplier(driver).jawab_pertanyaan()
 
     assert kolom.get_attribute("value") == "5000000"
+
+
+def test_pengalaman_peran_lain_dijawab_nol(monkeypatch):
+    from types import SimpleNamespace
+
+    cfg = SimpleNamespace(
+        education_level="S1",
+        expected_salary="5000000",
+        years_experience=3.0,
+        experience_roles=["inventory", "ppic", "warehouse"],
+        auto_answer_yes=True,
+    )
+
+    opsi = ["No experience", "1 year", "3 years", "5 years"]
+
+    # Peran yang tidak pernah dijalani: jangan klaim 3 tahun.
+    assert auto_apply.pilih_jawaban(
+        "How many years' experience do you have as a Pharmacist in Charge?",
+        opsi,
+        cfg,
+    ) == "No experience"
+
+    # Peran yang sesuai pengalaman: 3 tahun.
+    assert auto_apply.pilih_jawaban(
+        "How many years' experience do you have as an Inventory Controller?",
+        opsi,
+        cfg,
+    ) == "3 years"
+
+
+def test_pengalaman_peran_lain_tanpa_opsi_nol_dilewati(monkeypatch):
+    from types import SimpleNamespace
+
+    cfg = SimpleNamespace(
+        education_level="S1",
+        expected_salary="5000000",
+        years_experience=3.0,
+        experience_roles=["inventory"],
+        auto_answer_yes=True,
+    )
+
+    assert auto_apply.pilih_jawaban(
+        "Berapa tahun pengalaman kerjamu sebagai perawat?",
+        ["1 tahun", "3 tahun"],
+        cfg,
+    ) == ""
+
+
+def test_sukses_terdeteksi_dari_modal():
+    driver = FakeDriver(body="")
+    driver.current_url = "https://id.jobstreet.com/job/1/apply"
+    driver.elements = {
+        "[role='dialog']": [FakeElement(text="Your application has been sent")]
+    }
+
+    assert AutoApplier(driver)._is_success() is True
+
+
+def test_sukses_terdeteksi_dari_url():
+    driver = FakeDriver(body="")
+    driver.current_url = "https://id.jobstreet.com/my-application?success=1"
+
+    assert AutoApplier(driver)._is_success() is True
+
+
+def test_setelah_kirim_ditolak_validasi_berhenti(monkeypatch):
+    monkeypatch.setattr(auto_apply, "Select", FakeSelect)
+    jam = {"t": 100.0}
+    monkeypatch.setattr(auto_apply.time, "time", lambda: jam["t"])
+    monkeypatch.setattr(
+        auto_apply.time,
+        "sleep",
+        lambda detik=0: jam.__setitem__("t", jam["t"] + detik),
+    )
+
+    driver = FakeDriver()
+
+    jumlah = {"klik": 0}
+
+    def kirim():
+        jumlah["klik"] += 1
+        driver.body = (
+            "Before you can continue with the application, please address "
+            "the following issues: what's your expected monthly salary? - "
+            "please make a selection"
+        )
+
+    def ke_review():
+        driver.current_url = "https://id.jobstreet.com/job/1/apply/review"
+
+    driver.elements = {
+        APPLY_SELECTORS[0]: [FakeElement(text="Lamar", on_click=ke_review)],
+        "button[type='submit']": [
+            FakeElement(text="Submit application", on_click=kirim)
+        ],
+    }
+
+    hasil = AutoApplier(driver).apply({"url": "https://id.jobstreet.com/job/1"})
+
+    assert hasil.applied is False
+    assert "isian wajib" in hasil.reason.lower()
+    assert jumlah["klik"] == 1
