@@ -247,6 +247,42 @@ Saat `run` berjalan:
    - tekan **Enter** saja jika lamaran **tidak** dikirim (dicatat `skipped`);
    - ketik **y** jika lamaran benar-benar sudah dikirim (dicatat `applied`).
 
+### Update otomatis ke GitHub setiap ada perubahan
+
+Kalau tidak ingin mengetik perintah, jalankan pemantau di latar belakang:
+
+```bash
+pantau.bat          # Windows, periksa tiap 60 detik
+pantau.bat 30       # periksa tiap 30 detik
+./pantau.sh         # macOS/Linux
+```
+
+Setiap kali ada file yang berubah, `pantau.bat` memanggil `simpan.bat`
+(`git add -A` → commit → tarik → push) lalu kembali memantau. Berhentikan
+dengan `Ctrl+C`. File `.env`, `jobstreet_auto.db`, dan `debug/` tetap tidak
+pernah ikut terkirim karena ada di `.gitignore`.
+
+Supaya berjalan sendiri setiap menyalakan komputer:
+
+1. Tekan `Win+R`, ketik `shell:startup`, tekan Enter.
+2. Klik kanan di folder yang terbuka → **New** → **Shortcut**.
+3. Isi lokasi target dengan:
+   `"C:\Users\ASUS\dimastes\pantau.bat" 120`
+4. Beri nama, mis. *Pantau GitHub dimastes*.
+
+**Identitas commit.** Supaya commit tercatat atas nama Anda:
+
+```bash
+git config user.name "Dimas Widyawanto"
+git config user.email "widyawantod@gmail.com"
+```
+
+Alamat email itu harus sudah ditambahkan dan **diverifikasi** di
+<https://github.com/settings/emails>, kalau tidak commit-nya tidak akan
+terhubung ke profil GitHub. Bila ingin menyembunyikan email asli dari riwayat
+publik, pakai alamat `...@users.noreply.github.com` yang diberikan GitHub
+(hanya commit berikutnya yang berubah; commit lama tetap seperti semula).
+
 ### Uji cepat tanpa Chrome
 
 `python cli.py simulasi` menjalankan enam skenario halaman JobStreet palsu:
@@ -520,6 +556,8 @@ python buka_pencarian.py --locations "Bandung,Jakarta,Bekasi" --max-tabs 12
 | `simulasi_glints.py` | Simulasi alur lamaran Glints tanpa Chrome |
 | `buka_pencarian.py` | Pembuka tab pencarian tanpa Selenium |
 | `jalankan.bat` / `jalankan.sh` | Skrip bantu: siapkan `.venv`, pasang dependensi, jalankan CLI |
+| `simpan.bat` / `simpan.sh` | Kirim perubahan ke GitHub sekali jalan |
+| `pantau.bat` / `pantau.sh` | Pemantau: kirim otomatis setiap ada perubahan |
 | `tests/` | Unit test untuk filter dan database |
 
 ## Seberapa otomatis alat ini?
