@@ -454,10 +454,12 @@ Sekarang**, dan urutan **Baru Ditambahkan** untuk lowongan terbaru.
 
 ```bash
 python cli.py glints simulasi                # uji alur tanpa Chrome (7 skenario)
+python cli.py glints cari --limit 10         # daftar lowongan layak + URL-nya
+python cli.py glints uji                     # uji lamar: lowongan dipilih sendiri
 python cli.py glints run                     # semua kata kunci di .env
 python cli.py glints run --keywords "warehouse,PPIC" --max-pages 1
 python cli.py glints run --limit 10         # batasi 10 lamaran sesi ini
-python cli.py glints uji --url "https://glints.com/id/opportunities/jobs/admin-warehouse/b5f8d754-afd9-4f0c-a618-360afe12248c"
+python cli.py glints uji --url "https://glints.com/id/opportunities/jobs/staff-gudang/11111111-2222-3333-4444-555555555555"
 ```
 
 Lewat skrip bantu: `jalankan.bat glints run` (Windows) atau

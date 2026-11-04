@@ -276,6 +276,33 @@ def alasan_gaji(job: Dict, minimal: Optional[int] = None) -> str:
     )
 
 
+def alasan_tidak_layak(job: Dict, saringan: Optional[JobFilter] = None) -> str:
+    """Alasan lowongan tidak dicoba dilamar ('' bila layak).
+
+    Dipakai `glints cari` dan `glints uji` otomatis, supaya keduanya memilih
+    lowongan dengan aturan yang sama seperti sesi penuh.
+    """
+    if job.get("khusus_aplikasi"):
+        return "hanya bisa dilamar lewat aplikasi Glints"
+
+    if job.get("sudah_dilamar"):
+        return "sudah pernah dilamar"
+
+    alasan = alasan_gaji(job)
+    if alasan:
+        return alasan
+
+    if not lokasi_cocok(str(job.get("location") or ""), config.locations):
+        return f"lokasi di luar daftar ({job.get('location') or '-'})"
+
+    saringan = saringan or JobFilter()
+    lolos, kenapa = saringan.should_apply(job)
+    if not lolos:
+        return kenapa
+
+    return ""
+
+
 # ----------------------------------------------------------------------
 # Pelamar: mesin auto_apply dengan peta Glints
 # ----------------------------------------------------------------------
@@ -754,10 +781,133 @@ def jalankan_glints(max_pages: int = 0, keywords: Optional[List[str]] = None,
     return laporan
 
 
+def kumpulkan_lowongan(bot, kata_kunci, halaman: int) -> List[Dict]:
+    """Baca semua kartu dari daftar kata kunci, tanpa duplikat."""
+    lowongan: List[Dict] = []
+    terlihat = set()
+
+    for keyword in kata_kunci:
+        for nomor in range(max(1, halaman)):
+            console.print(f"[cyan]Glints: '{keyword}' halaman {nomor + 1}[/]")
+            for job in bot.cari(keyword, nomor):
+                if job["job_id"] in terlihat:
+                    continue
+                terlihat.add(job["job_id"])
+                lowongan.append(job)
+
+    return lowongan
+
+
+def pilih_kandidat(lowongan: List[Dict], batas: int = 0,
+                   semuanya: bool = False) -> List[Dict]:
+    """Saring lowongan yang layak dicoba (urutan tetap seperti di situs)."""
+    saringan = JobFilter()
+    hasil = []
+
+    for job in lowongan:
+        if not semuanya and alasan_tidak_layak(job, saringan):
+            continue
+        hasil.append(job)
+        if batas and len(hasil) >= batas:
+            break
+
+    return hasil
+
+def pesan_url_salah(url: str) -> str:
+    """Pesan bantuan saat URL uji tidak bisa dipakai."""
+    contoh = (
+        "https://glints.com/id/opportunities/jobs/admin-warehouse/"
+        "b5f8d754-afd9-4f0c-a618-360afe12248c"
+    )
+
+    if not url or url.startswith("<") or "contoh" in url.lower():
+        return (
+            "URL belum diisi (masih teks contoh). Tempel URL asli hasil copy "
+            f"dari halaman lowongan Glints, mis. {contoh}"
+        )
+
+    if "glints.com" not in url.lower():
+        return (
+            "URL itu bukan alamat Glints. Buka lowongan di glints.com lalu "
+            "salin dari kolom alamat Chrome."
+        )
+
+    return (
+        "URL Glints belum berisi kode lowongan (bagian .../<kode-panjang>). "
+        "Buka halaman detail lowongan, bukan halaman pencarian. Contoh: "
+        f"{contoh}"
+    )
+
+
+def daftar_kandidat(keywords: Optional[List[str]] = None,
+                    max_pages: int = 1, batas: int = 10,
+                    semuanya: bool = False) -> List[Dict]:
+    """Cari lowongan Glints lalu kembalikan yang layak dilamar (tanpa melamar)."""
+    kata_kunci = list(keywords or config.keywords)
+    bot = GlintsBot()
+
+    try:
+        bot.init_browser()
+        lowongan = kumpulkan_lowongan(bot, kata_kunci, max_pages)
+    finally:
+        bot.tutup()
+
+    console.print(f"[bold]Terbaca {len(lowongan)} lowongan Glints.[/]")
+    return pilih_kandidat(lowongan, batas=batas, semuanya=semuanya)
+
+
+def uji_otomatis(keywords: Optional[List[str]] = None,
+                 max_pages: int = 1) -> tuple:
+    """Pilih sendiri satu lowongan yang layak, lalu uji lamar di sana.
+
+    Dipakai `glints uji` tanpa --url, supaya tidak perlu mencari URL manual.
+    """
+    kata_kunci = list(keywords or config.keywords)
+    bot = GlintsBot()
+
+    try:
+        bot.init_browser()
+        lowongan = kumpulkan_lowongan(bot, kata_kunci, max_pages)
+
+        if not lowongan:
+            return None, ApplyResult(
+                False, "error", "Tidak ada lowongan terbaca dari pencarian"
+            )
+
+        kandidat = pilih_kandidat(lowongan, batas=1)
+
+        if not kandidat:
+            contoh = next(
+                (job for job in lowongan if not job.get("khusus_aplikasi")),
+                lowongan[0],
+            )
+            return contoh, ApplyResult(
+                False,
+                "manual_required",
+                "Semua lowongan terbaca sudah tersaring (gaji/lokasi/judul/"
+                "aplikasi). Coba --keywords lain.",
+            )
+
+        if not bot.login():
+            return kandidat[0], ApplyResult(
+                False, "login_required", "Login Glints belum selesai"
+            )
+
+        job = kandidat[0]
+        console.print(
+            f"[cyan]Lowongan uji terpilih:[/] {job['title']} — "
+            f"{job.get('company') or '-'} ({job.get('location') or '-'})"
+        )
+        return job, bot.lamar(job)
+    finally:
+        bot.tutup()
+
 def uji_glints(url: str) -> ApplyResult:
     """Uji alur lamaran pada satu lowongan Glints (tanpa pencarian)."""
+    url = (url or "").strip()
+
     if not id_dari_url(url):
-        return ApplyResult(False, "error", "URL bukan halaman lowongan Glints")
+        return ApplyResult(False, "error", pesan_url_salah(url))
 
     bot = GlintsBot()
     try:

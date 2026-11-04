@@ -104,6 +104,85 @@ def jalankan_glints(max_pages: int = 0, keywords: str = "", batas: int = 0):
     )
 
 
+def cari_glints(keywords: str = "", max_pages: int = 1, batas: int = 10,
+                semuanya: bool = False):
+    """Tampilkan lowongan Glints yang layak dilamar beserta URL-nya."""
+    from rich.table import Table
+
+    from glints import daftar_kandidat
+
+    kata_kunci = [k.strip() for k in keywords.split(",") if k.strip()] or None
+    console.print(f"[cyan]Versi kode:[/] {versi_kode()}")
+
+    try:
+        lowongan = daftar_kandidat(
+            keywords=kata_kunci,
+            max_pages=max(1, max_pages),
+            batas=max(1, batas),
+            semuanya=semuanya,
+        )
+    except Exception as exc:
+        console.print(f"[bold red]Gagal mencari lowongan Glints:[/] {exc}")
+        return
+
+    if not lowongan:
+        console.print("[yellow]Tidak ada lowongan yang layak.[/]")
+        return
+
+    table = Table(title=f"{len(lowongan)} lowongan layak dilamar")
+    table.add_column("#", justify="right")
+    table.add_column("Posisi", style="cyan")
+    table.add_column("Perusahaan", overflow="fold")
+    table.add_column("Gaji")
+    table.add_column("Lokasi", overflow="fold")
+    table.add_column("URL", overflow="fold", style="dim")
+
+    for nomor, job in enumerate(lowongan, start=1):
+        table.add_row(
+            str(nomor),
+            job.get("title", "")[:40],
+            (job.get("company") or "-")[:28],
+            job.get("salary") or "-",
+            (job.get("location") or "-")[:26],
+            job.get("url", ""),
+        )
+
+    console.print(table)
+    console.print(
+        "[dim]Salin salah satu URL untuk: "
+        "jalankan.bat glints uji --url \"URL\"[/]"
+    )
+
+
+def uji_glints_otomatis(keywords: str = "", max_pages: int = 1):
+    """Pilih sendiri satu lowongan layak, lalu uji alur lamarannya."""
+    from glints import uji_otomatis
+
+    kata_kunci = [k.strip() for k in keywords.split(",") if k.strip()] or None
+    console.print(f"[cyan]Versi kode:[/] {versi_kode()}")
+    console.print("[cyan]Mode:[/] uji otomatis (lowongan dipilih sendiri)")
+
+    try:
+        job, hasil = uji_otomatis(keywords=kata_kunci, max_pages=max_pages)
+    except Exception as exc:
+        console.print(f"[bold red]Gagal menguji lowongan:[/] {exc}")
+        return
+
+    if job:
+        console.print(f"[cyan]URL:[/] {job.get('url', '')}")
+
+    warna = "green" if hasil.applied else "yellow"
+    console.print(f"\n[bold {warna}]Status:[/] {hasil.status} — {hasil.reason}")
+
+    if hasil.applied:
+        console.print("[bold green]Lamaran Glints terkirim otomatis.[/]")
+    else:
+        console.print(
+            "[dim]Bila perlu, kirim file di folder debug/ (txt + png) untuk "
+            "perbaikan selector.[/]"
+        )
+
+
 def simulasi_glints():
     """Simulasi alur lamaran Glints tanpa Chrome."""
     from simulasi_glints import jalankan
@@ -449,9 +528,36 @@ if __name__ == "__main__":
     )
 
     glints_uji = glints_sub.add_parser(
-        "uji", help="Uji alur lamaran satu lowongan Glints"
+        "uji",
+        help="Uji alur lamaran Glints (tanpa --url: lowongan dipilih sendiri)",
     )
-    glints_uji.add_argument("--url", required=True, help="URL lowongan Glints")
+    glints_uji.add_argument(
+        "--url", default="", help="URL lowongan Glints (opsional)"
+    )
+    glints_uji.add_argument(
+        "--keywords", default="", help="Kata kunci dipisah koma untuk uji otomatis"
+    )
+    glints_uji.add_argument(
+        "--max-pages", type=int, default=1, help="Halaman per kata kunci (1)"
+    )
+
+    glints_cari = glints_sub.add_parser(
+        "cari", help="Tampilkan lowongan Glints yang layak + URL-nya"
+    )
+    glints_cari.add_argument(
+        "--keywords", default="", help="Kata kunci dipisah koma (bawaan .env)"
+    )
+    glints_cari.add_argument(
+        "--max-pages", type=int, default=1, help="Halaman per kata kunci (1)"
+    )
+    glints_cari.add_argument(
+        "--limit", type=int, default=10, help="Jumlah lowongan ditampilkan (10)"
+    )
+    glints_cari.add_argument(
+        "--semua",
+        action="store_true",
+        help="Tampilkan semua hasil, tanpa saringan gaji/lokasi/judul",
+    )
 
     glints_sub.add_parser(
         "simulasi", help="Simulasi alur lamaran Glints (tanpa Chrome)"
@@ -519,7 +625,14 @@ if __name__ == "__main__":
         if args.glints_command == "run":
             jalankan_glints(args.max_pages, args.keywords, args.limit)
         elif args.glints_command == "uji":
-            uji_glints(args.url)
+            if args.url.strip():
+                uji_glints(args.url)
+            else:
+                uji_glints_otomatis(args.keywords, max(1, args.max_pages))
+        elif args.glints_command == "cari":
+            cari_glints(
+                args.keywords, args.max_pages, args.limit, args.semua
+            )
         elif args.glints_command == "simulasi":
             simulasi_glints()
         else:
