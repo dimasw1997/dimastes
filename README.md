@@ -283,6 +283,43 @@ terhubung ke profil GitHub. Bila ingin menyembunyikan email asli dari riwayat
 publik, pakai alamat `...@users.noreply.github.com` yang diberikan GitHub
 (hanya commit berikutnya yang berubah; commit lama tetap seperti semula).
 
+### Memakai repo GitHub sendiri (mis. `dimaswidyawanto/Apply-Job`)
+
+Kode ini juga bisa disimpan di repo Anda sendiri. Setelah repo tujuan dibuat
+(mis. `https://github.com/<akun>/Apply-Job.git`):
+
+```bash
+# 1. Arahkan origin ke repo Anda, lalu kirim seluruh riwayat sebagai main
+git remote set-url origin https://github.com/<akun>/Apply-Job.git
+git push -u origin arena/4ab2b9fa-dimastes:main
+
+# 2. Pindah ke cabang main yang tadi dikirim
+git checkout -B main origin/main
+```
+
+Sejak itu `main` adalah salinan penuh di repo Anda, dan `simpan.bat` /
+`pantau.bat` mengirim perubahan ke sana.
+
+**Menarik pembaruan dari repo pengembangan** (akun `dimasw1997`) dilakukan
+dengan satu perintah; remote `arena` ditambahkan otomatis:
+
+```bash
+tarik.bat        # Windows
+./tarik.sh       # macOS/Linux
+```
+
+Alurnya jadi dua arah: `tarik.bat` untuk mengambil pembaruan, `pantau.bat`
+untuk mengirim pekerjaan Anda sendiri ke repo Anda.
+
+Bila muncul permintaan login saat push, masuk dengan akun pemilik repo tujuan
+(mis. `dimaswidyawanto`). Bila Windows menyimpan kredensial akun lama:
+
+```bash
+cmdkey /delete:git:https://github.com
+```
+
+lalu push sekali lagi dan ikuti jendela login.
+
 ### Uji cepat tanpa Chrome
 
 `python cli.py simulasi` menjalankan enam skenario halaman JobStreet palsu:
@@ -558,6 +595,7 @@ python buka_pencarian.py --locations "Bandung,Jakarta,Bekasi" --max-tabs 12
 | `jalankan.bat` / `jalankan.sh` | Skrip bantu: siapkan `.venv`, pasang dependensi, jalankan CLI |
 | `simpan.bat` / `simpan.sh` | Kirim perubahan ke GitHub sekali jalan |
 | `pantau.bat` / `pantau.sh` | Pemantau: kirim otomatis setiap ada perubahan |
+| `tarik.bat` / `tarik.sh` | Tarik pembaruan dari repo pengembangan |
 | `tests/` | Unit test untuk filter dan database |
 
 ## Seberapa otomatis alat ini?
