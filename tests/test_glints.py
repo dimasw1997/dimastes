@@ -208,3 +208,54 @@ def test_alasan_gaji_menyebut_angka_dan_isi_kartu():
 
 def test_alasan_gaji_kosong_bila_lolos():
     assert glints.alasan_gaji({"salary": "Rp 6jt"}, minimal=4_500_000) == ""
+
+
+# ----------------------------------------------------------------------
+# Waktu tunggu & pesan diagnostik (dari uji nyata di PC pengguna)
+# ----------------------------------------------------------------------
+def test_glints_memakai_waktu_tunggu_lebih_panjang():
+    """Formulir Glints berupa modal; 3 detik terlalu singkat."""
+    applier = GlintsApplier(Driver())
+
+    assert applier.step_timeout >= 12
+    assert applier.submit_timeout >= 30
+
+
+def test_penghalang_profil_belum_lengkap_terdeteksi():
+    driver = Driver(body="Lengkapi profil kamu dulu untuk melamar")
+    alasan = GlintsApplier(driver)._blocker()
+
+    assert "profil" in alasan.lower()
+
+
+def test_penghalang_unggah_cv_terdeteksi():
+    driver = Driver(body="Silakan unggah CV terbaru kamu")
+    alasan = GlintsApplier(driver)._blocker()
+
+    assert "cv" in alasan.lower()
+
+
+def test_pesan_alur_tidak_dikenali_menyebut_tombol():
+    driver = Driver()
+    driver.elements = {
+        "button": [Elemen(text="Simpan"), Elemen(text="Bagikan")],
+    }
+
+    pesan = GlintsApplier(driver)._pesan_alur_tidak_dikenali()
+
+    assert "simpan" in pesan.lower()
+    assert "bagikan" in pesan.lower()
+
+
+def test_chrome_tertutup_jadi_pesan_jelas():
+    class DriverMati(Driver):
+        def get(self, url):
+            raise glints.WebDriverException(
+                "invalid session id: session deleted as the browser has closed"
+            )
+
+    bot = glints.GlintsBot()
+    bot.driver = DriverMati()
+
+    with pytest.raises(glints.ChromeTertutup):
+        bot.lamar({"url": URL_UJI, "title": "Uji"})

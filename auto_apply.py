@@ -548,6 +548,13 @@ class AutoApplier:
         except Exception:
             return ""
 
+    def _pesan_alur_tidak_dikenali(self) -> str:
+        """Pesan saat alur lamaran tidak bisa dilanjutkan otomatis."""
+        return (
+            "Alur lamaran tidak dikenali dalam "
+            f"{self.step_timeout} detik"
+        )
+
     def _alasan_lewati(self) -> str:
         """Alasan lowongan harus dilewati sebelum menekan Lamar.
 
@@ -1480,7 +1487,7 @@ class AutoApplier:
             return ApplyResult(
                 False,
                 "manual_required",
-                f"Alur lamaran tidak dikenali dalam {self.step_timeout} detik",
+                self._pesan_alur_tidak_dikenali(),
             )
 
         except (KeyboardInterrupt, SystemExit):

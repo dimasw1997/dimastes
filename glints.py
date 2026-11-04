@@ -22,6 +22,7 @@ from urllib.parse import quote_plus
 
 from rich.console import Console
 from selenium import webdriver
+from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -33,6 +34,25 @@ from job_filter import JobFilter, rentang_gaji
 from notifier import notifier
 
 console = Console()
+
+
+class ChromeTertutup(RuntimeError):
+    """Chrome/jendela ditutup saat program berjalan."""
+
+
+TANDA_CHROME_MATI = (
+    "invalid session",
+    "not connected to devtools",
+    "browser has closed",
+    "chrome not reachable",
+    "disconnected",
+)
+
+
+def chrome_mati(pesan: str) -> bool:
+    """True bila pesan galat berarti jendela Chrome sudah tidak ada."""
+    teks = str(pesan or "").lower()
+    return any(tanda in teks for tanda in TANDA_CHROME_MATI)
 
 DOMAIN = "glints.com"
 BASE = "https://glints.com"
@@ -73,6 +93,21 @@ SUKSES_GLINTS = (
     "application submitted",
     "application sent",
     "you have successfully applied",
+)
+
+# Penghalang khas Glints: profil belum lengkap, CV belum dipilih, dsb.
+PENGHALANG_GLINTS = (
+    (
+        "lengkapi profil",
+        "Profil Glints belum lengkap — lengkapi di glints.com lalu jalankan lagi",
+    ),
+    ("profilmu belum lengkap", "Profil Glints belum lengkap — lengkapi dulu"),
+    ("unggah cv", "Glints meminta unggah CV — isi RESUME_PATH di .env"),
+    ("unggah resume", "Glints meminta unggah CV — isi RESUME_PATH di .env"),
+    ("upload cv", "Glints meminta unggah CV — isi RESUME_PATH di .env"),
+    ("pilih cv", "Glints meminta memilih CV — unggah CV di profil Glints"),
+    ("masuk untuk melanjutkan", "Sesi Glints berakhir — login ulang"),
+    ("login untuk melanjutkan", "Sesi Glints berakhir — login ulang"),
 )
 
 SIBUK_TEXTS = (
@@ -254,8 +289,57 @@ class GlintsApplier(AutoApplier):
         "next",
     )
 
+    submit_texts = (
+        "lamar sekarang",
+        "kirim lamaran",
+        "kirim aplikasi",
+        "submit application",
+        "kirim",
+        "apply now",
+        "selanjutnya",
+        "lanjutkan",
+    )
+
     success_texts = SUKSES_GLINTS
     already_texts = SIBUK_TEXTS
+
+    def __init__(self, driver, wait=None):
+        super().__init__(driver, wait)
+
+        # Formulir Glints berupa modal yang butuh waktu memuat; 3 detik
+        # terlalu singkat sehingga alur sehat pun dianggap tidak dikenali.
+        self.step_timeout = max(self.step_timeout, 12)
+        self.submit_timeout = max(self.submit_timeout, 30)
+
+    def _blocker(self) -> str:
+        """Penghalang khas Glints (profil/CV/login) sebelum menyerah."""
+        alasan = super()._blocker()
+        if alasan:
+            return alasan
+
+        body = self._body_text()
+        for tanda, pesan in PENGHALANG_GLINTS:
+            if tanda in body:
+                return pesan
+
+        return ""
+
+    def _pesan_alur_tidak_dikenali(self) -> str:
+        """Sertakan tombol yang terlihat supaya mudah dilaporkan."""
+        label = []
+        for selector in ("button", "a[role='button']", "[role='dialog']"):
+            for element in self._find_all(selector):
+                if not self._visible(element):
+                    continue
+                teks = self._text(element)
+                if teks and teks not in label:
+                    label.append(teks[:30])
+
+        dasar = super()._pesan_alur_tidak_dikenali()
+        if not label:
+            return dasar
+
+        return f"{dasar}. Tombol terlihat: {', '.join(label[:10])}"
 
     def _alasan_lewati(self) -> str:
         """Lowongan Glints yang hanya bisa dilamar dari aplikasi mobile."""
@@ -458,7 +542,27 @@ class GlintsBot:
 
     # ------------------------------ lamar -----------------------------
     def lamar(self, job: dict) -> ApplyResult:
-        return GlintsApplier(self.driver).apply(job)
+        try:
+            hasil = GlintsApplier(self.driver).apply(job)
+        except WebDriverException as exc:
+            if chrome_mati(str(exc)):
+                raise ChromeTertutup(
+                    "Jendela Chrome tertutup saat program berjalan"
+                ) from exc
+            return ApplyResult(False, "error", f"Galat browser: {exc}")
+        except Exception as exc:  # jaring pengaman: jangan hentikan sesi
+            return ApplyResult(
+                False, "error", f"Galat tak terduga: {exc}"
+            )
+
+        # apply() menelan galat browser menjadi ApplyResult; ubah lagi menjadi
+        # ChromeTertutup supaya sesi berhenti rapi, bukan mencetak traceback.
+        if hasil.status == "error" and chrome_mati(hasil.reason):
+            raise ChromeTertutup(
+                "Jendela Chrome tertutup saat program berjalan"
+            )
+
+        return hasil
 
     def tutup(self):
         with contextlib.suppress(Exception):
@@ -547,7 +651,12 @@ def jalankan_glints(max_pages: int = 0, keywords: Optional[List[str]] = None,
             if db.add_job(job):
                 laporan["baru"] += 1
 
-            hasil = bot.lamar(job)
+            try:
+                hasil = bot.lamar(job)
+            except ChromeTertutup as exc:
+                console.print(f"[bold red]{exc}.[/] Sesi dihentikan.")
+                laporan["gagal"] += 1
+                break
 
             if hasil.applied:
                 laporan["dilamar"] += 1
@@ -566,7 +675,9 @@ def jalankan_glints(max_pages: int = 0, keywords: Optional[List[str]] = None,
                 db.record_application(
                     job["job_id"], "manual_required", hasil.reason
                 )
-                console.print(f"[yellow]Perlu manual: {job['title']}[/]")
+                console.print(
+                    f"[yellow]Perlu manual: {job['title']} — {hasil.reason}[/]"
+                )
             else:
                 laporan["gagal"] += 1
                 db.record_application(job["job_id"], hasil.status, hasil.reason)
