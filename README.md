@@ -552,11 +552,24 @@ di `.env`, lalu jalankan lagi. Untuk halaman terakhir pakai
 `AUTO_APPLY_SUBMIT_TIMEOUT` (default **20** detik).
 
 **Halaman "Review and submit" tidak terkirim / lowongan dilewati di langkah akhir.**
-Bot sekarang mengenali halaman review lewat URL (`/apply/review`) maupun teks
-halaman, lalu mengklik tombol kirim apa pun yang tersedia (termasuk
-`button[type=submit]`) dengan batas waktu 20 detik. Bila masih gagal, buka folder
-`debug/` di folder program — ada screenshot + HTML halaman saat itu; kirimkan
-`debug/*.png` tersebut agar selector bisa diperbaiki.
+Bot mengenali halaman review lewat URL (`/apply/review`) maupun teks halaman,
+lalu mengklik tombol kirim apa pun yang tersedia (termasuk
+`button[type=submit]`) dengan batas waktu 20 detik. Ada tiga sebab yang dibedakan
+sekarang:
+
+1. **Isian wajib kurang** — muncul banner "please address the following issues".
+   Bot berhenti setelah satu klik dan menuliskan isian mana yang kurang.
+2. **Galat server JobStreet** — banner merah *"Something has gone wrong. Please
+   try again or contact Customer Service"*. Bot memuat ulang halaman sekali dan
+   mencoba kirim lagi; kalau tetap gagal, lowongan dilewati (tidak lagi menunggu
+   20 detik lalu mengklik 3 kali).
+3. **Halaman lambat dimuat** — bot menunggu 1,5 detik sebelum klik pertama dan
+   tidak mengklik ganda.
+
+Bila masih gagal, buka folder `debug/`. Sekarang ada dua berkas per lowongan:
+`*.txt` (URL, isi modal, banner galat server, dan label tombol yang terlihat) dan
+`*.html`/`*.png` untuk pemeriksaan lebih dalam. Kirimkan `*.txt`-nya — biasanya
+sudah cukup untuk tahu penyebabnya.
 
 **Program masih menunggu Enter saat lowongan dibuka.**
 Berarti mode manual aktif. Pastikan `AUTO_APPLY=true` di `.env` (atau jalankan

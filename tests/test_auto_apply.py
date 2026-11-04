@@ -853,3 +853,123 @@ def test_setelah_kirim_ditolak_validasi_berhenti(monkeypatch):
     assert hasil.applied is False
     assert "isian wajib" in hasil.reason.lower()
     assert jumlah["klik"] == 1
+
+
+def test_galat_server_diulang_sekali_lalu_berhasil(monkeypatch):
+    """Banner "Something has gone wrong" -> muat ulang -> kirim kedua sukses."""
+    monkeypatch.setattr(auto_apply, "Select", FakeSelect)
+
+    kelas = type("DriverMuatUlang", (FakeDriver,), {})
+
+    driver = kelas()
+    jumlah = {"klik": 0, "muat_ulang": 0}
+    banner = (
+        "Something has gone wrong. Please try again or contact "
+        "Customer Service"
+    )
+    sukses = "Your application has been sent"
+
+    def kirim():
+        jumlah["klik"] += 1
+        if jumlah["klik"] == 1:
+            driver.body = banner
+        else:
+            driver.body = sukses
+
+    def muat_ulang():
+        jumlah["muat_ulang"] += 1
+        driver.body = "Review and submit Documents included"
+
+    driver.refresh = muat_ulang
+
+    def ke_review():
+        driver.current_url = "https://id.jobstreet.com/job/1/apply/review"
+
+    driver.elements = {
+        APPLY_SELECTORS[0]: [FakeElement(text="Lamar", on_click=ke_review)],
+        "button[type='submit']": [
+            FakeElement(text="Submit application", on_click=kirim)
+        ],
+    }
+
+    hasil = AutoApplier(driver).apply({"url": "https://id.jobstreet.com/job/1"})
+
+    assert hasil.applied is True
+    assert jumlah["klik"] == 2
+    assert jumlah["muat_ulang"] == 1
+
+
+def test_galat_server_dua_kali_dilewati(monkeypatch):
+    """Galat server tetap ada setelah kirim kedua -> dilewati."""
+    monkeypatch.setattr(auto_apply, "Select", FakeSelect)
+
+    kelas = type("DriverMuatUlangGagal", (FakeDriver,), {})
+    driver = kelas()
+    jumlah = {"klik": 0}
+    banner = (
+        "Something has gone wrong. Please try again or contact "
+        "Customer Service"
+    )
+
+    def kirim():
+        jumlah["klik"] += 1
+        driver.body = banner
+
+    def muat_ulang():
+        driver.body = "Review and submit Documents included"
+
+    driver.refresh = muat_ulang
+
+    def ke_review():
+        driver.current_url = "https://id.jobstreet.com/job/2/apply/review"
+
+    driver.elements = {
+        APPLY_SELECTORS[0]: [FakeElement(text="Lamar", on_click=ke_review)],
+        "button[type='submit']": [
+            FakeElement(text="Submit application", on_click=kirim)
+        ],
+    }
+
+    hasil = AutoApplier(driver).apply({"url": "https://id.jobstreet.com/job/2"})
+
+    assert hasil.applied is False
+    assert "something has gone wrong" in hasil.reason.lower()
+    assert "2x" in hasil.reason
+    assert jumlah["klik"] == 2
+
+
+def test_galat_server_sebelum_klik_dimuat_ulang(monkeypatch):
+    """Banner galat sudah tampil sejak halaman review dibuka -> dimuat ulang dulu."""
+    monkeypatch.setattr(auto_apply, "Select", FakeSelect)
+
+    kelas = type("DriverBannerAwal", (FakeDriver,), {})
+    driver = kelas()
+    jumlah = {"klik": 0, "muat_ulang": 0}
+
+    driver.body = "Something has gone wrong. Please try again"
+
+    def muat_ulang():
+        jumlah["muat_ulang"] += 1
+        driver.body = "Review and submit Documents included"
+
+    driver.refresh = muat_ulang
+
+    def kirim():
+        jumlah["klik"] += 1
+        driver.body = "Your application has been sent"
+
+    def ke_review():
+        driver.current_url = "https://id.jobstreet.com/job/3/apply/review"
+
+    driver.elements = {
+        APPLY_SELECTORS[0]: [FakeElement(text="Lamar", on_click=ke_review)],
+        "button[type='submit']": [
+            FakeElement(text="Submit application", on_click=kirim)
+        ],
+    }
+
+    hasil = AutoApplier(driver).apply({"url": "https://id.jobstreet.com/job/3"})
+
+    assert hasil.applied is True
+    assert jumlah["muat_ulang"] == 1
+    assert jumlah["klik"] == 1

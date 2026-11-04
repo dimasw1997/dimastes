@@ -79,6 +79,24 @@ SUCCESS_TEXTS = (
     "lamaran anda sudah kami terima",
 )
 
+# JobStreet kadang menolak submit dengan galat server, bukan validasi isian.
+# Gejalanya banner merah "Something has gone wrong. Please try again...".
+GALAT_SITUS_TEXTS = (
+    "something has gone wrong",
+    "something went wrong",
+    "please try again",
+    "contact customer service",
+    "terjadi kesalahan",
+    "silakan coba lagi",
+    "hubungi customer service",
+)
+
+# Cukup dua percobaan kirim: lebih dari itu memperbesar risiko lamaran ganda.
+MAKS_KLIK_KIRIM = 2
+
+# Jeda sebelum klik Kirim pertama supaya formulir selesai dimuat.
+JEDA_SEBELUM_KIRIM = 1.5
+
 ALREADY_TEXTS = (
     "anda sudah melamar",
     "sudah pernah melamar",
@@ -564,6 +582,7 @@ class AutoApplier:
                 f"URL: {url}\n"
                 f"Job: {job.get('title') or '-'}\n"
                 f"Modal: {self._teks_modal()[:300]}\n"
+                f"Galat server: {self._galat_situs() or '-'}\n"
                 f"Tombol terlihat: {tombol}\n",
                 encoding="utf-8",
             )
@@ -986,6 +1005,26 @@ class AutoApplier:
 
         return ""
 
+    def _galat_situs(self) -> str:
+        """Banner galat server JobStreet ('' bila tidak ada)."""
+        gabungan = f"{self._body_text()} {self._teks_modal()}"
+
+        for tanda in GALAT_SITUS_TEXTS:
+            if tanda in gabungan:
+                return tanda
+
+        return ""
+
+    def _muat_ulang(self) -> bool:
+        """Muat ulang halaman saat ini (False bila tidak bisa)."""
+        try:
+            self.driver.refresh()
+        except Exception:
+            return False
+
+        time.sleep(1.0)
+        return True
+
     @staticmethod
     def _is_required(element) -> bool:
         """True bila elemen benar-benar wajib (termasuk `required` kosong)."""
@@ -1183,6 +1222,7 @@ class AutoApplier:
             )
             sudah_klik_kirim = False
             percobaan_kirim = 0
+            jumlah_muat_ulang = 0
             kirim_terakhir = 0.0
             jejak_lanjut = ""
             klik_lanjut = 0
@@ -1248,8 +1288,31 @@ class AutoApplier:
                             )
 
                 if sudah_klik_kirim:
-                    # Setelah Kirim ditekan, JobStreet bisa menolak karena
-                    # masih ada isian wajib. Berhenti, jangan klik berulang.
+                    # Setelah Kirim ditekan, JobStreet bisa gagal di sisi
+                    # server ("Something has gone wrong"). Muat ulang sekali
+                    # lalu coba kirim lagi; jangan menunggu 20 detik buta.
+                    galat_situs = self._galat_situs()
+                    if galat_situs:
+                        if jumlah_muat_ulang < 1 and self._muat_ulang():
+                            jumlah_muat_ulang += 1
+                            sudah_klik_kirim = False
+                            deadline = time.time() + self.submit_timeout
+                            console.print(
+                                f'[dim]   JobStreet: "{galat_situs}" — '
+                                "halaman dimuat ulang, coba kirim sekali lagi[/]"
+                            )
+                            continue
+
+                        self._dump_debug(job)
+                        return ApplyResult(
+                            False,
+                            "manual_required",
+                            f'JobStreet menolak kirim: "{galat_situs}" '
+                            f"(dicoba {percobaan_kirim}x, halaman dimuat "
+                            "ulang) — dilewati",
+                        )
+
+                    # Masih ada isian wajib yang belum terisi: berhenti.
                     galat = self._validation_error()
                     if galat:
                         rinci = pertanyaan_dari_galat(galat)
@@ -1264,6 +1327,27 @@ class AutoApplier:
                             f"{rinci} — dilewati",
                         )
 
+                if review_page and not sudah_klik_kirim:
+                    # Banner galat bisa sudah ada sejak halaman dibuka.
+                    galat_situs = self._galat_situs()
+                    if galat_situs:
+                        if jumlah_muat_ulang < 1 and self._muat_ulang():
+                            jumlah_muat_ulang += 1
+                            deadline = time.time() + self.submit_timeout
+                            console.print(
+                                f'[dim]   halaman review menampilkan '
+                                f'"{galat_situs}" — dimuat ulang[/]'
+                            )
+                            continue
+
+                        self._dump_debug(job)
+                        return ApplyResult(
+                            False,
+                            "manual_required",
+                            f'Halaman review menampilkan galat JobStreet: '
+                            f'"{galat_situs}" — dilewati',
+                        )
+
                 submit_button = self._find_submit_button(review_page)
                 if submit_button is not None:
                     # Hindari klik ganda: beri jeda 2 detik sebelum mencoba
@@ -1272,7 +1356,15 @@ class AutoApplier:
                         not sudah_klik_kirim
                         or time.time() - kirim_terakhir >= 2
                     )
-                    if boleh_klik and percobaan_kirim < 3:
+                    if boleh_klik and percobaan_kirim < MAKS_KLIK_KIRIM:
+                        if percobaan_kirim == 0:
+                            # Formulir JobStreet butuh waktu selesai dimuat;
+                            # klik terlalu cepat membuat server menolak.
+                            time.sleep(JEDA_SEBELUM_KIRIM)
+                            submit_button = (
+                                self._find_submit_button(review_page)
+                                or submit_button
+                            )
                         if not self._click(submit_button):
                             return ApplyResult(
                                 False,
@@ -1332,6 +1424,15 @@ class AutoApplier:
             self._dump_debug(job)
 
             if sudah_klik_kirim:
+                galat_situs = self._galat_situs()
+                if galat_situs:
+                    return ApplyResult(
+                        False,
+                        "manual_required",
+                        f'JobStreet: "{galat_situs}" setelah Kirim diklik '
+                        f"{percobaan_kirim}x — dilewati "
+                        "(periksa riwayat lamaran)",
+                    )
                 return ApplyResult(
                     False,
                     "manual_required",
