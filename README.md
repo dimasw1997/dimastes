@@ -183,6 +183,10 @@ python cli.py perbarui-env
 # 5c. Ubah nilai di .env tanpa membuka editor
 python cli.py set-env MAX_APPLY_PER_DAY=0 AUTO_APPLY_MAX_PER_SESSION=0
 
+# 5d. Kirim perubahan ke GitHub dengan satu perintah
+simpan.bat              # Windows
+./simpan.sh             # macOS/Linux
+
 # 6. Uji alur lamaran dengan halaman palsu (tanpa Chrome, tanpa internet)
 python cli.py simulasi
 
@@ -196,6 +200,38 @@ submit", status akhir). Berguna untuk memastikan lamaran benar-benar terkirim
 tanpa harus menunggu ada lowongan baru yang lolos filter. Baris **Versi kode
 (commit)** di `python cli.py config` menunjukkan versi kode yang sedang
 dijalankan — samakan dengan commit terakhir di GitHub.
+
+### Kirim perubahan ke GitHub (otomatis)
+
+Perubahan dari sesi pengembangan sudah di-push otomatis ke cabang
+`arena/4ab2b9fa-dimastes`. Di PC Anda cukup menariknya:
+
+```bash
+git branch --show-current     # pastikan cabangnya benar
+git pull
+```
+
+Kalau `git branch --show-current` menampilkan `main` padahal pekerjaan terbaru
+ada di cabang `arena/4ab2b9fa-dimastes`, `git pull` **tidak** akan menarik apa
+pun. Pindah dulu: `git checkout arena/4ab2b9fa-dimastes` lalu `git pull`.
+
+Untuk mengirim perubahan **dari PC ke GitHub** cukup satu klik:
+
+```bash
+simpan.bat                        # Windows
+simpan.bat "Pesan commit sendiri" # dengan pesan sendiri
+./simpan.sh                       # macOS/Linux
+```
+
+Skrip itu menjalankan `git add -A` → `commit` → `pull --rebase` → `push`. File
+`.env`, `jobstreet_auto.db`, dan `debug/` otomatis tidak ikut terkirim karena
+sudah ada di `.gitignore`. Kalau tidak ada perubahan, skrip hanya menarik lalu
+mengirim ulang tanpa membuat commit kosong.
+
+Supaya tidak diminta password setiap kali: pada Windows, Git for Windows
+memakai *Git Credential Manager* — login sekali lewat jendela browser, setelah
+itu tersimpan. Cek dengan `git config --global credential.helper` (harus
+menampilkan `manager`). Bisa juga `gh auth login` sekali saja.
 
 Saat `run` berjalan:
 
