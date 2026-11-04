@@ -33,6 +33,76 @@ def normalisasi_perusahaan(nama: str) -> str:
     )
 
 
+# Satuan yang sering dipakai di kartu lowongan.
+_SATUAN_GAJI = (
+    ("juta", 1_000_000),
+    ("jt", 1_000_000),
+    ("rb", 1_000),
+    ("ribu", 1_000),
+)
+
+
+def _nilai_gaji(angka: str, satuan: str, ada_satuan_juta: bool) -> float:
+    """Ubah satu potongan "2,5jt" / "4.500.000" menjadi rupiah."""
+    teks = angka.strip()
+    try:
+        if re.fullmatch(r"\d{1,3}(?:\.\d{3})+", teks):
+            nilai = float(teks.replace(".", ""))
+        elif re.fullmatch(r"\d{1,3}(?:,\d{3})+", teks):
+            nilai = float(teks.replace(",", ""))
+        elif re.fullmatch(r"\d+,\d+", teks):
+            nilai = float(teks.replace(",", "."))
+        else:
+            nilai = float(teks)
+    except ValueError:
+        return 0.0
+
+    satuan = (satuan or "").lower()
+
+    for nama, pengali in _SATUAN_GAJI:
+        if satuan.startswith(nama):
+            return nilai * pengali
+
+    # Tanpa satuan: angka besar sudah rupiah, angka kecil dianggap juta.
+    if nilai >= 1_000:
+        return nilai
+    if ada_satuan_juta or nilai < 100:
+        return nilai * 1_000_000
+    return nilai
+
+
+def rentang_gaji(teks: str) -> tuple[int, int]:
+    """Rentang gaji (terendah, tertinggi) dari teks kartu lowongan.
+
+    Contoh: "Rp 2-3jt" -> (2_000_000, 3_000_000),
+    "Rp 4-4,5jt" -> (4_000_000, 4_500_000),
+    "Rp2.000.000 - 3.000.000/Bulan" -> (2_000_000, 3_000_000).
+    Teks tanpa angka (mis. "Gaji Tidak Ditampilkan") -> (0, 0).
+    """
+    isi = str(teks or "").lower()
+    if not isi:
+        return (0, 0)
+
+    isi = isi.replace("\u2013", "-").replace("\u2014", "-")
+
+    pola = re.compile(
+        r"(\d[\d.,]*)\s*(juta|jt|ribu|rb)?",
+    )
+    ada_juta = bool(re.search(r"\d\s*(?:juta|jt)\b", isi))
+
+    nilai = []
+    for cocok in pola.finditer(isi):
+        angka, satuan = cocok.group(1), cocok.group(2)
+        hasil = _nilai_gaji(angka, satuan, ada_juta)
+        if hasil > 0:
+            nilai.append(hasil)
+
+    if not nilai:
+        return (0, 0)
+
+    return (int(min(nilai)), int(max(nilai)))
+
+
 class JobFilter:
     def __init__(self):
         self.exclude_keywords = [
@@ -110,7 +180,8 @@ class JobFilter:
         if not nama:
             return ""
 
-        daftar = list(getattr(config, "blacklist_companies", []) or [])
+        daftar = list(getattr(config, "blocked_companies", []) or [])
+        daftar += list(getattr(config, "blacklist_companies", []) or [])
 
         with contextlib.suppress(Exception):
             daftar += [
@@ -119,7 +190,17 @@ class JobFilter:
 
         for item in daftar:
             kunci = normalisasi_perusahaan(item)
-            if kunci and (kunci in nama or nama in kunci):
+            if not kunci:
+                continue
+
+            # Nama pendek seperti "ifa" dicocokkan per kata supaya tidak
+            # menolak perusahaan lain yang kebetulan memuat huruf sama.
+            if len(kunci) <= 4:
+                if re.search(rf"\b{re.escape(kunci)}\b", nama):
+                    return str(item).strip()
+                continue
+
+            if kunci in nama or nama in kunci:
                 return str(item).strip()
 
         return ""

@@ -86,6 +86,18 @@ class Config:
         default_factory=lambda: _list_setting("BLACKLIST_COMPANIES", "")
     )
 
+    # Perusahaan yang selalu ditolak (tidak perlu menambah manual di .env).
+    # "ifa" dicocokkan per kata, jadi "Kafifa" tidak ikut tertolak.
+    blocked_companies: list[str] = field(
+        default_factory=lambda: _list_setting(
+            "BLOCKED_COMPANIES", "royal abadi,ifa"
+        )
+    )
+
+    # Glints: lamaran hanya dikirim bila gaji bisa mencapai angka ini.
+    # Gaji yang tidak dicantumkan tetap dilamar (0 = tanpa batas).
+    glints_min_salary: int = _int_setting("GLINTS_MIN_SALARY", 4_500_000)
+
     # Tolak lowongan yang lokasinya jelas di luar LOCATION.
     strict_location: bool = _bool_setting("STRICT_LOCATION", False)
 

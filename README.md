@@ -118,6 +118,8 @@ cp .env.example .env
 | `MIN_SALARY` | `0` | Gaji minimum (0 = tanpa filter) |
 | `MAX_EXPERIENCE_YEARS` | `5` | Tolak lowongan yang minta pengalaman lebih dari ini |
 | `BLACKLIST_COMPANIES` | kosong | Perusahaan yang tidak ingin dilamar (dipisah koma, cocok longgar) |
+| `BLOCKED_COMPANIES` | `royal abadi,ifa` | Perusahaan yang **selalu** ditolak di JobStreet maupun Glints. Nama pendek seperti `ifa` dicocokkan per kata, jadi `Kafifa` tidak ikut tertolak |
+| `GLINTS_MIN_SALARY` | `4500000` | Khusus Glints: lamar hanya bila gaji bisa mencapai angka ini. Lowongan yang tidak mencantumkan gaji **tetap** dilamar; `0` = tanpa batas |
 | `EXCLUDE_KEYWORDS` | `principal,director,head,senior,lead` | Kata yang membuat judul otomatis ditolak |
 | `STRICT_LOCATION` | `false` | `true` = tolak lowongan yang lokasinya di luar `LOCATION` |
 | `MAX_APPLY_PER_DAY` | `0` | Batas lamaran per hari; `0` = tanpa batas |
@@ -475,9 +477,15 @@ Perbedaan yang perlu diketahui:
 | Urutan terbaru | parameter `sortmode=ListedDate` | klik tombol *Baru Ditambahkan* |
 | Umur lowongan | terbaca ("3 hari yang lalu") | tidak ditampilkan Glints |
 | Lowongan khusus HP | — | *"Lamar & chat di aplikasi"* dilewati otomatis |
+| Batas gaji | `MIN_SALARY` (batas bawah) | `GLINTS_MIN_SALARY` (gaji tertinggi di rentang) |
 
 Karena Glints tidak menampilkan tanggal tayang di kartu, urutan "terbaru"
 mengandalkan urutan situs, bukan `MAX_AGE_DAYS`.
+
+Aturan gaji di Glints: lowongan dengan gaji di bawah `GLINTS_MIN_SALARY`
+(bawaan **Rp4.500.000**) dilewati. Untuk rentang seperti *Rp 4-4,5jt* dipakai
+angka tertinggi — jadi masih dilamar karena bisa mencapai 4,5 juta. Lowongan
+yang menulis *"Gaji Tidak Ditampilkan"* atau tanpa info gaji **tetap dilamar**.
 
 ### Versi ringan tanpa Selenium
 

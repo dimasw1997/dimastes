@@ -325,3 +325,63 @@ def test_blacklist_dari_daftar_tersimpan(filter_baru, monkeypatch):
 
     assert lolos is False
     assert "blacklist" in alasan.lower()
+
+
+# ----------------------------------------------------------------------
+# Rentang gaji (dipakai aturan minimal gaji Glints)
+# ----------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "teks, expected",
+    [
+        ("Rp 2-3jt", (2_000_000, 3_000_000)),
+        ("Rp 4-4,5jt", (4_000_000, 4_500_000)),
+        ("Rp 4,2jt", (4_200_000, 4_200_000)),
+        ("Rp 5jt", (5_000_000, 5_000_000)),
+        ("Rp2.000.000 - 3.000.000/Bulan", (2_000_000, 3_000_000)),
+        ("Rp 4.500.000 - 6.000.000", (4_500_000, 6_000_000)),
+        ("Rp 1-2,5jt", (1_000_000, 2_500_000)),
+        ("Gaji Tidak Ditampilkan", (0, 0)),
+        ("", (0, 0)),
+    ],
+)
+def test_rentang_gaji(teks, expected):
+    assert job_filter_module.rentang_gaji(teks) == expected
+
+
+# ----------------------------------------------------------------------
+# Perusahaan yang selalu ditolak
+# ----------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "company",
+    [
+        "PT IFA Indonesia",
+        "IFA",
+        "PT IFA",
+        "ifa group",
+        "PT Royal Abadi Sejahtera",
+        "ROYAL ABADI",
+    ],
+)
+def test_blocked_companies_selalu_ditolak(filter_baru, monkeypatch, company):
+    monkeypatch.setattr(config, "blacklist_companies", [])
+    monkeypatch.setattr(config, "blocked_companies", ["royal abadi", "ifa"])
+
+    lolos, alasan = filter_baru.should_apply(make_job(company=company))
+
+    assert lolos is False
+    assert "blacklist" in alasan.lower()
+
+
+@pytest.mark.parametrize(
+    "company",
+    ["PT Kafifa Nusantara", "PT Sinar Abadi Nusantara", "PT Ifana Jaya"],
+)
+def test_blocked_companies_tidak_menolak_nama_mirip(
+    filter_baru, monkeypatch, company
+):
+    monkeypatch.setattr(config, "blacklist_companies", [])
+    monkeypatch.setattr(config, "blocked_companies", ["royal abadi", "ifa"])
+
+    lolos, _ = filter_baru.should_apply(make_job(company=company))
+
+    assert lolos is True
