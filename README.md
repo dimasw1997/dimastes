@@ -144,6 +144,7 @@ cp .env.example .env
 | `AUTO_APPLY_MAX_PER_SESSION` | `0` | Batas lamaran per sesi; `0` = tanpa batas |
 | `AUTO_APPLY_STEP_TIMEOUT` | `3` | Batas detik mengenali tiap langkah; lewat itu lowongan dilewati |
 | `AUTO_ANSWER_QUESTIONS` | `true` | Jawab otomatis pertanyaan dropdown (pengalaman, gaji, pendidikan) |
+| `AUTO_ANSWER_WAIT` | `20` | Bila ada kuesioner yang tak bisa dijawab otomatis: beri waktu sekian detik agar Anda mengisi di Chrome, lalu bot melanjutkan sendiri. `0` = langsung dilewati |
 | `EXPECTED_SALARY` | `5000000` | Gaji yang diharapkan (kosong = pertanyaan gaji dilewati) |
 | `YEARS_EXPERIENCE` | `3` | Total pengalaman kerja (tahun) untuk pertanyaan pengalaman |
 | `EXPERIENCE_ROLES` | inventory, ppic, gudang, purchasing, ... | Bidang pengalaman Anda; di luar daftar ini dijawab 0 tahun |
@@ -527,6 +528,45 @@ internal).
 
 Matikan semuanya dengan `AUTO_ANSWER_QUESTIONS=false` bila ingin semua
 pertanyaan dilewati.
+
+### Kuesioner yang belum terisi: bot menunggu Anda
+
+Tidak semua pertanyaan perusahaan bisa dijawab bot (mis. *"Warna favorit?"*,
+atau pertanyaan pilihan yang polanya tidak dikenali). Dulu lowongan seperti itu
+langsung dilewati. Sekarang bot memberi Anda waktu untuk mengisinya sendiri:
+
+```
+[dim]   belum bisa dijawab otomatis: Warna favorit kamu?
+Ada pertanyaan yang belum terisi: Warna favorit kamu?
+   Silakan isi di jendela Chrome sekarang — menunggu sampai 20 detik...
+   menunggu... sisa 15 detik
+   isian sudah lengkap — melanjutkan pengiriman lamaran.
+[dim]   klik tombol kirim "Kirim lamaran" (percobaan 1)
+Status: applied — Terkirim otomatis
+```
+
+Cara kerjanya:
+
+1. Bot mendeteksi ada pertanyaan wajib yang belum terisi (atau formulir menolak
+   dikirim karena isian wajib).
+2. Pesan muncul di terminal dan bot menunggu sampai `AUTO_ANSWER_WAIT` detik
+   (bawaan **20**). Terminal **tidak** meminta Anda menekan apa pun.
+3. Isi kuesionernya di jendela Chrome yang sedang terbuka.
+4. Bot memeriksa ulang setiap detik: begitu tidak ada pertanyaan tersisa dan
+   peringatan validasi hilang, ia melanjutkan sendiri — mengklik **Kirim**.
+5. Bila waktu habis dan isian masih kurang, lowongan dilewati seperti biasa
+   dan masuk daftar "perlu dilamar manual" di akhir sesi.
+
+Atur lamanya:
+
+```bash
+python cli.py set-env AUTO_ANSWER_WAIT=45    # lebih lega, sesi lebih lambat
+python cli.py set-env AUTO_ANSWER_WAIT=0     # kembali ke perilaku lama: langsung lewati
+```
+
+Tips: jalankan tanpa `HEADLESS_MODE` (bawaan) supaya jendela Chrome terlihat
+dan bisa Anda isi. Di mode headless tidak ada yang bisa diklik, jadi biarkan
+`AUTO_ANSWER_WAIT=0`.
 
 ### Isian lamaran otomatis
 

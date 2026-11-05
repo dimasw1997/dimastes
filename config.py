@@ -111,6 +111,11 @@ class Config:
     # perusahaan. Bawaan false agar perilaku lama tidak berubah.
     require_company_logo: bool = _bool_setting("REQUIRE_COMPANY_LOGO", False)
 
+    # Bila ada kuesioner yang tidak bisa dijawab otomatis, beri kesempatan
+    # mengisinya sendiri di jendela Chrome selama ini (detik). 0 = langsung
+    # dilewati seperti sebelumnya.
+    auto_answer_wait: int = _int_setting("AUTO_ANSWER_WAIT", 20)
+
     # Hanya lamar lowongan yang judulnya cocok dengan minat.
     require_keyword_match: bool = _bool_setting("REQUIRE_KEYWORD_MATCH", True)
     # Kata kunci untuk mencocokkan judul. Kosong = pakai KEYWORDS.
