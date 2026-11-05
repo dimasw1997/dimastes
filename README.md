@@ -127,8 +127,11 @@ Ringkasnya, berkas yang bisa diklik:
 
 | Berkas | Gunanya |
 |---|---|
-| **`Lamar Otomatis.bat`** | satu klik: tarik kode terbaru, lalu lamar di JobStreet → Glints → Indeed |
-| `buat-pintasan.bat` | sekali jalan: menaruh pintasan “Lamar Otomatis” di Desktop |
+| **`Lamar JobStreet.bat`** | satu klik: lamar otomatis **hanya di JobStreet** |
+| **`Lamar Glints.bat`** | satu klik: lamar otomatis **hanya di Glints** |
+| **`Lamar Indeed.bat`** | satu klik: lamar otomatis **hanya di Indeed** |
+| **`Lamar Otomatis.bat`** | satu klik: ketiganya berurutan (JobStreet → Glints → Indeed) |
+| `buat-pintasan.bat` | sekali jalan: menaruh keempat pintasan di Desktop |
 | `tarik.bat` | hanya menarik pembaruan kode |
 | `jalankan.bat` | menjalankan perintah CLI mana pun (mis. `jalankan.bat glints run`) |
 | `simpan.bat` | mengirim perubahan kode ke repo Anda |
@@ -918,34 +921,54 @@ Dua perbedaan yang memang disengaja:
    (`countryCode=ID`), jadi hasilnya lebih luas lalu disaring dengan
    `LOCATIONS`. Aturan "semua lokasi tercakup" tetap terpenuhi.
 
-### Satu klik: `Lamar Otomatis.bat`
+### Satu klik: berkas peluncur
 
-Klik dua kali **`Lamar Otomatis.bat`** (atau pintasannya di Desktop). Berkas itu:
+Ada empat berkas yang bisa diklik — **satu untuk tiap situs**, plus satu untuk
+semuanya:
+
+| Berkas | Yang dijalankan |
+|---|---|
+| `Lamar JobStreet.bat` | JobStreet saja |
+| `Lamar Glints.bat` | Glints saja |
+| `Lamar Indeed.bat` | Indeed saja |
+| `Lamar Otomatis.bat` | JobStreet → Glints → Indeed |
+
+Semuanya bekerja sama: klik dua kali berkasnya (atau pintasannya di Desktop).
+Setiap peluncur:
 
 1. menarik kode terbaru dari GitHub (`tarik.bat`),
 2. memasang dependensi hanya bila `requirements.txt` berubah,
-3. menjalankan **JobStreet → Glints → Indeed** berurutan,
-4. memakai **satu** kuota harian untuk ketiganya,
-5. mengirim **satu** laporan harian Telegram di akhir,
-6. berhenti sendiri bila kuota habis, dan tidak menutup jendela sebelum Anda
-   melihat ringkasannya.
+3. melamar di situs yang dituju,
+4. memakai **satu** kuota harian bersama — kalau jatah hari ini sudah habis,
+   sesi langsung berhenti dengan pesan kuota,
+5. mengirim laporan harian Telegram,
+6. tidak menutup jendela sebelum Anda melihat ringkasannya.
 
 ```powershell
-# klik dua kali, atau:
+# cukup klik dua kali, atau:
+.\Lamar JobStreet.bat
+.\Lamar Glints.bat
+.\Lamar Indeed.bat
 .\Lamar Otomatis.bat
-.\Lamar Otomatis.bat --situs jobstreet,indeed --limit 10
-.\Lamar Otomatis.bat --max-pages 2
 ```
 
-Ingin ikon di Desktop? Jalankan sekali:
+Opsi bisa ditambahkan pada berkas mana pun:
+
+```powershell
+.\Lamar Indeed.bat --limit 10
+.\Lamar Indeed.bat --max-pages 2
+.\Lamar Otomatis.bat --situs jobstreet,indeed
+```
+
+Ingin ikon di Desktop? Jalankan sekali — keempat pintasan dibuat sekaligus:
 
 ```powershell
 .\buat-pintasan.bat
 ```
 
-Situs yang dijalankan diatur `SITES` di `.env` (bawaan
-`jobstreet,glints,indeed`). Satu situs gagal (mis. Cloudflare) tidak
-menghentikan situs lain.
+Jalankan berurutan kapan saja; lowongan yang sudah dilamar tercatat sehingga
+tidak terkirim dua kali. Pada `Lamar Otomatis.bat`, satu situs gagal
+(mis. Cloudflare) tidak menghentikan situs lain.
 
 ### Indeed (id.indeed.com)
 

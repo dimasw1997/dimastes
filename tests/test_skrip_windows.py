@@ -112,5 +112,55 @@ def test_pembuat_pintasan_desktop_ada():
     assert mentah.count(b"\r\n") == mentah.count(b"\n")
 
     isi = mentah.decode("utf-8")
-    assert "Lamar Otomatis.bat" in isi
+    assert "Lamar Otomatis" in isi
+    assert "CreateShortcut" in isi
+
+
+def test_peluncur_per_situs():
+    """Satu berkas per situs: JobStreet, Glints, Indeed."""
+    for nama, kunci in (
+        ("Lamar JobStreet", "jobstreet"),
+        ("Lamar Glints", "glints"),
+        ("Lamar Indeed", "indeed"),
+    ):
+        jalur = AKAR / f"{nama}.bat"
+        assert jalur.exists(), nama
+
+        mentah = jalur.read_bytes()
+        assert mentah.count(b"\r\n") == mentah.count(b"\n"), nama
+
+        isi = mentah.decode("utf-8")
+        assert f"--situs {kunci}" in isi, nama
+        assert "tarik.bat" in isi, nama
+        assert "jalankan.bat lamar" in isi, nama
+        assert "pause" in isi, nama
+
+        baris = [b.strip().lower() for b in isi.splitlines()]
+        assert not any(b.startswith("goto") for b in baris), nama
+        assert not any(b.startswith(":") for b in baris), nama
+
+
+def test_tiap_peluncur_hanya_satu_situs():
+    """JobStreet tidak boleh ikut menjalankan Glints/Indeed, dan sebaliknya."""
+    for nama, lain in (
+        ("Lamar JobStreet", ("glints", "indeed")),
+        ("Lamar Glints", ("jobstreet", "indeed")),
+        ("Lamar Indeed", ("jobstreet", "glints")),
+    ):
+        isi = (AKAR / f"{nama}.bat").read_text(encoding="utf-8")
+        perintah = [
+            b for b in isi.splitlines()
+            if "jalankan.bat lamar" in b
+        ]
+        assert len(perintah) == 1, nama
+        for situs_lain in lain:
+            assert situs_lain not in perintah[0], nama
+
+
+def test_pembuat_pintasan_mencakup_semua_peluncur():
+    isi = (AKAR / "buat-pintasan.bat").read_text(encoding="utf-8")
+
+    for nama in ("Lamar JobStreet", "Lamar Glints", "Lamar Indeed",
+                 "Lamar Otomatis"):
+        assert nama in isi
     assert "CreateShortcut" in isi
