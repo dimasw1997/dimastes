@@ -273,3 +273,21 @@ def test_sesi_glints_berhenti_bila_kuota_habis(monkeypatch, db_kosong):
 
     assert bot.dilamar == []
     assert laporan["dilamar"] == 0
+
+
+def test_glints_cari_menampilkan_status_logo(monkeypatch, capsys):
+    """`glints cari` harus memperlihatkan deteksi logo (untuk verifikasi)."""
+    import cli
+
+    kandidat = [glints_job("a", "Inventory Staff"), glints_job("b", "Staff Umum")]
+    kandidat[1]["has_logo"] = False
+
+    monkeypatch.setattr(glints_module, "daftar_kandidat", lambda **_: kandidat)
+    monkeypatch.setattr(config, "require_company_logo", True)
+
+    cli.cari_glints(max_pages=1, batas=10)
+
+    keluaran = capsys.readouterr().out
+    assert "Logo" in keluaran
+    assert "tidak" in keluaran
+    assert "1" in keluaran and "2 kartu terdeteksi" in keluaran

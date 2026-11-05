@@ -226,6 +226,7 @@ def cari_glints(keywords: str = "", max_pages: int = 1, batas: int = 10,
     table.add_column("Perusahaan", overflow="fold")
     table.add_column("Gaji")
     table.add_column("Lokasi", overflow="fold")
+    table.add_column("Logo", justify="center")
     table.add_column("URL", overflow="fold", style="dim")
 
     for nomor, job in enumerate(lowongan, start=1):
@@ -235,6 +236,7 @@ def cari_glints(keywords: str = "", max_pages: int = 1, batas: int = 10,
             (job.get("company") or "-")[:28],
             job.get("salary") or "-",
             (job.get("location") or "-")[:26],
+            "[green]ya[/]" if job.get("has_logo") else "[red]tidak[/]",
             job.get("url", ""),
         )
 
@@ -243,6 +245,23 @@ def cari_glints(keywords: str = "", max_pages: int = 1, batas: int = 10,
         "[dim]Salin salah satu URL untuk: "
         "jalankan.bat glints uji --url \"URL\"[/]"
     )
+
+    berlogo = sum(1 for job in lowongan if job.get("has_logo"))
+    console.print(
+        f"[bold]{berlogo}[/] dari [bold]{len(lowongan)}[/] kartu terdeteksi "
+        "berlogo perusahaan."
+    )
+
+    if config.require_company_logo:
+        console.print(
+            "[green]REQUIRE_COMPANY_LOGO=true[/] — kartu tanpa logo dilewati "
+            "saat melamar. Tambahkan --semua untuk melihat kartu yang tersaring."
+        )
+    else:
+        console.print(
+            "[yellow]REQUIRE_COMPANY_LOGO=false[/] — filter logo belum aktif "
+            "(sama seperti JobStreet)."
+        )
 
 
 def uji_glints_otomatis(keywords: str = "", max_pages: int = 1):

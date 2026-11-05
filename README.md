@@ -475,7 +475,9 @@ python cli.py set-env REQUIRE_COMPANY_LOGO=true
 
 Aturan ini berlaku untuk **JobStreet maupun Glints** — keduanya memakai
 penilai logo yang sama (`logo_perusahaan`), hanya sumber gambarnya berbeda
-(kartu JobStreet vs kartu Glints).
+(kartu JobStreet vs kartu Glints). Untuk Glints, deteksinya bisa dilihat
+langsung lewat kolom **Logo** pada `python cli.py glints cari`; tambahkan
+`--semua` bila ingin melihat kartu yang tersaring oleh aturan ini.
 
 `cek-logo` membuka pencarian JobStreet seperti biasa (perlu login, sama seperti
 `run`),
