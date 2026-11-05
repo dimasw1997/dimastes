@@ -251,3 +251,60 @@ def test_lowongan_sudah_dilamar_dilewati(monkeypatch):
 
     assert bot.dilamar == []
     assert laporan["sudah"] == 1
+
+
+# ------------------------------------------------------------- logo ----
+def test_logo_dari_cdn_tanpa_kata_logo_diterima():
+    """Logo Indeed sering dari CDN perusahaan, tanpa kata "logo" di URL."""
+    from indeed import logo_kartu_indeed
+
+    gambar = [{"src": "https://cdn.affinity.com/foto/abc123.png", "alt": ""}]
+    punya, _ = logo_kartu_indeed(gambar, "PT Contoh")
+    assert punya is True
+
+
+def test_gambar_placeholder_bukan_logo():
+    from indeed import logo_kartu_indeed
+
+    for src in (
+        "https://id.indeed.com/images/company-logo-placeholder.png",
+        "https://id.indeed.com/no-logo.png",
+        "data:image/gif;base64,R0lGOD",
+        "https://example.com/spacer.gif",
+    ):
+        punya, _ = logo_kartu_indeed([{"src": src, "alt": ""}], "PT Contoh")
+        assert punya is False, src
+
+
+def test_placeholder_lewat_class_juga_ditolak():
+    from indeed import logo_kartu_indeed
+
+    gambar = [{
+        "src": "https://cdn.example.com/x.png",
+        "alt": "",
+        "penanda": "companyLogo placeholder",
+    }]
+    punya, _ = logo_kartu_indeed(gambar, "PT Contoh")
+    assert punya is False
+
+
+def test_logo_dari_alt_nama_perusahaan():
+    from indeed import logo_kartu_indeed
+
+    punya, _ = logo_kartu_indeed(
+        [{"src": "", "alt": "Logo PT Contoh"}], "PT Contoh"
+    )
+    assert punya is True
+
+
+def test_tanpa_gambar_sama_sekali():
+    from indeed import logo_kartu_indeed
+
+    assert logo_kartu_indeed([], "PT Contoh")[0] is False
+    assert logo_kartu_indeed(None, "PT Contoh")[0] is False
+
+
+def test_rapikan_kartu_memakai_deteksi_logo_indeed():
+    mentah = dict(KARTU_MENTAH)
+    mentah["logo"] = [{"src": "https://cdn.affinity.com/foto/abc.png", "alt": ""}]
+    assert rapikan_kartu(mentah)["has_logo"] is True
