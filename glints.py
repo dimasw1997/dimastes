@@ -303,12 +303,15 @@ def pilih_teratas(lowongan: List[Dict], batas: int = 0) -> List[Dict]:
     return terurut
 
 
-def tampilkan_rincian_skor(kandidat: List[Dict], maksimal: int = 3):
+def tampilkan_rincian_skor(kandidat: List[Dict], maksimal: int = 3,
+                           situs: str = "Glints"):
     """Rincian skor per dimensi (sama seperti tabel JobStreet)."""
     if not kandidat:
         return
 
-    table = Table(title="Rincian skor kandidat teratas (Glints)", show_lines=False)
+    table = Table(
+        title=f"Rincian skor kandidat teratas ({situs})", show_lines=False
+    )
     table.add_column("Judul", style="cyan", max_width=30)
     for nama in ("Posisi", "Lokasi", "Kualifikasi", "Pengalaman", "Pendidikan",
                  "Keterampilan", "Tanggal", "Gaji", "Total"):
@@ -329,13 +332,14 @@ def tampilkan_rincian_skor(kandidat: List[Dict], maksimal: int = 3):
     console.print(table)
 
 
-def tampilkan_perbandingan(kandidat: List[Dict], maksimal: int = 10):
-    """Tabel kandidat teratas beserta skor kecocokannya (Glints)."""
+def tampilkan_perbandingan(kandidat: List[Dict], maksimal: int = 10,
+                           situs: str = "Glints"):
+    """Tabel kandidat teratas beserta skor kecocokannya."""
     if not kandidat:
         return
 
     table = Table(
-        title=f"Kandidat Glints yang akan dilamar (dibandingkan dari "
+        title=f"Kandidat {situs} yang akan dilamar (dibandingkan dari "
         f"{len(kandidat)})",
         show_lines=False,
     )
