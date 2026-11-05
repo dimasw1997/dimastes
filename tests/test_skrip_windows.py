@@ -81,3 +81,36 @@ def test_jalankan_sh_memasang_dependensi_sekali_saja():
 
     assert ".deps-terpasang" in isi
     assert "LEWATI_PASANG" in isi
+
+
+def test_peluncur_satu_klik_ada_dan_benar():
+    """Satu berkas: tarik kode, pasang dependensi bila perlu, jalankan 3 situs."""
+    jalur = AKAR / "Lamar Otomatis.bat"
+    assert jalur.exists()
+
+    mentah = jalur.read_bytes()
+    assert b"\r\n" in mentah
+    assert mentah.count(b"\r\n") == mentah.count(b"\n")
+
+    isi = mentah.decode("utf-8")
+    assert "tarik.bat" in isi
+    assert "jalankan.bat lamar" in isi
+    assert "--tanpa-perbarui" in isi
+    assert "pause" in isi
+
+    # Tanpa perintah goto / label: pola itu pernah merusak batch berakhiran LF.
+    baris = [b.strip().lower() for b in isi.splitlines()]
+    assert not any(b.startswith("goto") for b in baris)
+    assert not any(b.startswith(":") for b in baris)
+
+
+def test_pembuat_pintasan_desktop_ada():
+    jalur = AKAR / "buat-pintasan.bat"
+    assert jalur.exists()
+
+    mentah = jalur.read_bytes()
+    assert mentah.count(b"\r\n") == mentah.count(b"\n")
+
+    isi = mentah.decode("utf-8")
+    assert "Lamar Otomatis.bat" in isi
+    assert "CreateShortcut" in isi

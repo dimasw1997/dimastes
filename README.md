@@ -123,6 +123,17 @@ chmod +x jalankan.sh
 Argumen apa pun diteruskan ke `cli.py`, misalnya
 `jalankan.bat history --limit 10` atau `jalankan.bat repair`.
 
+Ringkasnya, berkas yang bisa diklik:
+
+| Berkas | Gunanya |
+|---|---|
+| **`Lamar Otomatis.bat`** | satu klik: tarik kode terbaru, lalu lamar di JobStreet → Glints → Indeed |
+| `buat-pintasan.bat` | sekali jalan: menaruh pintasan “Lamar Otomatis” di Desktop |
+| `tarik.bat` | hanya menarik pembaruan kode |
+| `jalankan.bat` | menjalankan perintah CLI mana pun (mis. `jalankan.bat glints run`) |
+| `simpan.bat` | mengirim perubahan kode ke repo Anda |
+| `pantau.bat` | memantau repo dan menarik pembaruan otomatis |
+
 ## Instalasi manual
 
 ```bash
@@ -906,6 +917,35 @@ Dua perbedaan yang memang disengaja:
 2. **Pencarian Glints tidak per lokasi** — alamat explore-nya nasional
    (`countryCode=ID`), jadi hasilnya lebih luas lalu disaring dengan
    `LOCATIONS`. Aturan "semua lokasi tercakup" tetap terpenuhi.
+
+### Satu klik: `Lamar Otomatis.bat`
+
+Klik dua kali **`Lamar Otomatis.bat`** (atau pintasannya di Desktop). Berkas itu:
+
+1. menarik kode terbaru dari GitHub (`tarik.bat`),
+2. memasang dependensi hanya bila `requirements.txt` berubah,
+3. menjalankan **JobStreet → Glints → Indeed** berurutan,
+4. memakai **satu** kuota harian untuk ketiganya,
+5. mengirim **satu** laporan harian Telegram di akhir,
+6. berhenti sendiri bila kuota habis, dan tidak menutup jendela sebelum Anda
+   melihat ringkasannya.
+
+```powershell
+# klik dua kali, atau:
+.\Lamar Otomatis.bat
+.\Lamar Otomatis.bat --situs jobstreet,indeed --limit 10
+.\Lamar Otomatis.bat --max-pages 2
+```
+
+Ingin ikon di Desktop? Jalankan sekali:
+
+```powershell
+.\buat-pintasan.bat
+```
+
+Situs yang dijalankan diatur `SITES` di `.env` (bawaan
+`jobstreet,glints,indeed`). Satu situs gagal (mis. Cloudflare) tidak
+menghentikan situs lain.
 
 ### Indeed (id.indeed.com)
 

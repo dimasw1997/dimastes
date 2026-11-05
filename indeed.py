@@ -880,7 +880,7 @@ def tampilkan_konfigurasi() -> None:
 
 
 def jalankan_indeed(max_pages: int = 0, keywords: Optional[List[str]] = None,
-                    batas: int = 0) -> dict:
+                    batas: int = 0, laporan_harian: bool = True) -> dict:
     """Riset → saring → peringkat → lamar di Indeed, aturan sama JobStreet."""
     kata_kunci = list(keywords) if keywords else config.keywords_riset
     halaman = batas_halaman_riset(max_pages)
@@ -1031,10 +1031,11 @@ def jalankan_indeed(max_pages: int = 0, keywords: Optional[List[str]] = None,
     finally:
         bot.tutup()
 
-        try:
-            notifier.send_daily_report(db.get_stats())
-        except Exception as exc:
-            console.print(f"[yellow]Laporan harian gagal dikirim: {exc}[/]")
+        if laporan_harian:
+            try:
+                notifier.send_daily_report(db.get_stats())
+            except Exception as exc:
+                console.print(f"[yellow]Laporan harian gagal dikirim: {exc}[/]")
 
     return laporan
 
