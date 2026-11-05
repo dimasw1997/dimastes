@@ -122,7 +122,7 @@ cp .env.example .env
 | `GLINTS_MIN_SALARY` | `4500000` | Khusus Glints: lamar hanya bila gaji bisa mencapai angka ini. Lowongan yang tidak mencantumkan gaji **tetap** dilamar; `0` = tanpa batas |
 | `EXCLUDE_KEYWORDS` | `principal,director,head,senior,lead` | Kata yang membuat judul otomatis ditolak |
 | `STRICT_LOCATION` | `false` | `true` = tolak lowongan yang lokasinya di luar `LOCATION` |
-| `REQUIRE_COMPANY_LOGO` | `false` | Khusus JobStreet: `true` = hanya lamar lowongan yang kartunya menampilkan **logo perusahaan**; lowongan tanpa logo dilewati |
+| `REQUIRE_COMPANY_LOGO` | `false` | JobStreet **dan** Glints: `true` = hanya lamar lowongan yang kartunya menampilkan **logo perusahaan**; tanpa logo dilewati |
 | `MAX_APPLY_PER_DAY` | `0` | Batas lamaran per hari; `0` = tanpa batas |
 | `DELAY_BETWEEN_APPLY` | `3` | Jeda (detik) antar lowongan |
 | `MAX_PAGES` | `3` | Jumlah halaman hasil pencarian per kata kunci |
@@ -473,7 +473,12 @@ python cli.py cek-logo --limit 20 --keywords "ppic,inventory"
 python cli.py set-env REQUIRE_COMPANY_LOGO=true
 ```
 
-`cek-logo` membuka pencarian seperti biasa (perlu login, sama seperti `run`),
+Aturan ini berlaku untuk **JobStreet maupun Glints** — keduanya memakai
+penilai logo yang sama (`logo_perusahaan`), hanya sumber gambarnya berbeda
+(kartu JobStreet vs kartu Glints).
+
+`cek-logo` membuka pencarian JobStreet seperti biasa (perlu login, sama seperti
+`run`),
 lalu menampilkan tabel: judul, perusahaan, **ada logo atau tidak**, dan
 keterangan cara deteksinya. Contoh keluaran:
 
@@ -672,6 +677,10 @@ kuota — sisanya yang dipakai. Bila kuota habis, program berhenti dengan pesan
 Ingin kembali melamar sambil mencari (lebih cepat, tanpa perbandingan)?
 `python cli.py set-env COLLECT_BEFORE_APPLY=false`.
 
+Aturan yang sama berlaku di Glints: `jalankan.bat glints run` juga mengumpulkan
+semua kandidat, mengurutkan dari kecocokan tertinggi, menampilkan tabel
+perbandingan, lalu hanya melamar sebanyak sisa kuota `MAX_APPLY_PER_DAY`.
+
 ### Glints (glints.com)
 
 Versi Glints memakai mesin lamaran yang sama, tetapi dengan peta situsnya
@@ -708,6 +717,9 @@ Perbedaan yang perlu diketahui:
 | Umur lowongan | terbaca ("3 hari yang lalu") | tidak ditampilkan Glints |
 | Lowongan khusus HP | — | *"Lamar & chat di aplikasi"* dilewati otomatis |
 | Batas gaji | `MIN_SALARY` (batas bawah) | `GLINTS_MIN_SALARY` (gaji tertinggi di rentang) |
+| Logo perusahaan | `REQUIRE_COMPANY_LOGO` | `REQUIRE_COMPANY_LOGO` (aturan sama) |
+| Kuota harian & pilih yang paling cocok | `MAX_APPLY_PER_DAY` + `RANK_BY` | sama |
+| Menunggu kuesioner diisi | `AUTO_ANSWER_WAIT` | sama |
 
 Karena Glints tidak menampilkan tanggal tayang di kartu, urutan "terbaru"
 mengandalkan urutan situs, bukan `MAX_AGE_DAYS`.
