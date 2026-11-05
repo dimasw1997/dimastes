@@ -253,6 +253,9 @@ def rapikan_kartu(data: Dict) -> Optional[Dict]:
 
     return {
         "has_logo": punya_logo,
+        # Kartu Indeed tidak memuat logo perusahaan, jadi aturan "wajib logo"
+        # milik JobStreet tidak dipakai di situs ini.
+        "logo_diabaikan": True,
         "logo_src": info_logo,
         "job_id": f"indeed:{kunci}",
         "title": judul,
@@ -865,7 +868,7 @@ def tampilkan_konfigurasi() -> None:
         else "semua lokasi",
     )
     tabel.add_row(
-        "Wajib logo perusahaan", "ya" if config.require_company_logo else "tidak"
+        "Wajib logo perusahaan", "tidak (kartu Indeed tanpa logo)"
     )
     tabel.add_row("Urutan kandidat", getattr(config, "rank_by", "relevance"))
     tabel.add_row("Jeda antar lamaran", f"{config.delay_between_apply} detik")
@@ -914,7 +917,6 @@ def jalankan_indeed(max_pages: int = 0, keywords: Optional[List[str]] = None,
 
         layak: List[Dict] = []
         sudah = JobFilter()
-        tanpa_logo = 0
 
         for job in lowongan:
             if job.get("sudah_dilamar"):
@@ -937,20 +939,10 @@ def jalankan_indeed(max_pages: int = 0, keywords: Optional[List[str]] = None,
             alasan = alasan_tidak_layak(job, sudah)
             if alasan:
                 laporan["dilewati"] += 1
-                if "logo" in alasan.lower():
-                    tanpa_logo += 1
                 console.print(f"[dim]Lewati: {job['title']} — {alasan}[/]")
                 continue
 
             layak.append(job)
-
-        if config.require_company_logo and lowongan and tanpa_logo == len(lowongan):
-            console.print(
-                f"[yellow]Semua {tanpa_logo} kartu Indeed terbaca tanpa logo. "
-                "Bila di situs logonya terlihat, jalankan `python cli.py "
-                "indeed diagnosa` lalu kirimkan hasilnya agar deteksi logo "
-                "disesuaikan.[/]"
-            )
 
         if not layak:
             console.print("[yellow]Tidak ada lowongan Indeed yang lolos filter.[/]")

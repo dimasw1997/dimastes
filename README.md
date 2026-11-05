@@ -917,7 +917,7 @@ Indeed memakai **aturan yang sama persis** dengan JobStreet:
 | Urutan | tanggal terbaru (`sort=date`) |
 | Dedupe | lintas kata kunci × lokasi |
 | Saringan | `JobFilter` yang sama (judul, lokasi, gaji `MIN_SALARY`, kualifikasi) |
-| Logo perusahaan | `REQUIRE_COMPANY_LOGO` (aturan deteksi yang sama) |
+| Logo perusahaan | **tidak dipakai** — kartu Indeed tidak memuat logo, jadi `REQUIRE_COMPANY_LOGO` hanya berlaku untuk JobStreet & Glints |
 | Skor & ranking | 8 dimensi, ranking global, ambil yang terbaik dulu |
 | Kuota harian | `kuota.py` — 50/hari, **dipakai bersama** JobStreet & Glints |
 | Batas per sesi | `AUTO_APPLY_MAX_PER_SESSION` |
@@ -929,6 +929,10 @@ Indeed memakai **aturan yang sama persis** dengan JobStreet:
 
 Lamaran Indeed yang dialihkan ke situs perusahaan (`Apply on company site`)
 dilewati sebagai *perlu manual* — sama seperti JobStreet.
+
+Catatan: Indeed tetap mencoba membaca logo perusahaan (untuk ditampilkan di
+daftar kandidat), tetapi hasilnya **tidak** dipakai menyaring lowongan. Logo
+hanya jadi syarat di JobStreet dan Glints.
 
 ```powershell
 .\jalankan.bat indeed run
