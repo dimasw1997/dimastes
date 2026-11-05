@@ -130,6 +130,7 @@ cp .env.example .env
 | `TELEGRAM_BOT_TOKEN` | kosong | Opsional, untuk notifikasi |
 | `TELEGRAM_CHAT_ID` | kosong | Opsional, untuk notifikasi |
 | `COLLECT_BEFORE_APPLY` | `false` | `false` = lamar sambil mencari (halaman terbaru dulu); `true` = kumpulkan dulu |
+| `RANK_BY` | `relevance` | Urutan pemilihan saat `COLLECT_BEFORE_APPLY=true`: `relevance` = kecocokan tertinggi dulu, `newest` = posting terbaru dulu |
 | `SORT_MODE` | `ListedDate` | Urutan hasil; `ListedDate` = terbaru dulu, `KeywordRelevance` = relevansi |
 | `PREFER_NEWEST` | `true` | Dahulukan lowongan paling baru saat antrean melamar |
 | `MAX_AGE_DAYS` | `0` | Hanya lowongan N hari terakhir (0 = semua). Nilai valid JobStreet: 1, 3, 7, 14, 31 |
@@ -582,6 +583,54 @@ menghentikannya (Ctrl+C). Untuk memasang batas lagi:
 ```bash
 python cli.py set-env MAX_APPLY_PER_DAY=100 AUTO_APPLY_MAX_PER_SESSION=50
 ```
+
+### Batas 50 lamaran/hari — hanya yang paling cocok
+
+Bila ingin kuota harian dipakai untuk lowongan yang **paling cocok** (bukan
+yang kebetulan ditemukan lebih dulu), kumpulkan dulu semua kandidat dari
+**semua lokasi**, bandingkan, baru lamar yang terbaik:
+
+```bash
+python cli.py set-env MAX_APPLY_PER_DAY=50 COLLECT_BEFORE_APPLY=true RANK_BY=relevance
+python cli.py run
+```
+
+Yang terjadi saat `run`:
+
+1. Semua lokasi × kata kunci × halaman dikumpulkan (duplikat dibuang, yang
+   sudah pernah dilamar dilewati).
+2. Kandidat **diurutkan dari skor kecocokan tertinggi** (`RANK_BY=relevance`);
+   bila skornya sama, yang paling baru didahulukan.
+3. Sisa kuota hari ini dihitung: `MAX_APPLY_PER_DAY` − lamaran yang sudah
+   dikirim hari ini.
+4. Hanya **sebanyak sisa kuota** yang dilamar, diambil dari urutan teratas.
+   Kandidat di bawahnya tidak disentuh pada sesi itu.
+5. Perbandingannya ditampilkan lebih dulu:
+
+```
+Pengumpulan selesai: 63 lowongan lolos filter, diurutkan dari kecocokan tertinggi.
+Kuota harian: 12 sudah dilamar hari ini, sisa 38 dari 50.
+63 kandidat bersaing untuk 38 slot — diambil 38 yang paling cocok.
+      Kandidat yang akan dilamar (dibandingkan dari 38)
+┏━━━┳━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ # ┃ Skor ┃ Judul                 ┃ Perusahaan    ┃ Umur        ┃
+┡━━━╇━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ 1 │   28 │ Staff PPIC            │ PT A          │ hari ini    │
+│ 2 │   25 │ Inventory Controller  │ PT B          │ 1 hari lalu │
+└───┴──────┴───────────────────────┴───────────────┴─────────────┘
+```
+
+Skor kecocokan dihitung dari: kata kunci `KEYWORDS` ada di **judul** (+10)
+atau di deskripsi (+3), gaji dicantumkan (+5), dan lowongan tayang hari ini
+(+5) atau kemarin (+3).
+
+Catatan: `MAX_APPLY_PER_DAY` adalah batas **per hari kalender** yang dihitung
+dari database, jadi menjalankan `run` dua kali dalam sehari tidak menambah
+kuota — sisanya yang dipakai. Bila kuota habis, program berhenti dengan pesan
+`Kuota lamaran hari ini sudah habis` dan tidak mengirim apa pun.
+
+Ingin kembali melamar sambil mencari (lebih cepat, tanpa perbandingan)?
+`python cli.py set-env COLLECT_BEFORE_APPLY=false`.
 
 ### Glints (glints.com)
 

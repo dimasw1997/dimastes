@@ -41,6 +41,12 @@ def _float_setting(name: str, default: float) -> float:
         return default
 
 
+def _pilihan_setting(name: str, default: str, pilihan: tuple[str, ...]) -> str:
+    """Nilai teks yang dibatasi pada daftar pilihan; salah ketik -> default."""
+    nilai = str(os.getenv(name, default) or default).strip().lower()
+    return nilai if nilai in pilihan else default
+
+
 def _bool_setting(name: str, default: bool = False) -> bool:
     value = str(os.getenv(name, str(default))).strip().lower()
     return value in ("1", "true", "yes", "y", "ya")
@@ -129,6 +135,11 @@ class Config:
     # true  = kumpulkan semua kandidat dulu, baru lamar (mulai terbaru).
     # false = lamar sambil mencari, per halaman (halaman 1 = terbaru).
     collect_before_apply: bool = _bool_setting("COLLECT_BEFORE_APPLY", False)
+
+    # Urutan pemilihan saat mengumpulkan dulu (COLLECT_BEFORE_APPLY=true):
+    #   relevance = yang paling cocok dengan minat didahulukan (bawaan)
+    #   newest    = yang paling baru didahulukan
+    rank_by: str = _pilihan_setting("RANK_BY", "relevance", ("relevance", "newest"))
 
     # Urutkan hasil pencarian dari yang paling baru (ListedDate).
     # Kosongkan SORT_MODE untuk kembali ke urutan relevansi JobStreet.

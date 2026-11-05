@@ -453,12 +453,49 @@ class AutoApplyEngine:
             )
             return
 
-        kandidat = job_filter.rank_jobs(kandidat, prefer_newest=True)
+        # Urutkan: kecocokan tertinggi dulu (bawaan) atau posting terbaru.
+        urut_terbaru = config.rank_by == "newest"
+        kandidat = job_filter.rank_jobs(kandidat, prefer_newest=urut_terbaru)
 
+        keterangan_urut = (
+            "posting terbaru" if urut_terbaru else "kecocokan tertinggi"
+        )
         console.print(
             f"\n[bold green]Pengumpulan selesai: {len(kandidat)} lowongan "
-            "siap dilamar, mulai dari posting terbaru.[/]"
+            f"lolos filter, diurutkan dari {keterangan_urut}.[/]"
         )
+
+        # Bandingkan dulu, baru lamar: ambil hanya yang terbaik sebanyak sisa
+        # kuota hari ini, supaya batas harian dipakai untuk lowongan paling
+        # cocok — bukan untuk yang kebetulan ditemukan lebih dulu.
+        if config.max_apply_per_day > 0:
+            sudah = db.get_today_apply_count()
+            sisa = max(0, config.max_apply_per_day - sudah)
+
+            console.print(
+                f"[cyan]Kuota harian:[/] {sudah} sudah dilamar hari ini, "
+                f"sisa {sisa} dari {config.max_apply_per_day}."
+            )
+
+            if sisa == 0:
+                console.print(
+                    "[bold yellow]Kuota lamaran hari ini sudah habis. "
+                    "Tidak ada lamaran dikirim.[/]"
+                )
+                return
+
+            if len(kandidat) > sisa:
+                console.print(
+                    f"[bold]{len(kandidat)} kandidat[/] bersaing untuk "
+                    f"[bold]{sisa} slot[/] — diambil {sisa} yang paling cocok."
+                )
+                kandidat = kandidat[:sisa]
+
+        if not kandidat:
+            console.print("[yellow]Tidak ada lowongan yang dilamar.[/]")
+            return
+
+        self._tampilkan_perbandingan(kandidat)
 
         for job in kandidat:
             if self.stop_requested:
@@ -476,6 +513,45 @@ class AutoApplyEngine:
 
             if not self._lamar(job):
                 return
+
+    @staticmethod
+    def _tampilkan_perbandingan(kandidat: list, maksimal: int = 10):
+        """Tampilkan kandidat teratas beserta skor kecocokannya."""
+        if not kandidat:
+            return
+
+        table = Table(
+            title=f"Kandidat yang akan dilamar (dibandingkan dari {len(kandidat)})",
+            show_lines=False,
+        )
+        table.add_column("#", justify="right", style="dim")
+        table.add_column("Skor", justify="right", style="green")
+        table.add_column("Judul", style="cyan", max_width=44)
+        table.add_column("Perusahaan", max_width=26)
+        table.add_column("Umur", style="dim", max_width=14)
+
+        for nomor, job in enumerate(kandidat[:maksimal], start=1):
+            umur = job.get("age_days")
+            keterangan = (
+                "hari ini" if umur == 0
+                else f"{umur} hari lalu" if isinstance(umur, int)
+                else "-"
+            )
+            table.add_row(
+                str(nomor),
+                str(job.get("_score", 0)),
+                (job.get("title") or "-")[:44],
+                (job.get("company") or "-")[:26],
+                keterangan,
+            )
+
+        console.print(table)
+
+        if len(kandidat) > maksimal:
+            console.print(
+                f"[dim]… dan {len(kandidat) - maksimal} lowongan lain di "
+                "bawahnya (tidak dilamar pada sesi ini).[/]"
+            )
 
     def _print_banner(self):
         banner = """
@@ -519,7 +595,12 @@ class AutoApplyEngine:
         table.add_row(
             "Urutan pelamaran",
             (
-                "Kumpulkan dulu, mulai dari posting terbaru"
+                "Kumpulkan dulu lalu bandingkan — "
+                + (
+                    "posting terbaru dulu"
+                    if config.rank_by == "newest"
+                    else "kecocokan tertinggi dulu"
+                )
                 if config.auto_apply and config.collect_before_apply
                 else "Lamar sambil mencari (halaman terbaru dulu)"
             ),

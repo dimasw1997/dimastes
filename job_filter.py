@@ -341,7 +341,14 @@ class JobFilter:
                 )
             )
         else:
-            scored_jobs.sort(key=lambda item: item["_score"], reverse=True)
+            # Kecocokan tertinggi dulu; bila skornya sama, yang paling baru.
+            scored_jobs.sort(
+                key=lambda item: (
+                    -item["_score"],
+                    item.get("age_days") is None,
+                    item.get("age_days") or 0,
+                )
+            )
 
         return scored_jobs
 
