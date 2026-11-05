@@ -33,7 +33,6 @@ from database import db
 from job_filter import (
     JobFilter,
     dedupe_jobs,
-    rentang_gaji,
 )
 from job_filter import (
     alasan_tidak_layak as alasan_standar,
@@ -477,38 +476,6 @@ def lokasi_cocok(lokasi: str, daftar: List[str]) -> bool:
         return True
 
     return any(item.lower().strip() in teks for item in daftar if item.strip())
-
-
-def lolos_gaji(job: Dict, minimal: Optional[int] = None) -> bool:
-    """True bila gaji lowongan memenuhi batas minimal Glints.
-
-    Aturan pemakai: gaji di bawah batas tidak dilamar, tetapi lowongan yang
-    tidak mencantumkan gaji tetap dilamar. Untuk rentang (mis. "Rp 4-4,5jt")
-    dipakai angka tertinggi, karena gaji yang ditawarkan bisa mencapai itu.
-    """
-    batas = config.glints_min_salary if minimal is None else minimal
-    if not batas or batas <= 0:
-        return True
-
-    _, tertinggi = rentang_gaji(str(job.get("salary") or ""))
-    if tertinggi <= 0:
-        # Tidak ada angka gaji: tetap dilamar sesuai permintaan.
-        return True
-
-    return tertinggi >= batas
-
-
-def alasan_gaji(job: Dict, minimal: Optional[int] = None) -> str:
-    """Alasan penolakan karena gaji ('' bila lolos)."""
-    if lolos_gaji(job, minimal):
-        return ""
-
-    batas = config.glints_min_salary if minimal is None else minimal
-    gaji = " ".join(str(job.get("salary") or "").split())
-    return (
-        f"Gaji di bawah Rp{batas:,}".replace(",", ".")
-        + f" ({gaji})"
-    )
 
 
 def alasan_tidak_layak(job: Dict, saringan: Optional[JobFilter] = None) -> str:
