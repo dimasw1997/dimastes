@@ -122,6 +122,7 @@ cp .env.example .env
 | `GLINTS_MIN_SALARY` | `4500000` | Khusus Glints: lamar hanya bila gaji bisa mencapai angka ini. Lowongan yang tidak mencantumkan gaji **tetap** dilamar; `0` = tanpa batas |
 | `EXCLUDE_KEYWORDS` | `principal,director,head,senior,lead` | Kata yang membuat judul otomatis ditolak |
 | `STRICT_LOCATION` | `false` | `true` = tolak lowongan yang lokasinya di luar `LOCATION` |
+| `REQUIRE_COMPANY_LOGO` | `false` | Khusus JobStreet: `true` = hanya lamar lowongan yang kartunya menampilkan **logo perusahaan**; lowongan tanpa logo dilewati |
 | `MAX_APPLY_PER_DAY` | `0` | Batas lamaran per hari; `0` = tanpa batas |
 | `DELAY_BETWEEN_APPLY` | `3` | Jeda (detik) antar lowongan |
 | `MAX_PAGES` | `3` | Jumlah halaman hasil pencarian per kata kunci |
@@ -194,6 +195,9 @@ python cli.py simulasi
 
 # 7. Uji alur lamaran pada satu lowongan (tanpa pencarian/filter)
 python cli.py uji-lamar --url "https://id.jobstreet.com/job/95549275"
+
+# 8. Periksa deteksi logo perusahaan pada kartu JobStreet
+python cli.py cek-logo --limit 10
 ```
 
 `uji-lamar` membuka satu lowongan, menjalankan alur lamaran otomatis, lalu
@@ -455,6 +459,48 @@ Ingin menambah sendiri? Tambahkan istilah dipisah koma, mis.
 Ingin mematikan filter ini (lamar semua yang muncul)?
 `REQUIRE_KEYWORD_MATCH=false`.
 
+### Hanya perusahaan yang menampilkan logo (JobStreet)
+
+Sebagian lowongan di JobStreet menampilkan **logo perusahaan** di kanan atas
+kartu; sebagian lagi tidak. Bila ingin hanya melamar lowongan yang ada
+logonya:
+
+```bash
+python cli.py cek-logo            # periksa dulu apa yang terdeteksi
+python cli.py cek-logo --limit 20 --keywords "ppic,inventory"
+python cli.py set-env REQUIRE_COMPANY_LOGO=true
+```
+
+`cek-logo` membuka pencarian seperti biasa (perlu login, sama seperti `run`),
+lalu menampilkan tabel: judul, perusahaan, **ada logo atau tidak**, dan
+keterangan cara deteksinya. Contoh keluaran:
+
+```
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
+┃ Judul                        ┃ Perusahaan      ┃ Logo ┃ Keterangan          ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━━━━━━━━━━━━━━┩
+│ Admin PPIC GARMENT           │ Trackerindo ... │  ya  │ penanda 'company... │
+│ Staf Gudang                  │ PT Tanpa Logo   │ tidak│ 2 gambar tanpa logo │
+└──────────────────────────────┴━━━━━━━━━━━━━━━━━┵──────┴─────────────────────┘
+2 dari 12 kartu terdeteksi berlogo perusahaan.
+```
+
+Deteksinya berlapis, karena JobStreet bisa mengubah penanda HTML-nya:
+penanda `data-automation`/`data-testid`/`alt` yang memuat kata *logo*, URL
+gambar yang memuat *logo*/*brand*, atau teks alternatif gambar yang memuat
+**nama perusahaan**. Gambar yang jelas ikon/placeholder (mis. `icon`,
+`placeholder`, `sprite`) tidak dihitung logo.
+
+Dengan `REQUIRE_COMPANY_LOGO=true`, lowongan tanpa logo **dilewati** dan
+alasannya tampil di terminal (`Dilewati: … — Tanpa logo perusahaan`). Situs
+lain — Glints — tidak terpengaruh karena tidak mengisi informasi logo.
+
+Bila `cek-logo` menampilkan **tidak** untuk semua kartu padahal di situs
+logonya terlihat, berarti aturan perlu disesuaikan: kirimkan tabel itu (kolom
+*Keterangan* yang penting). Saat `run` berjalan, program juga memberi
+peringatan sekali bila satu halaman penuh kartu terbaca tanpa logo, supaya
+filter tidak diam-diam membuang semua lowongan.
+
 ### Pertanyaan pilihan dari perusahaan
 
 Banyak lowongan menambahkan pertanyaan wajib: dropdown, radio ya/tidak, atau
@@ -605,7 +651,7 @@ python buka_pencarian.py --locations "Bandung,Jakarta,Bekasi" --max-tabs 12
 | `scraper.py` | Selenium: buka Chrome, cari lowongan, baca kartu lowongan |
 | `job_filter.py` | Aturan lolos/tidak dan pemeringkatan |
 | `main.py` | Alur sesi: login → cari → saring → tinjau |
-| `cli.py` | Perintah `run`, `stats`, `history`, `config`, `repair`, `blacklist` |
+| `cli.py` | Perintah `run`, `stats`, `history`, `config`, `repair`, `blacklist`, `cek-logo`, dan `glints` |
 | `notifier.py` | Notifikasi Telegram (opsional) |
 | `auto_apply.py` | Alur klik Lamar → Lanjutkan → Kirim + deteksi pengaman |
 | `glints.py` | Situs Glints: pencarian, kartu lowongan, dan pelamaran |

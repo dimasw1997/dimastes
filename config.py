@@ -101,6 +101,10 @@ class Config:
     # Tolak lowongan yang lokasinya jelas di luar LOCATION.
     strict_location: bool = _bool_setting("STRICT_LOCATION", False)
 
+    # JobStreet: lamar hanya lowongan yang kartunya menampilkan logo
+    # perusahaan. Bawaan false agar perilaku lama tidak berubah.
+    require_company_logo: bool = _bool_setting("REQUIRE_COMPANY_LOGO", False)
+
     # Hanya lamar lowongan yang judulnya cocok dengan minat.
     require_keyword_match: bool = _bool_setting("REQUIRE_KEYWORD_MATCH", True)
     # Kata kunci untuk mencocokkan judul. Kosong = pakai KEYWORDS.

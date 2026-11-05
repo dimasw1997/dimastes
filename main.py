@@ -38,6 +38,7 @@ class AutoApplyEngine:
         self.stop_requested = False
         self.alias_lokasi = {}
         self.gagal_lokasi = {}
+        self._logo_diingatkan = False
 
     def run(self):
         self._print_banner()
@@ -90,6 +91,7 @@ class AutoApplyEngine:
         Jumlah 0 berarti halaman itu tidak memuat hasil apa pun.
         """
         jobs = self.bot.search_jobs(keyword, page, location=location)
+        self._peringatkan_logo(jobs)
 
         if not jobs:
             console.print(f"Tidak ada lowongan terbaca di halaman {page}.")
@@ -175,6 +177,29 @@ class AutoApplyEngine:
         )
 
         return eligible_jobs, len(jobs)
+
+    def _peringatkan_logo(self, jobs: list):
+        """Ingatkan bila semua kartu di satu halaman terbaca tanpa logo.
+
+        Bila di situs logonya terlihat, berarti aturan deteksi perlu
+        disesuaikan — tanpa peringatan ini filter akan diam-diam membuang
+        semua lowongan.
+        """
+        if not config.require_company_logo or self._logo_diingatkan:
+            return
+
+        if len(jobs) < 3:
+            return
+
+        tanpa_logo = sum(1 for job in jobs if job.get("has_logo") is False)
+
+        if tanpa_logo == len(jobs):
+            self._logo_diingatkan = True
+            console.print(
+                f"[yellow]Semua {len(jobs)} kartu terbaca tanpa logo. Bila di "
+                "situs logonya terlihat, jalankan `python cli.py cek-logo` dan "
+                "kirimkan tabelnya agar deteksi disesuaikan.[/]"
+            )
 
     def _cari_dengan_alias(self, keyword: str, page: int, location: str):
         """Cari satu halaman; bila lokasi tidak dikenali, coba aliasnya."""
