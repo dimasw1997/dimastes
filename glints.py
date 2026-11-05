@@ -25,6 +25,7 @@ from rich.table import Table
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.by import By
 
+import kuota
 from auto_apply import ApplyResult, AutoApplier
 from browser import buka_chrome, tutup_chrome
 from config import MAKS_HALAMAN_RISET, batas_halaman_riset, config
@@ -1199,6 +1200,13 @@ class GlintsBot:
                 )
                 return ApplyResult(False, "already_applied", "Sudah pernah dilamar")
 
+            # Mode manual: isian pengguna di halaman ini ikut diingat.
+            pencatat = GlintsApplier(self.driver)
+            try:
+                potret_awal = pencatat._potret_jawaban()
+            except Exception:
+                potret_awal = {}
+
             console.print(f"\n[bold magenta]{title}[/]")
             console.print(f"Perusahaan: {job.get('company', 'Tidak diketahui')}")
             console.print(f"URL: {url}")
@@ -1211,6 +1219,9 @@ class GlintsBot:
                 "Setelah selesai meninjau, tekan Enter "
                 "(ketik y bila lamaran sudah terkirim): "
             ).strip().lower()
+
+            with contextlib.suppress(Exception):
+                pencatat._rekam_jawaban_pengguna(potret_awal)
 
             if jawab in ("y", "ya", "yes"):
                 self._catat(
@@ -1248,20 +1259,19 @@ class GlintsBot:
 # Alur utama
 # ----------------------------------------------------------------------
 def _batas_harian_tercapai() -> bool:
-    batas = int(getattr(config, "max_apply_per_day", 0) or 0)
-    if batas <= 0:
+    """Sama seperti JobStreet: satu aturan di modul `kuota`."""
+    if not kuota.habis(db):
         return False
-    return db.get_today_apply_count() >= batas
+
+    console.print("[bold yellow]Batas lamaran harian tercapai.[/]")
+    return True
 
 
 def tampilkan_konfigurasi_glints() -> None:
     """Ringkasan pengaturan aktif, isinya sama dengan banner JobStreet."""
     mode = "otomatis" if config.auto_apply else "manual (tinjau sendiri)"
-    kuota = (
-        f"{config.max_apply_per_day} per hari"
-        if config.max_apply_per_day > 0
-        else "tanpa batas"
-    )
+    batas_harian = kuota.batas()
+    teks_kuota = f"{batas_harian} per hari" if batas_harian else "tanpa batas"
     batas_sesi = int(getattr(config, "auto_apply_max_per_session", 0) or 0)
     port = int(getattr(config, "chrome_debug_port", 0) or 0)
 
@@ -1271,7 +1281,7 @@ def tampilkan_konfigurasi_glints() -> None:
 
     kata_kunci = list(config.keywords_riset or [])
     tabel.add_row("Mode lamar", mode)
-    tabel.add_row("Kuota lamaran", kuota)
+    tabel.add_row("Kuota lamaran", teks_kuota)
     tabel.add_row(
         "Batas per sesi", f"{batas_sesi} lamaran" if batas_sesi else "tanpa batas"
     )
@@ -1483,26 +1493,17 @@ def jalankan_glints(max_pages: int = 0, keywords: Optional[List[str]] = None,
                 )
             return laporan
 
-        # Sisa kuota harian, sama seperti di JobStreet.
-        sisa = 0
-        if config.max_apply_per_day > 0:
-            sudah = db.get_today_apply_count()
-            sisa = max(0, config.max_apply_per_day - sudah)
-            console.print(
-                f"[cyan]Kuota harian:[/] {sudah} sudah dilamar hari ini, "
-                f"sisa {sisa} dari {config.max_apply_per_day}."
-            )
+        # Sisa kuota harian — modul `kuota` yang sama dengan JobStreet.
+        console.print(f"[cyan]{kuota.ringkasan(db)}[/]")
 
-            if sisa == 0:
-                console.print(
-                    "[bold yellow]Kuota lamaran hari ini sudah habis. "
-                    "Tidak ada lamaran dikirim.[/]"
-                )
-                return laporan
+        if kuota.habis(db):
+            console.print(f"[bold yellow]{kuota.pesan_habis()}[/]")
+            return laporan
 
-        dipilih = pilih_teratas(layak, sisa)
+        dipilih = pilih_teratas(layak, kuota.sisa(db) or 0)
 
-        if sisa and len(layak) > sisa:
+        sisa = kuota.sisa(db)
+        if sisa is not None and len(layak) > sisa:
             console.print(
                 f"[bold]{len(layak)} kandidat[/] bersaing untuk "
                 f"[bold]{sisa} slot[/] — diambil {sisa} yang paling cocok."

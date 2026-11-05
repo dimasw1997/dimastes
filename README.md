@@ -662,6 +662,12 @@ gaji, tahun pengalaman, dan pendidikan bila Anda mengubahnya.
 Yang **tidak** dicatat: tebakan bot sendiri. Bila bot memilih "Dasar" lalu Anda
 mengubahnya menjadi "Ahli", yang diingat adalah "Ahli" (keadaan akhir formulir).
 
+Perubahan Anda juga diingat **walau lamaran tidak selesai**: alur yang berakhir
+"perlu manual", galat, atau waktu tunggu habis tetap merekam isian yang sempat
+Anda ubah. Begitu juga di mode manual `AUTO_APPLY=false` — setelah Anda meninjau
+halaman lowongan dan menekan Enter di terminal, isian yang Anda lakukan ikut
+disimpan.
+
 Kelola ingatannya:
 
 ```bash
@@ -863,7 +869,7 @@ JobStreet dipakai sebagai acuan; Glints mengikuti aturan yang sama:
 | Saring judul/lokasi/gaji/kualifikasi | `JobFilter` | `JobFilter` yang sama |
 | Wajib logo perusahaan (`REQUIRE_COMPANY_LOGO`) | ya | ya |
 | Skor 8 dimensi + ranking global | ya | ya |
-| TOP 50 global per hari, kuota dipakai bersama | ya | ya |
+| TOP 50 global per hari, kuota dipakai bersama | ya (`kuota.py`) | ya (`kuota.py`) |
 | Lewati yang sudah pernah dilamar (situs **dan** database) | ya | ya |
 | Lewati lowongan yang hanya bisa dilamar via aplikasi | tidak berlaku | ya (khusus Glints) |
 | `AUTO_APPLY_MAX_PER_SESSION` | ya | ya |
@@ -880,6 +886,18 @@ Dua perbedaan yang memang disengaja:
 2. **Pencarian Glints tidak per lokasi** — alamat explore-nya nasional
    (`countryCode=ID`), jadi hasilnya lebih luas lalu disaring dengan
    `LOCATIONS`. Aturan "semua lokasi tercakup" tetap terpenuhi.
+
+#### Batas harian: satu aturan untuk dua situs
+
+Batas `MAX_APPLY_PER_DAY` dihitung di satu tempat (`kuota.py`) dan dipakai
+**bersama** oleh JobStreet dan Glints:
+
+* lamaran yang terkirim lewat JobStreet mengurangi jatah Glints, dan sebaliknya;
+* `0` berarti tanpa batas;
+* kandidat dipotong menurut sisa kuota **setelah** dinilai dan diperingkat,
+  jadi slot dipakai untuk lowongan yang paling cocok;
+* pesan yang dicetak kedua situs identik:
+  `Kuota harian: 4 sudah dilamar hari ini, sisa 46 dari 50.`
 
 #### "Terbaca 0 lowongan" di Glints
 
