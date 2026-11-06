@@ -1,6 +1,9 @@
+import html
+
 import requests
-from config import config
 from rich.console import Console
+
+from config import config
 
 console = Console()
 
@@ -12,21 +15,31 @@ class Notifier:
     def send(self, message: str):
         if not self.enabled:
             return
+
         try:
             url = f"https://api.telegram.org/bot{config.telegram_token}/sendMessage"
             payload = {
                 "chat_id": config.telegram_chat_id,
-                "text": message,
-                "parse_mode": "HTML"
+                # Pesan di-escape karena parse_mode=HTML; tanpa escape,
+                # karakter seperti "&" atau "<" membuat Telegram menolak.
+                "text": html.escape(str(message)),
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True,
             }
-            requests.post(url, json=payload, timeout=10)
-        except Exception as e:
-            console.print(f"[yellow]Notifikasi gagal: {e}[/]")
+            response = requests.post(url, json=payload, timeout=10)
+
+            if response.status_code >= 400:
+                console.print(
+                    f"[yellow]Notifikasi gagal (HTTP {response.status_code}).[/]"
+                )
+
+        except Exception as exc:
+            console.print(f"[yellow]Notifikasi gagal: {exc}[/]")
 
     def send_apply_success(self, job: dict):
         msg = (
             "Berhasil Apply!\n\n"
-            f"Posisi: {job['title']}\n"
+            f"Posisi: {job.get('title', 'N/A')}\n"
             f"Perusahaan: {job.get('company', 'N/A')}\n"
             f"Lokasi: {job.get('location', 'N/A')}\n"
             f"Gaji: {job.get('salary', 'N/A')}\n"
@@ -37,9 +50,9 @@ class Notifier:
     def send_daily_report(self, stats: dict):
         msg = (
             "Laporan Harian\n\n"
-            f"Total job ditemukan: {stats['total_jobs_found']}\n"
-            f"Total sudah apply: {stats['total_applied']}\n"
-            f"Apply hari ini: {stats['today_applied']}\n"
+            f"Total job ditemukan: {stats.get('total_jobs_found', 0)}\n"
+            f"Total sudah apply: {stats.get('total_applied', 0)}\n"
+            f"Apply hari ini: {stats.get('today_applied', 0)}"
         )
         self.send(msg)
 
