@@ -1,0 +1,43 @@
+# Salin .env.example menjadi .env; file .env hanya untuk mesin Anda.
+.env
+.env.bak
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Database pengguna: berisi riwayat lamaran Anda, jangan di-commit.
+jobstreet_auto.db
+*.db-wal
+*.db-shm
+*.db-journal
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Berkas debug otomatis (HTML/screenshot halaman JobStreet)
+debug/
+
+# Catatan aktivitas pemantau (pantau.bat/pantau.sh)
+pantau.log
+*.log
+.pantau-terakhir
+
+# Berkas runtime (jangan di-commit)
+logs/
+reports/
+backups/
+*.db.bak
+.dimastes-sesi.lock
+.dimastes-kendali
+debug/
+.venv-lama/
