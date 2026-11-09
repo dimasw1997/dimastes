@@ -1252,3 +1252,95 @@ def test_pilih_opsi_mengirim_event_perubahan(monkeypatch):
     assert berhasil is True
     assert select.get_attribute("value") == "3 years"
     assert any("dispatchEvent" in str(item) for item in skrip)
+
+
+# ---------------------------------------- label opsi dari wadah (JobStreet) ---
+def test_label_opsi_diambil_dari_wadah_induk(monkeypatch):
+    """Opsi JobStreet kadang hanya berupa teks di wadah, tanpa label[for].
+
+    Tanpa fallback ini, daftar opsi kosong sehingga pertanyaan ya/tidak tidak
+    pernah dijawab walau polanya sudah dikenali.
+    """
+    wadah_ya = FakeElement(text="Yes")
+    wadah_tidak = FakeElement(text="No")
+    ya = FakeElement(attrs={"name": "dukungan"}, visible=False, parent=wadah_ya)
+    tidak = FakeElement(attrs={"name": "dukungan"}, visible=False, parent=wadah_tidak)
+
+    applier = AutoApplier(FakeDriver())
+    monkeypatch.setattr(applier, "_find_all", lambda selector: [])
+
+    assert applier._label_untuk(ya) == "Yes"
+    assert applier._label_untuk(tidak) == "No"
+
+
+def test_aria_labelledby_dipakai_untuk_label_opsi(monkeypatch):
+    rujukan = FakeElement(text="Tidak")
+    opsi = FakeElement(attrs={"aria-labelledby": "opsi-tidak"})
+
+    applier = AutoApplier(FakeDriver())
+    monkeypatch.setattr(
+        applier,
+        "_find_all",
+        lambda selector: [rujukan] if selector == "[id='opsi-tidak']" else [],
+    )
+
+    assert applier._label_untuk(opsi) == "Tidak"
+
+
+def test_wadah_banyak_input_tidak_dipakai_sebagai_label(monkeypatch):
+    """Wadah pertanyaan (memuat semua opsi) tidak boleh jadi label opsi."""
+
+    class WadahBanyakInput(FakeElement):
+        def find_elements(self, by, selector):
+            if selector == "input":
+                return [FakeElement(), FakeElement()]
+            return super().find_elements(by, selector)
+
+    wadah = WadahBanyakInput(text="Do you have experience? Yes No")
+    opsi = FakeElement(attrs={"name": "q"}, parent=wadah)
+
+    applier = AutoApplier(FakeDriver())
+    monkeypatch.setattr(applier, "_find_all", lambda selector: [])
+
+    assert applier._label_untuk(opsi) == ""
+
+
+def test_radio_dengan_label_dari_wadah_dijawab(monkeypatch):
+    monkeypatch.setattr(config, "auto_answer_yes", True)
+
+    pertanyaan = FakeElement(text="Do you have purchasing experience?")
+    wadah_ya = FakeElement(text="Yes")
+    wadah_tidak = FakeElement(text="No")
+    ya = FakeElement(attrs={"name": "beli"}, visible=False, parent=wadah_ya)
+    tidak = FakeElement(attrs={"name": "beli"}, visible=False, parent=wadah_tidak)
+    pertanyaan.parent = None
+    wadah_ya.parent = pertanyaan
+    wadah_tidak.parent = pertanyaan
+
+    def klik(item):
+        item._selected = True
+
+    ya._on_click = lambda: klik(ya)
+    tidak._on_click = lambda: klik(tidak)
+
+    applier = AutoApplier(FakeDriver())
+    monkeypatch.setattr(
+        applier,
+        "_find_all",
+        lambda selector: [ya, tidak] if selector == "input[type='radio']" else [],
+    )
+    monkeypatch.setattr(
+        applier,
+        "_raw_text",
+        lambda el: el.text if el.text else "",
+    )
+    monkeypatch.setattr(
+        applier,
+        "_pertanyaan",
+        lambda el, opsi=(): "Do you have purchasing experience?",
+    )
+
+    gagal = applier.jawab_pertanyaan()
+
+    assert gagal == []
+    assert ya.is_selected() is True

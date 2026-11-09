@@ -867,6 +867,37 @@ class AutoApplier:
         if label and not tampak_id_internal(label):
             return label
 
+        # 3. aria-labelledby -> teks elemen yang dirujuk
+        with contextlib.suppress(Exception):
+            ids = (element.get_attribute("aria-labelledby") or "").split()
+            for id_rujukan in ids:
+                for rujukan in self._find_all(f"[id='{id_rujukan}']"):
+                    teks = " ".join(self._raw_text(rujukan).split())
+                    if teks and not tampak_id_internal(teks):
+                        return teks
+
+        # 4. input dibungkus <label> (JobStreet sering memakai pola ini)
+        with contextlib.suppress(Exception):
+            induk_label = element.find_element(By.XPATH, "ancestor::label[1]")
+            teks = " ".join(self._raw_text(induk_label).split())
+            if teks and not tampak_id_internal(teks):
+                return teks
+
+        # 5. teks wadah induk — hanya bila wadah itu memuat SATU input saja.
+        #    Tanpa syarat ini, wadah pertanyaan (yang memuat semua opsi) akan
+        #    terbaca sebagai label dan seluruh opsi jadi sama.
+        with contextlib.suppress(Exception):
+            wadah = element.find_element(By.XPATH, "..")
+            if wadah is not None:
+                jumlah = len(wadah.find_elements(By.CSS_SELECTOR, "input"))
+                teks = " ".join(self._raw_text(wadah).split())
+                if (
+                    jumlah <= 1
+                    and 0 < len(teks) <= 60
+                    and not tampak_id_internal(teks)
+                ):
+                    return teks
+
         return ""
 
     def _pertanyaan(self, element, opsi=()) -> str:
