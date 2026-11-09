@@ -280,17 +280,23 @@ dijalankan — samakan dengan commit terakhir di GitHub.
 
 ### Kirim perubahan ke GitHub (otomatis)
 
-Perubahan dari sesi pengembangan sudah di-push otomatis ke cabang
-`arena/4ab2b9fa-dimastes`. Di PC Anda cukup menariknya:
+Perubahan dari sesi pengembangan digabungkan ke **`main`**, jadi di PC Anda
+cukup:
 
-```bash
-git branch --show-current     # pastikan cabangnya benar
-git pull
+```powershell
+.\tarik.bat
 ```
 
-Kalau `git branch --show-current` menampilkan `main` padahal pekerjaan terbaru
-ada di cabang `arena/4ab2b9fa-dimastes`, `git pull` **tidak** akan menarik apa
-pun. Pindah dulu: `git checkout arena/4ab2b9fa-dimastes` lalu `git pull`.
+`tarik.bat` kini selalu menggabungkan `arena/main` (bukan cabang pengembangan
+tertentu), jadi tetap bekerja meskipun nama cabang pengembangan berganti.
+Setara dengan perintah manual:
+
+```bash
+git pull origin main
+```
+
+Kalau ingin memastikan versi yang dipakai, bandingkan **Versi kode (commit)**
+di `python cli.py config` dengan commit terakhir di GitHub.
 
 Untuk mengirim perubahan **dari PC ke GitHub** cukup satu klik:
 
