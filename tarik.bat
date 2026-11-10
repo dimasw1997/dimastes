@@ -10,6 +10,11 @@ rem baris dan memunculkan galat seperti "'gabungan' is not recognized".
 setlocal
 cd /d "%~dp0"
 
+rem Jangan pernah membuka editor teks (Vim) di tengah skrip: tanpa ini,
+rem penggabungan yang menghasilkan commit gabungan akan menggantung di Vim.
+set "GIT_EDITOR=echo"
+set "GIT_MERGE_AUTOEDIT=no"
+
 if "%ARENA_REMOTE%"=="" set "ARENA_REMOTE=arena"
 if "%ARENA_CABANG%"=="" set "ARENA_CABANG=main"
 set "ARENA_URL=https://github.com/dimasw1997/dimastes.git"

@@ -193,3 +193,18 @@ def test_jalankan_bat_punya_jalur_cepat():
     # Penanda hanya dibuat untuk Python yang didukung (< 3.14).
     assert ".python-baik" in isi
     assert ':cek_deps' in isi
+
+
+def test_skrip_git_tidak_membuka_editor():
+    """Commit/penggabungan tidak boleh memunculkan Vim di tengah skrip.
+
+    Pengguna pernah terjebak di Vim saat `simpan.bat` menjalankan `git pull`
+    yang berakhir dengan commit gabungan.
+    """
+    for nama in ("tarik.bat", "simpan.bat"):
+        isi = (AKAR / nama).read_text(encoding="utf-8")
+        assert 'set "GIT_EDITOR=' in isi, f"{nama} bisa membuka editor"
+        assert 'set "GIT_MERGE_AUTOEDIT=no"' in isi, f"{nama} bisa membuka editor"
+
+    simpan = (AKAR / "simpan.bat").read_text(encoding="utf-8")
+    assert "git pull --no-rebase --autostash --no-edit" in simpan
