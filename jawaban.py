@@ -13,7 +13,6 @@ cadangan.
 
 import re
 from difflib import SequenceMatcher
-from typing import List, Optional
 
 from config import config
 from database import db
@@ -23,10 +22,30 @@ AMBANG_MIRIP = 0.86
 
 _TANDA_BACA = re.compile(r"[^\w\s]+", re.UNICODE)
 
+# Karakter tak terlihat yang sering disisipkan situs lowongan ke teks tombol,
+# label opsi, dan judul pertanyaan: word joiner (U+2060), zero-width space
+# (U+200B), zero-width joiner/non-joiner, BOM, NBSP, dan penanda arah teks.
+# Tanpa dibuang, "\u2060Submit application" tidak pernah sama dengan
+# "submit application" sehingga tombol/opsi tidak dikenali.
+TAK_TERLIHAT = dict.fromkeys(
+    map(ord, "\u2060\u200b\u200c\u200d\ufeff\u200e\u200f"),
+    None,
+)
+
+
+def bersihkan_teks(teks) -> str:
+    """Buang karakter tak terlihat dan rapikan spasi.
+
+    NBSP diganti spasi (bukan dihapus) supaya "years\u00a0experience"
+    tidak menempel menjadi "yearsexperience".
+    """
+    teks = str(teks or "").replace("\u00a0", " ")
+    return " ".join(teks.translate(TAK_TERLIHAT).split())
+
 
 def kunci_pertanyaan(pertanyaan: str) -> str:
     """Kunci pencarian stabil dari teks pertanyaan."""
-    teks = str(pertanyaan or "").casefold()
+    teks = bersihkan_teks(pertanyaan).casefold()
     teks = _TANDA_BACA.sub(" ", teks)
     return " ".join(teks.split())
 
@@ -212,7 +231,7 @@ def _aktif() -> bool:
     return bool(getattr(config, "ingat_jawaban", True))
 
 
-def cari(pertanyaan: str) -> Optional[str]:
+def cari(pertanyaan: str) -> str | None:
     """Jawaban yang pernah diberikan untuk pertanyaan ini (None bila belum).
 
     Pencocokan: kunci sama → kembalikan; bila tidak, cari pertanyaan tersimpan
@@ -269,7 +288,7 @@ def ingat(pertanyaan: str, jawaban: str, jenis: str = "",
     )
 
 
-def daftar() -> List[dict]:
+def daftar() -> list[dict]:
     """Semua jawaban tersimpan (untuk ditampilkan / diperiksa)."""
     return db.daftar_jawaban()
 
