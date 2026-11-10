@@ -18,7 +18,6 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List
 
 from rich.console import Console
 from rich.table import Table
@@ -110,7 +109,7 @@ def perbarui_kode(remote: str = "", cabang: str = "") -> tuple[bool, str]:
 
 
 # ------------------------------------------------------------------ situs ---
-def situs_terpilih(teks: str = "") -> List[str]:
+def situs_terpilih(teks: str = "") -> list[str]:
     """Daftar situs yang akan dijalankan, urut dan tanpa duplikat."""
     mentah = teks or getattr(config, "situs_aktif", "") or ",".join(SITUS_BAKU)
     diminta = [bagian.strip().lower() for bagian in str(mentah).split(",")]
@@ -128,7 +127,7 @@ def situs_terpilih(teks: str = "") -> List[str]:
     return [nama for nama in SITUS_BAKU if nama in hasil]
 
 
-def _jalankan_situs(nama: str, max_pages: int, batas: int) -> Dict:
+def _jalankan_situs(nama: str, max_pages: int, batas: int) -> dict:
     """Jalankan satu situs tanpa laporan harian sendiri."""
     if nama == "jobstreet":
         from main import AutoApplyEngine
@@ -159,7 +158,7 @@ def _jalankan_situs(nama: str, max_pages: int, batas: int) -> Dict:
 
 
 # --------------------------------------------------------------- ringkasan ---
-def _tabel(hasil: Dict[str, Dict], dilewati: Dict[str, str]) -> None:
+def _tabel(hasil: dict[str, dict], dilewati: dict[str, str]) -> None:
     tabel = Table(title="Ringkasan lamar otomatis")
     tabel.add_column("Situs", style="cyan")
     tabel.add_column("Terbaca", justify="right")
@@ -198,7 +197,7 @@ def jalankan(
     max_pages: int = 0,
     batas: int = 0,
     perbarui: bool = True,
-) -> Dict[str, Dict]:
+) -> dict[str, dict]:
     """Jalankan seluruh situs terpilih dan kembalikan hasil per situs."""
     console.print("[bold cyan]Lamar otomatis — JobStreet · Glints · Indeed[/]")
     mulai_sesi = time.monotonic()
@@ -228,8 +227,8 @@ def jalankan(
     console.print(f"[cyan]Situs yang dijalankan:[/] {urutan}")
     console.print(f"[cyan]{kuota.ringkasan()}[/]")
 
-    hasil: Dict[str, Dict] = {}
-    dilewati: Dict[str, str] = {}
+    hasil: dict[str, dict] = {}
+    dilewati: dict[str, str] = {}
 
     for nama in daftar:
         if kuota.habis():

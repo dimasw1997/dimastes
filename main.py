@@ -1,6 +1,5 @@
 import contextlib
 import time
-from typing import Optional
 
 from rich.console import Console
 from rich.panel import Panel
@@ -321,7 +320,7 @@ class AutoApplyEngine:
         self,
         keyword: str,
         location: str = "",
-        halaman_maks: Optional[int] = None,
+        halaman_maks: int | None = None,
         cek_kuota: bool = True,
     ) -> list:
         """Cari & saring satu kata kunci untuk satu lokasi.

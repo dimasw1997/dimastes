@@ -16,7 +16,6 @@ Objek database dan konfigurasi bisa diberikan oleh pemanggil (dipakai tes agar
 tidak menyentuh database asli).
 """
 
-from typing import List, Optional
 
 from config import config
 from database import db
@@ -38,7 +37,7 @@ def tanpa_batas(cfg=None) -> bool:
     return batas(cfg) <= 0
 
 
-def sisa(db_obj=None, cfg=None) -> Optional[int]:
+def sisa(db_obj=None, cfg=None) -> int | None:
     """Sisa slot hari ini; None bila tanpa batas."""
     batas_harian = batas(cfg)
 
@@ -64,7 +63,7 @@ def ringkasan(db_obj=None, cfg=None) -> str:
     )
 
 
-def potong(kandidat: List[dict], db_obj=None, cfg=None) -> List[dict]:
+def potong(kandidat: list[dict], db_obj=None, cfg=None) -> list[dict]:
     """Batasi kandidat sesuai sisa kuota (tanpa batas = tidak dipotong)."""
     sisa_hari_ini = sisa(db_obj, cfg)
 

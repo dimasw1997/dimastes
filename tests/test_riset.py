@@ -214,7 +214,7 @@ def test_top_50_global_dari_semua_kategori_dan_lokasi(siapkan, monkeypatch):
     mesin._kumpulkan_lalu_lamar()
 
     assert len(mesin.bot.dilamar) == 50
-    assert set(f"baik-{n}" for n in range(10)) <= set(mesin.bot.dilamar)
+    assert {f"baik-{n}" for n in range(10)} <= set(mesin.bot.dilamar)
 
 
 def test_kurang_dari_50_dilamar_semua(siapkan, monkeypatch):

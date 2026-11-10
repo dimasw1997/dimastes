@@ -19,7 +19,6 @@ Aturan Indeed **sama persis dengan JobStreet**:
 import contextlib
 import re
 import time
-from typing import Dict, List, Optional
 from urllib.parse import quote_plus
 
 from rich.console import Console
@@ -243,7 +242,7 @@ def logo_kartu_indeed(kandidat, perusahaan: str = "") -> tuple:
     return False, "gambar pengganti"
 
 
-def rapikan_kartu(data: Dict) -> Optional[Dict]:
+def rapikan_kartu(data: dict) -> dict | None:
     """Ubah hasil pembaca kartu menjadi dict lowongan; None bila tidak layak."""
     if not isinstance(data, dict):
         return None
@@ -280,7 +279,7 @@ def rapikan_kartu(data: Dict) -> Optional[Dict]:
     }
 
 
-def alasan_tidak_layak(job: Dict, saringan: Optional[JobFilter] = None) -> str:
+def alasan_tidak_layak(job: dict, saringan: JobFilter | None = None) -> str:
     """Alasan lowongan tidak dicoba dilamar ('' bila layak).
 
     Memakai aturan tunggal JobStreet (`job_filter.alasan_tidak_layak`), tanpa
@@ -355,7 +354,7 @@ class IndeedBot:
         self.driver = None
         self.filters = JobFilter()
         self.login_expired = False
-        self.diagnosa_terakhir: Dict = {}
+        self.diagnosa_terakhir: dict = {}
 
     # ------------------------------ browser ---------------------------
     def init_browser(self):
@@ -418,7 +417,7 @@ class IndeedBot:
         return False
 
     # --------------------------- pencarian ----------------------------
-    def _tautan_kartu(self) -> List[str]:
+    def _tautan_kartu(self) -> list[str]:
         try:
             elemen = self.driver.find_elements(By.CSS_SELECTOR, "a[href*='jk=']")
         except Exception:
@@ -435,7 +434,7 @@ class IndeedBot:
 
         return hasil
 
-    def _tunggu_kartu(self, detik: Optional[int] = None) -> int:
+    def _tunggu_kartu(self, detik: int | None = None) -> int:
         """Tunggu sampai tautan lowongan muncul (SEARCH_WAIT detik)."""
         batas = time.time() + max(
             3, int(detik if detik is not None else config.search_wait)
@@ -551,12 +550,12 @@ class IndeedBot:
         return hasil
 
     def cari(self, keyword: str, halaman: int = 0,
-             location: str = "") -> List[Dict]:
+             location: str = "") -> list[dict]:
         """Kumpulkan lowongan Indeed: satu kata kunci, maksimal `halaman` muat."""
         if not self.buka_pencarian(keyword, location):
             return []
 
-        lowongan: List[Dict] = []
+        lowongan: list[dict] = []
         sudah_ada = set()
 
         def serap() -> int:
@@ -734,7 +733,7 @@ class IndeedBot:
             return " ".join(str(self.driver.title or "").split())
         return ""
 
-    def simpan_diagnosa(self, awalan: str = "indeed", keyword: str = "") -> Dict:
+    def simpan_diagnosa(self, awalan: str = "indeed", keyword: str = "") -> dict:
         """Simpan HTML + screenshot dan laporkan penyebab kartu tidak terbaca."""
         folder = folder_debug()
         cap = f"{awalan}-{time.strftime('%Y%m%d-%H%M%S')}"
@@ -795,13 +794,13 @@ class IndeedBot:
 # ----------------------------------------------------------------------
 # Alur utama
 # ----------------------------------------------------------------------
-def kumpulkan_lowongan(bot: IndeedBot, kata_kunci: List[str],
+def kumpulkan_lowongan(bot: IndeedBot, kata_kunci: list[str],
                        halaman: int,
-                       lokasi: Optional[List[str]] = None) -> List[Dict]:
+                       lokasi: list[str] | None = None) -> list[dict]:
     """Riset Indeed: semua lokasi × kata kunci, dedupe, maksimal 5 halaman."""
     daftar_lokasi = list(lokasi if lokasi is not None else config.locations) or [""]
     halaman = max(1, min(int(halaman or 1), MAKS_HALAMAN_RISET))
-    lowongan: List[Dict] = []
+    lowongan: list[dict] = []
     terlihat = set()
     duplikat = 0
 
@@ -897,7 +896,7 @@ def tampilkan_konfigurasi() -> None:
     console.print(tabel)
 
 
-def jalankan_indeed(max_pages: int = 0, keywords: Optional[List[str]] = None,
+def jalankan_indeed(max_pages: int = 0, keywords: list[str] | None = None,
                     batas: int = 0, laporan_harian: bool = True) -> dict:
     """Riset → saring → peringkat → lamar di Indeed, aturan sama JobStreet."""
     kata_kunci = list(keywords) if keywords else config.keywords_riset
@@ -933,7 +932,7 @@ def jalankan_indeed(max_pages: int = 0, keywords: Optional[List[str]] = None,
         if batas_riset and len(lowongan) > batas_riset:
             lowongan = lowongan[:batas_riset]
 
-        layak: List[Dict] = []
+        layak: list[dict] = []
         sudah = JobFilter()
 
         for job in lowongan:
@@ -1081,9 +1080,9 @@ def jalankan_indeed(max_pages: int = 0, keywords: Optional[List[str]] = None,
     return laporan
 
 
-def daftar_kandidat(keywords: Optional[List[str]] = None,
+def daftar_kandidat(keywords: list[str] | None = None,
                     max_pages: int = 1, batas: int = 10,
-                    semuanya: bool = False) -> List[Dict]:
+                    semuanya: bool = False) -> list[dict]:
     """Lowongan Indeed yang layak dilamar (tanpa melamar)."""
     kata_kunci = list(keywords or config.keywords)
     bot = IndeedBot()
@@ -1109,7 +1108,7 @@ def daftar_kandidat(keywords: Optional[List[str]] = None,
     return hasil[:batas] if batas and batas > 0 else hasil
 
 
-def diagnosa_indeed(keyword: str = "", location: str = "") -> Dict:
+def diagnosa_indeed(keyword: str = "", location: str = "") -> dict:
     """Periksa mengapa kartu Indeed tidak terbaca (HTML + PNG disimpan)."""
     kata = (keyword or "").strip()
     if not kata:
@@ -1123,7 +1122,7 @@ def diagnosa_indeed(keyword: str = "", location: str = "") -> Dict:
         lokasi = config.locations[0]
 
     bot = IndeedBot()
-    info: Dict = {}
+    info: dict = {}
 
     try:
         bot.init_browser()

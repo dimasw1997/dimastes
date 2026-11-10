@@ -4,8 +4,7 @@ import contextlib
 import sqlite3
 import threading
 from contextlib import contextmanager, suppress
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta, timezone
 
 from config import config
 
@@ -23,7 +22,7 @@ TITLE_FALLBACK = "(judul tidak tersedia)"
 WIB = timezone(timedelta(hours=7))
 
 
-def rentang_hari_wib(sekarang: Optional[datetime] = None) -> tuple[str, str]:
+def rentang_hari_wib(sekarang: datetime | None = None) -> tuple[str, str]:
     """Awal dan akhir hari ini menurut WIB, dalam teks UTC (format SQLite)."""
     kini = sekarang or datetime.now(WIB)
     kini = (
@@ -35,8 +34,8 @@ def rentang_hari_wib(sekarang: Optional[datetime] = None) -> tuple[str, str]:
 
     format_ = "%Y-%m-%d %H:%M:%S"
     return (
-        mulai.astimezone(timezone.utc).strftime(format_),
-        selesai.astimezone(timezone.utc).strftime(format_),
+        mulai.astimezone(UTC).strftime(format_),
+        selesai.astimezone(UTC).strftime(format_),
     )
 
 
@@ -68,8 +67,7 @@ def sumber_dari_url(url: str) -> str:
     """Nama situs dari URL (jobstreet / glints / indeed / lainnya)."""
     host = str(url or "").strip().lower().split("://", 1)[-1]
     host = host.split("/", 1)[0].split(":", 1)[0]
-    if host.startswith("www."):
-        host = host[4:]
+    host = host.removeprefix("www.")
 
     for nama in ("jobstreet", "glints", "indeed", "linkedin", "kalibrr",
                  "jobsdb", "karir"):
@@ -114,6 +112,10 @@ class Database:
                 self.db_path, check_same_thread=False
             )
             self._conn.row_factory = sqlite3.Row
+            # SQLite mematikan pemaksaan foreign key secara bawaan. Skema
+            # sekarang belum memakai FOREIGN KEY, tetapi PRAGMA ini menjaga
+            # integritas bila nanti ditambahkan dan tidak berbiaya.
+            self._conn.execute("PRAGMA foreign_keys=ON")
         return self._conn
 
     @contextmanager
@@ -307,7 +309,7 @@ class Database:
             )
         return True
 
-    def cari_jawaban(self, kunci: str) -> Optional[dict]:
+    def cari_jawaban(self, kunci: str) -> dict | None:
         """Ambil satu jawaban berdasarkan kuncinya (None bila belum ada)."""
         with self._get_conn() as conn:
             row = conn.execute(
@@ -407,7 +409,7 @@ class Database:
                 return False
 
     def set_status_antrean(self, job_id: str, status: str,
-                           alasan: str = "", skor: Optional[float] = None) -> bool:
+                           alasan: str = "", skor: float | None = None) -> bool:
         """Ubah status antrean satu lowongan (pasal 4.2)."""
         job_id = str(job_id or "").strip()
         status = str(status or "").strip().lower()
