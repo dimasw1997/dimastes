@@ -28,6 +28,7 @@ from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.by import By
 
 import antrean
+import cache_riset
 import kendali
 import kuota
 import log_aktivitas
@@ -827,7 +828,22 @@ def kumpulkan_lowongan(bot: IndeedBot, kata_kunci: list[str],
                 + f" — muat sampai {halaman} halaman[/]"
             )
 
-            kartu = bot.cari(kata, max(0, halaman - 1), location=location)
+            kunci_cache = cache_riset.kunci(
+                "indeed", kata, location, halaman
+            )
+            kartu = cache_riset.ambil(kunci_cache, situs="indeed")
+
+            if kartu is None:
+                kartu = bot.cari(
+                    kata, max(0, halaman - 1), location=location
+                )
+                cache_riset.simpan(kunci_cache, kartu, situs="indeed")
+            else:
+                console.print(
+                    f"[dim]Cache riset Indeed dipakai '{kata}'"
+                    + (f" — {location}" if location else "")
+                    + f" ({len(kartu)} lowongan).[/]"
+                )
 
             baru = 0
             for job in kartu:

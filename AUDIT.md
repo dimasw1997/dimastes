@@ -285,12 +285,12 @@ disertai tes baru; angka di bawah diambil dari eksekusi nyata, bukan perkiraan.
 | E-10 | Perintah uji Telegram tidak ada. | **Tidak diubah** — Anda sudah menetapkan agar kode/`.env` notifikasi Telegram tidak diutak-atik. | DITUNDA (sesuai instruksi) |
 | E-11 | Skor inventori/persediaan. | **Tidak diubah** — bagian dari prioritas stock/inventory yang Anda batalkan. | DITUNDA (sesuai instruksi) |
 
-### 7.4 P3 — perapian (belum dikerjakan)
+### 7.4 P3 — perapian (sudah dikerjakan, lihat bagian 12)
 
-| ID | Temuan | Alasan ditunda |
-|---|---|---|
-| E-12 | Normalisasi teks tersebar di beberapa modul. | Bagian teks formulir sudah disatukan lewat `jawaban.bersihkan_teks()`. `scraper._norm_teks()` sengaja dibiarkan karena tugasnya berbeda (membuang semua non-alfanumerik untuk mencocokkan nama perusahaan); menyatukannya berisiko mengubah pengenalan logo/duplikat. |
-| E-13 | Riset memanggil situs berulang tanpa cache. | Cache bisa menyajikan lowongan yang sudah kedaluwarsa atau melewatkan lowongan baru; perlu desain masa berlaku dan tombol paksa-segar lebih dulu. Belum dikerjakan. |
+| ID | Temuan | Perbaikan | Status |
+|---|---|---|---|
+| E-12 | Normalisasi teks tersebar di beberapa modul. | `teks.py` menjadi satu tempat: `bersihkan()` (buang karakter tak terlihat, rapikan spasi) dan `kunci_nama()` (huruf kecil tanpa tanda baca). `jawaban.bersihkan_teks` dan `scraper._norm_teks` kini hanya nama lama yang menunjuk ke sana, jadi perilaku pengenalan logo tidak berubah. | FIXED + TESTED (`tests/test_teks.py`) |
+| E-13 | Riset memanggil situs berulang tanpa cache. | `cache_riset.py` + tabel `riset_cache`: hasil satu kombinasi situs + kata kunci + lokasi + halaman dipakai ulang selama `CACHE_RISET_MENIT` (bawaan 60 menit), `0` = mati, `--segar` = ambil ulang. Lamaran tetap membuka halaman lowongannya sendiri. | FIXED + TESTED (`tests/test_cache_riset.py`) |
 
 ### 7.5 Batas yang perlu diketahui (jujur)
 
@@ -446,3 +446,55 @@ ruff bersih.
 Batas jujur: sisa slot yang tidak terpakai **hangus** saat siklus berganti
 (mulai 50 baru). Bila Anda ingin sisanya dibawa ke siklus berikutnya, itu
 perubahan kecil di `bentuk_siklus()` — beri tahu saja.
+
+---
+
+## 12. P3: normalisasi teks & cache riset (2026-11-03)
+
+Permintaan pemakai: "lanjutkan semua pr" → pilih "kerjakan temuan audit yang
+ditunda (E-12, E-13)". E-10 (Telegram) dan E-11 (skor inventori) tetap tidak
+disentuh sesuai instruksi.
+
+### E-12 — normalisasi teks
+
+Sebelumnya dua fungsi normalisasi terpisah, masing-masing membuang karakter
+tak terlihat dengan daftar sendiri:
+
+| Sebelum | Sesudah |
+|---|---|
+| `jawaban.bersihkan_teks()` — buang karakter tak terlihat, rapikan spasi | `teks.bersihkan()` |
+| `scraper._norm_teks()` — huruf kecil tanpa non-alfanumerik | `teks.kunci_nama()` |
+
+Nama lama tetap ada sebagai alias, jadi `logo_perusahaan()` dan pencocokan
+pertanyaan formulir berperilaku persis sama (dijaga oleh `tests/test_teks.py`,
+termasuk tiga kasus `logo_perusahaan`).
+
+### E-13 — cache riset
+
+| Hal | Nilai |
+|---|---|
+| Cakupan | satu kombinasi situs + kata kunci + lokasi + halaman |
+| Penyimpanan | tabel `riset_cache` (kunci, situs, jumlah, isi JSON, dibuat_at) |
+| Masa berlaku | `CACHE_RISET_MENIT` (bawaan 60 menit); `0` = mati |
+| Paksa ambil ulang | `--segar` pada `jalankan.bat run` / `lamar_semua.py` |
+| Pembersihan | baris > 3 hari dibuang setiap kali menyimpan |
+| Lamaran | **tidak** memakai cache — selalu buka halaman lowongannya sendiri |
+
+Alasan desain: risiko utama cache adalah menyajikan lowongan yang sudah tutup.
+Karena pengiriman lamaran tetap membuka halaman aslinya, lowongan tutup gagal
+dengan aman dan tidak pernah terkirim dua kali. Yang dihemat hanya pembacaan
+daftar lowongan (bagian terlama dari riset).
+
+Keluaran saat cache dipakai: `Halaman 1 diambil dari cache riset (24 lowongan).`
+dan di akhir riset: `Cache riset: 12 kombinasi dipakai ulang, 5 disimpan
+(berlaku 60 menit; pakai --segar untuk ambil ulang dari situs).`
+
+Tes: `tests/test_teks.py` (7) + `tests/test_cache_riset.py` (12) — kunci cache
+tidak tercampur antar situs, TTL, `--segar`, cache mati, pembersihan baris lama,
+dan pembuktian bahwa bot tidak dipanggil dua kali untuk kombinasi yang sama
+(Glints, Indeed, JobStreet). Suite penuh: **678 passed, 1 skipped**; gate ruff
+bersih.
+
+Batas jujur: semuanya teruji dengan objek tiruan (tanpa Chrome). Perilaku di
+situs sungguhan — terutama apakah cache 60 menit cukup segar untuk lowongan
+baru — baru ketahuan setelah dijalankan di PC Anda.

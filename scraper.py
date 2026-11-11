@@ -19,6 +19,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
+import teks as teks_modul
 from auto_apply import ApplyResult, AutoApplier
 from browser import buka_chrome, tutup_chrome
 from config import config
@@ -76,8 +77,12 @@ ALREADY_APPLIED_MARKERS = (
 
 
 def _norm_teks(teks: str) -> str:
-    """Huruf kecil tanpa tanda baca, untuk membandingkan nama perusahaan."""
-    return re.sub(r"[^a-z0-9]+", "", (teks or "").lower())
+    """Huruf kecil tanpa tanda baca, untuk membandingkan nama perusahaan.
+
+    Isinya kini satu tempat dengan `jawaban` lewat `teks.kunci_nama()`
+    (audit E-12); nama lama dipertahankan supaya pemanggil lama tetap jalan.
+    """
+    return teks_modul.kunci_nama(teks)
 
 
 def logo_perusahaan(

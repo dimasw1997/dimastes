@@ -222,6 +222,10 @@ class Config:
     # 0 = tanpa batas jumlah lowongan hasil riset (pengaman opsional).
     research_max_jobs: int = max(0, _int_setting("RESEARCH_MAX_JOBS", 0))
 
+    # Cache hasil riset per kombinasi situs + kata kunci + lokasi + halaman
+    # (audit E-13). 0 = selalu ambil ulang dari situs.
+    cache_riset_menit: int = max(0, _int_setting("CACHE_RISET_MENIT", 60))
+
     # Kata kunci keterampilan untuk menilai kesesuaian keterampilan pada
     # deskripsi kartu lowongan (satu poin per keterampilan yang disebut).
     skill_keywords: list[str] = field(default_factory=lambda: _list_setting(

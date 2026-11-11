@@ -25,6 +25,7 @@ from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.by import By
 
 import antrean
+import cache_riset
 import kendali
 import kuota
 import log_aktivitas
@@ -1603,7 +1604,19 @@ def kumpulkan_lowongan(bot, kata_kunci, halaman: int) -> list[dict]:
         console.print(
             f"[cyan]Glints: '{keyword}' — muat sampai {max(1, halaman)} kali[/]"
         )
-        for job in bot.cari(keyword, max(0, halaman - 1)):
+        kunci_cache = cache_riset.kunci("glints", keyword, "", halaman)
+        kartu = cache_riset.ambil(kunci_cache, situs="glints")
+
+        if kartu is None:
+            kartu = list(bot.cari(keyword, max(0, halaman - 1)))
+            cache_riset.simpan(kunci_cache, kartu, situs="glints")
+        else:
+            console.print(
+                f"[dim]Cache riset Glints dipakai '{keyword}' "
+                f"({len(kartu)} lowongan).[/]"
+            )
+
+        for job in kartu:
             if job["job_id"] in terlihat:
                 continue
             terlihat.add(job["job_id"])

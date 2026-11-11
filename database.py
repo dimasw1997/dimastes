@@ -1,6 +1,7 @@
 """Akses database SQLite untuk lowongan, lamaran, dan blacklist."""
 
 import contextlib
+import json
 import sqlite3
 import threading
 from contextlib import contextmanager, suppress
@@ -269,6 +270,14 @@ class Database:
                     applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     response TEXT,
                     notes TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS riset_cache (
+                    kunci TEXT PRIMARY KEY,
+                    situs TEXT,
+                    jumlah INTEGER DEFAULT 0,
+                    isi TEXT NOT NULL,
+                    dibuat_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
 
                 CREATE TABLE IF NOT EXISTS blacklist (
@@ -920,6 +929,71 @@ class Database:
         )
         hasil["situs"] = situs
         return hasil
+
+    # ------------------------------------------------------------ cache riset
+    def cache_riset_ambil(self, kunci: str, ttl_detik: int,
+                          sekarang: datetime | None = None):
+        """Isi cache riset bila masih segar; None bila kosong/kedaluwarsa."""
+        if ttl_detik <= 0:
+            return None
+
+        with self._get_conn() as conn:
+            baris = conn.execute(
+                "SELECT isi, dibuat_at FROM riset_cache WHERE kunci = ?",
+                (kunci,),
+            ).fetchone()
+
+        if not baris:
+            return None
+
+        dibuat = _waktu(baris["dibuat_at"])
+        kini = sekarang or datetime.now(UTC)
+
+        if dibuat is None or (kini - dibuat).total_seconds() > ttl_detik:
+            return None
+
+        try:
+            return json.loads(baris["isi"])
+        except (TypeError, ValueError):
+            return None
+
+    def cache_riset_simpan(self, kunci: str, situs: str, isi,
+                           sekarang: datetime | None = None) -> None:
+        """Simpan hasil riset satu kombinasi kata kunci."""
+        kini = sekarang or datetime.now(UTC)
+        teks = json.dumps(isi, ensure_ascii=False, default=str)
+
+        with self._get_conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO riset_cache (kunci, situs, jumlah, isi, dibuat_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(kunci) DO UPDATE SET
+                    situs = excluded.situs,
+                    jumlah = excluded.jumlah,
+                    isi = excluded.isi,
+                    dibuat_at = excluded.dibuat_at
+                """,
+                (
+                    kunci,
+                    situs,
+                    len(isi) if isinstance(isi, list) else 0,
+                    teks,
+                    kini.strftime(_FORMAT_WAKTU),
+                ),
+            )
+
+    def cache_riset_bersih(self, hari: int = 3,
+                           sekarang: datetime | None = None) -> int:
+        """Buang cache yang lebih tua dari `hari` hari. Kembalikan jumlahnya."""
+        kini = sekarang or datetime.now(UTC)
+        batas = (kini - timedelta(days=max(1, hari))).strftime(_FORMAT_WAKTU)
+
+        with self._get_conn() as conn:
+            cur = conn.execute(
+                "DELETE FROM riset_cache WHERE dibuat_at < ?", (batas,)
+            )
+            return cur.rowcount or 0
 
     def get_today_apply_count(self, situs: str = "") -> int:
         """Jumlah lamaran terkirim hari ini (dipakai untuk kuota harian).

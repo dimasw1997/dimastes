@@ -193,6 +193,7 @@ cp .env.example .env
 | `HEADLESS_MODE` | `false` | `true` = Chrome tanpa jendela (tidak cocok untuk tinjau manual) |
 | `TELEGRAM_BOT_TOKEN` | kosong | Opsional, untuk notifikasi |
 | `TELEGRAM_CHAT_ID` | kosong | Opsional, untuk notifikasi |
+| `CACHE_RISET_MENIT` | `60` | Cache hasil riset per kombinasi situs + kata kunci + lokasi + halaman selama N menit, supaya sesi kedua di siklus kuota yang sama tidak membaca situs dari nol. `0` = selalu ambil ulang; `--segar` memaksa ambil ulang sekali jalan |
 | `COLLECT_BEFORE_APPLY` | `true` | `true` = **riset dulu**: kumpulkan → dedup → nilai → peringkat → TOP 50 → lamar. `false` = lamar sambil mencari (hanya bila `MAX_APPLY_PER_DAY=0`) |
 | `RANK_BY` | `relevance` | Urutan pemilihan saat `COLLECT_BEFORE_APPLY=true`: `relevance` = kecocokan tertinggi dulu, `newest` = posting terbaru dulu |
 | `SORT_MODE` | `ListedDate` | Urutan hasil; `ListedDate` = terbaru dulu, `KeywordRelevance` = relevansi |
@@ -922,6 +923,21 @@ Cara mempercepat (pilih sesuai kebutuhan):
 | `.\jalankan.bat set-env HEADLESS_MODE=true` | Chrome tanpa jendela; lebih ringan, cocok untuk sesi panjang |
 | `.\jalankan.bat set-env AUTO_ANSWER_WAIT=10` | Memotong waktu tunggu kuesioner per lowongan (20 → 10 detik) |
 | `.\jalankan.bat set-env DELAY_BETWEEN_APPLY=2` | Menghemat ±50 detik untuk 50 lamaran |
+
+### Cache riset (`CACHE_RISET_MENIT`)
+
+Menjalankan `run` dua kali dalam siklus kuota yang sama (untuk mengejar 50)
+tidak perlu membaca situs dari nol. Hasil satu kombinasi **situs + kata kunci +
+lokasi + halaman** disimpan di SQLite dan dipakai ulang selama
+`CACHE_RISET_MENIT` menit (bawaan 60). Saat dipakai, terminal menampilkan
+`Halaman 1 diambil dari cache riset (24 lowongan).`
+
+- `0` = cache dimatikan, selalu ambil ulang dari situs.
+- `--segar` = paksa ambil ulang sekali jalan: `jalankan.bat run --auto --segar`.
+- Cache tidak dipakai saat mengirim lamaran: setiap lamaran tetap membuka
+  halaman lowongannya sendiri, jadi lowongan yang sudah tutup tetap gagal
+  dengan aman (tidak dikirim dua kali).
+- Baris cache lebih tua dari 3 hari dibuang otomatis.
 
 Catatan: `MAX_APPLY_PER_DAY` memakai **siklus 24 jam bergulir per situs**,
 bukan hari kalender. Siklus dimulai pada lamaran pertama; slot ke-51 baru bisa

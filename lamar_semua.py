@@ -22,6 +22,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
+import cache_riset
 import kuota
 from config import config
 from database import db
@@ -335,7 +336,15 @@ def main() -> int:
                         help="Batas lamaran sesi ini (0 = tanpa batas)")
     parser.add_argument("--tanpa-perbarui", action="store_true",
                         help="Jangan tarik pembaruan kode dari GitHub")
+    parser.add_argument("--segar", action="store_true",
+                        help="Abaikan cache riset, ambil ulang dari situs")
     arg = parser.parse_args()
+
+    if arg.segar:
+        cache_riset.paksa_segar()
+        console.print(
+            "[cyan]Cache riset dimatikan untuk sesi ini (--segar).[/]"
+        )
 
     jalankan(
         situs=arg.situs,
