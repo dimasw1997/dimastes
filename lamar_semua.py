@@ -227,13 +227,16 @@ def jalankan(
     console.print(f"[cyan]Situs yang dijalankan:[/] {urutan}")
     console.print(
         "[cyan]Kuota:[/] "
-        f"{kuota.batas()} lamaran per situs per hari "
-        "(hitungan tiap situs terpisah)"
+        f"{kuota.batas()} lamaran per situs per siklus 24 jam "
+        "(hitungan tiap situs terpisah, reset 24 jam sejak lamaran pertama)"
     )
     for baris in kuota.ringkasan_situs(daftar=daftar):
+        sisa_teks = (
+            f" — reset {baris['berakhir']}" if baris["berakhir"] else ""
+        )
         console.print(
             f"[dim]   {baris['nama']}: {baris['terpakai']}/"
-            f"{baris['batas']} hari ini[/]"
+            f"{baris['batas']} pada siklus ini{sisa_teks}[/]"
         )
 
     hasil: dict[str, dict] = {}
@@ -271,7 +274,8 @@ def jalankan(
     for baris in kuota.ringkasan_situs(daftar=daftar):
         console.print(
             f"[bold]{baris['nama']}:[/] {baris['terpakai']}/{baris['batas']} "
-            "lamaran hari ini"
+            "lamaran pada siklus ini"
+            + (f" (reset {baris['berakhir']})" if baris["berakhir"] else "")
         )
         if baris["sisa"]:
             kurang_target.append(
@@ -280,9 +284,11 @@ def jalankan(
 
     if kurang_target:
         console.print(
-            "[yellow]Target harian belum tercapai:[/] "
+            "[yellow]Target 50 belum tercapai:[/] "
             + ", ".join(kurang_target)
-            + ". Jalankan sesi lagi atau tambah kata kunci/halaman riset."
+            + ". Jalankan sesi lagi dalam siklus yang sama, atau tambah "
+            "kata kunci/halaman riset. Slot baru dibuka setelah 24 jam dari "
+            "lamaran pertama siklus ini."
         )
 
     # Ringkasan sesi gabungan semua situs (evaluasi berkala pasal 12.4).

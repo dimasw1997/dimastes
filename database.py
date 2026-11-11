@@ -39,6 +39,79 @@ def rentang_hari_wib(sekarang: datetime | None = None) -> tuple[str, str]:
     )
 
 
+# Satu siklus kuota berlangsung 24 jam sejak lamaran pertama di siklus itu.
+DURASI_SIKLUS = timedelta(hours=24)
+
+_FORMAT_WAKTU = "%Y-%m-%d %H:%M:%S"
+
+
+def _waktu(teks) -> datetime | None:
+    """Baca cap waktu SQLite (UTC) menjadi datetime sadar-zona."""
+    try:
+        return datetime.strptime(str(teks)[:19], _FORMAT_WAKTU).replace(tzinfo=UTC)
+    except (TypeError, ValueError):
+        return None
+
+
+def bentuk_siklus(
+    waktu_lamaran: list[datetime],
+    sekarang: datetime | None = None,
+    durasi: timedelta = DURASI_SIKLUS,
+) -> dict:
+    """Hitung siklus kuota bergulir dari daftar waktu lamaran (urut naik).
+
+    Aturan pemakai: 50 lamaran per situs, dan hitungan baru dimulai **24 jam
+    setelah lamaran pertama** siklus itu — bukan tengah malam.
+
+    Contoh: lamaran pertama 20:30 hari ini; lamaran ke-51 baru boleh dikirim
+    besok 20:30, bukan besok 00:00.
+    """
+    kini = sekarang or datetime.now(UTC)
+    mulai = None
+    jumlah = 0
+
+    for waktu in waktu_lamaran:
+        if waktu is None:
+            continue
+        if mulai is None or (waktu - mulai) >= durasi:
+            mulai = waktu
+            jumlah = 1
+        else:
+            jumlah += 1
+
+    if mulai is None:
+        return {
+            "mulai_at": "",
+            "berakhir_at": "",
+            "jumlah": 0,
+            "sisa_detik": None,
+            "aktif": False,
+        }
+
+    berakhir = mulai + durasi
+
+    if kini >= berakhir:
+        # Siklus terakhir sudah lewat dan belum ada lamaran di siklus baru:
+        # slot kembali penuh (50) dan siklus baru dimulai pada lamaran berikut.
+        return {
+            "mulai_at": "",
+            "berakhir_at": "",
+            "jumlah": 0,
+            "sisa_detik": None,
+            "aktif": False,
+        }
+
+    sisa_detik = max(0.0, (berakhir - kini).total_seconds())
+
+    return {
+        "mulai_at": mulai.strftime(_FORMAT_WAKTU),
+        "berakhir_at": berakhir.strftime(_FORMAT_WAKTU),
+        "jumlah": jumlah,
+        "sisa_detik": sisa_detik,
+        "aktif": sisa_detik > 0,
+    }
+
+
 # Status antrean lowongan (master prompt pasal 4.2).
 STATUS_ANTREAN = (
     "found",
@@ -804,6 +877,49 @@ class Database:
                 """,
                 (job_id, status, notes),
             )
+
+    def siklus_kuota(self, situs: str = "",
+                     sekarang: datetime | None = None,
+                     durasi_hari: int = 7) -> dict:
+        """Siklus kuota bergulir 24 jam untuk satu situs.
+
+        Menghitung dari data yang sudah ada (tabel `applications`), tanpa
+        tabel tambahan: lamaran diurutkan menurut waktu, lalu siklus baru
+        dimulai setiap kali jarak ke lamaran pertama siklus berjalan sudah
+        mencapai 24 jam.
+        """
+        kini = sekarang or datetime.now(UTC)
+        batas_awal = (kini - timedelta(days=durasi_hari)).strftime(_FORMAT_WAKTU)
+
+        placeholders = ", ".join("?" for _ in QUOTA_STATUSES)
+        parameter: list = [batas_awal, *QUOTA_STATUSES]
+
+        saringan = ""
+        situs = str(situs or "").strip().lower()
+        if situs:
+            saringan = f"AND {_situs_aplikasi_sql()} = ?"
+            parameter.append(situs)
+
+        with self._get_conn() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT a.applied_at
+                FROM applications a
+                LEFT JOIN jobs j ON a.job_id = j.job_id
+                WHERE a.applied_at >= ?
+                  AND a.status IN ({placeholders})
+                  {saringan}
+                ORDER BY a.applied_at ASC, a.id ASC
+                """,
+                parameter,
+            ).fetchall()
+
+        waktu = [_waktu(baris["applied_at"]) for baris in rows]
+        hasil = bentuk_siklus(
+            [item for item in waktu if item is not None], kini
+        )
+        hasil["situs"] = situs
+        return hasil
 
     def get_today_apply_count(self, situs: str = "") -> int:
         """Jumlah lamaran terkirim hari ini (dipakai untuk kuota harian).

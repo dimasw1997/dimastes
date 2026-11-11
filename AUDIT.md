@@ -405,3 +405,44 @@ Batas jujur: 50 per situs hanya bisa tercapai bila kandidatnya ada. Bila hasil
 riset habis sebelum 50 (mis. kata kunci terlalu sempit), sesi berhenti dan
 melaporkan kekurangannya — bukan memaksakan lowongan yang tidak memenuhi
 syarat.
+
+---
+
+## 11. Kuota 50 per situs dalam siklus 24 jam bergulir (2026-11-11)
+
+Klarifikasi pemakai atas permintaan sebelumnya: "50 itu per hari yah, karena
+batas maksimum setiap aplikasi 50 per hari; apabila sudah lewat 24 jam dari
+pengiriman pertama maka bisa lagi 50 apply; wajib setiap 50 harus tercapai".
+
+| Sebelum (PR #8) | Sesudah (PR #9) |
+|---|---|
+| 50 per situs per **hari kalender WIB** — reset pukul 00:00 | 50 per situs per **siklus 24 jam** — reset 24 jam sejak lamaran pertama |
+| Dimulai 20:30 → 00:00 sudah dapat 50 slot baru | Dimulai 20:30 → slot baru besok 20:30 |
+| Tidak ada info kapan kuota kembali | `status`/laporan/akhir sesi menampilkan "Reset berikutnya: besok 20:30" |
+
+Cara kerjanya (tanpa tabel baru, dihitung dari `applications`):
+
+1. `Database.bentuk_siklus()` mengurutkan waktu lamaran, memulai siklus baru
+   setiap kali jarak ke lamaran pertama siklus berjalan ≥ 24 jam.
+2. `Database.siklus_kuota(situs)` membatasi hitungan pada satu situs.
+3. Bila siklus terakhir sudah lewat dan belum ada lamaran baru, hitungan
+   kembali 0 (slot penuh 50) dan siklus baru dimulai pada lamaran berikutnya.
+4. `kuota.py` memakai siklus itu untuk `terpakai/sisa/habis/kurang/ringkasan/
+   ringkasan_situs`, lengkap dengan `berakhir` dan `sisa_waktu`.
+
+Contoh keluaran `status`:
+
+| Situs | Siklus ini | Target | Sisa | Reset berikutnya |
+|---|---|---|---|---|
+| JobStreet | 47 | 50 | 3 | hari ini 23:37 |
+| Glints | 12 | 50 | 38 | hari ini 23:37 |
+| Indeed | 0 | 50 | 50 | - |
+
+Tes: `tests/test_siklus_kuota.py` (13 tes) — batas 24 jam, bukan tengah malam,
+situs terpisah, status gagal tidak memakai kuota, siklus kemarin tidak menahan
+kuota hari ini, teks ringkasan. Suite penuh **659 passed, 1 skipped**, gate
+ruff bersih.
+
+Batas jujur: sisa slot yang tidak terpakai **hangus** saat siklus berganti
+(mulai 50 baru). Bila Anda ingin sisanya dibawa ke siklus berikutnya, itu
+perubahan kecil di `bentuk_siklus()` — beri tahu saja.
