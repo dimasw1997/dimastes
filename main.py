@@ -6,6 +6,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 import antrean
+import cache_riset
 import kendali
 import kuota
 import log_aktivitas
@@ -133,7 +134,20 @@ class AutoApplyEngine:
         Jumlah 0 berarti halaman itu tidak memuat hasil apa pun.
         """
         mulai_halaman = time.monotonic()
-        jobs = self.bot.search_jobs(keyword, page, location=location)
+
+        # Cache riset (E-13): kombinasi kata kunci + lokasi + halaman yang
+        # sudah dibaca beberapa menit lalu tidak perlu diminta ulang ke situs.
+        kunci_cache = cache_riset.kunci("jobstreet", keyword, location, page)
+        jobs = cache_riset.ambil(kunci_cache, situs="jobstreet")
+
+        if jobs is None:
+            jobs = self.bot.search_jobs(keyword, page, location=location)
+            cache_riset.simpan(kunci_cache, jobs or [], situs="jobstreet")
+        elif jobs:
+            console.print(
+                f"[dim]Halaman {page} diambil dari cache riset "
+                f"({len(jobs)} lowongan).[/]"
+            )
 
         # Catat kata kunci yang menemukan lowongan (evaluasi berkala pasal 12.4).
         for job in jobs or []:
@@ -624,6 +638,10 @@ class AutoApplyEngine:
         )
 
         self.durasi_riset = time.monotonic() - self.riset_mulai
+
+        ringkas_cache = cache_riset.ringkas()
+        if ringkas_cache:
+            console.print(f"[cyan]{ringkas_cache}[/]")
 
         if self.jumlah_halaman:
             rata = self.waktu_halaman / self.jumlah_halaman

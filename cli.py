@@ -7,6 +7,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
+import cache_riset
 from config import MAKS_HALAMAN_RISET, batas_halaman_riset, config
 from database import db
 
@@ -1380,6 +1381,14 @@ if __name__ == "__main__":
         action="store_true",
         help="Jangan menunggu Enter saat login; berhenti bila belum login",
     )
+    run_parser.add_argument(
+        "--segar",
+        action="store_true",
+        help=(
+            "Abaikan cache riset dan ambil ulang lowongan dari situs "
+            "(bawaan: cache CACHE_RISET_MENIT menit)"
+        ),
+    )
     subparsers.add_parser("stats", help="Tampilkan statistik")
     subparsers.add_parser("config", help="Tampilkan konfigurasi aktif")
     subparsers.add_parser("repair", help="Rapikan data lama di database")
@@ -1733,6 +1742,13 @@ if __name__ == "__main__":
 
         if args.no_login_wait:
             config.login_wait = False
+
+        if getattr(args, "segar", False):
+            cache_riset.paksa_segar()
+            console.print(
+                "[cyan]Cache riset dimatikan untuk sesi ini (--segar):[/] "
+                "lowongan diambil ulang dari situs."
+            )
 
         # Pemisahan situs: `run` tanpa --situs tetap JobStreet saja, persis
         # seperti sebelumnya. Situs lain dijalankan lewat jalur yang sama
