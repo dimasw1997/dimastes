@@ -4,8 +4,8 @@ Dipakai oleh "Lamar Otomatis.bat". Alur:
 
 1. (opsional) tarik pembaruan kode dari repo pengembangan,
 2. jalankan sesi JobStreet → Glints → Indeed berurutan,
-3. kuota harian tetap satu hitungan (`kuota.py`), jadi situs berikutnya hanya
-   memakai sisa jatah,
+3. kuota harian dihitung PER SITUS (`kuota.py`): JobStreet 50, Glints 50,
+   Indeed 50 — target satu situs tidak mengurangi jatah situs lain,
 4. kirim **satu** laporan harian Telegram di akhir, bukan tiga.
 
 Semua aturan per situs tetap milik modulnya masing-masing; berkas ini hanya
@@ -225,14 +225,23 @@ def jalankan(
 
     urutan = ", ".join(NAMA_SITUS[nama] for nama in daftar)
     console.print(f"[cyan]Situs yang dijalankan:[/] {urutan}")
-    console.print(f"[cyan]{kuota.ringkasan()}[/]")
+    console.print(
+        "[cyan]Kuota:[/] "
+        f"{kuota.batas()} lamaran per situs per hari "
+        "(hitungan tiap situs terpisah)"
+    )
+    for baris in kuota.ringkasan_situs(daftar=daftar):
+        console.print(
+            f"[dim]   {baris['nama']}: {baris['terpakai']}/"
+            f"{baris['batas']} hari ini[/]"
+        )
 
     hasil: dict[str, dict] = {}
     dilewati: dict[str, str] = {}
 
     for nama in daftar:
-        if kuota.habis():
-            pesan = kuota.pesan_habis()
+        if kuota.habis(situs=nama):
+            pesan = kuota.pesan_habis(nama)
             dilewati[nama] = pesan
             console.print(f"[yellow]Lewati {NAMA_SITUS[nama]}: {pesan}[/]")
             continue
@@ -256,7 +265,25 @@ def jalankan(
 
     terkirim = sum(data.get("dilamar", 0) for data in hasil.values())
     console.print(f"[bold green]Total terkirim sesi ini: {terkirim}[/]")
-    console.print(f"[bold]{kuota.ringkasan()}[/]")
+
+    # Target harian dihitung per situs: JobStreet 50, Glints 50, Indeed 50.
+    kurang_target = []
+    for baris in kuota.ringkasan_situs(daftar=daftar):
+        console.print(
+            f"[bold]{baris['nama']}:[/] {baris['terpakai']}/{baris['batas']} "
+            "lamaran hari ini"
+        )
+        if baris["sisa"]:
+            kurang_target.append(
+                f"{baris['nama']} kurang {baris['sisa']}"
+            )
+
+    if kurang_target:
+        console.print(
+            "[yellow]Target harian belum tercapai:[/] "
+            + ", ".join(kurang_target)
+            + ". Jalankan sesi lagi atau tambah kata kunci/halaman riset."
+        )
 
     # Ringkasan sesi gabungan semua situs (evaluasi berkala pasal 12.4).
     with contextlib.suppress(Exception):

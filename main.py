@@ -362,11 +362,11 @@ class AutoApplyEngine:
         return terkumpul
 
     def _batas_harian_tercapai(self) -> bool:
-        """Satu aturan kuota untuk JobStreet dan Glints (modul `kuota`)."""
-        if kuota.habis(db):
+        """Kuota harian JobStreet saja (situs lain punya hitungan sendiri)."""
+        if kuota.habis(db, situs="jobstreet"):
             console.print(
-                f"[bold yellow]Batas lamaran harian tercapai "
-                f"({kuota.batas()}).[/]"
+                "[bold yellow]Target/kuota harian JobStreet tercapai "
+                f"({kuota.batas()} lamaran).[/]"
             )
             return True
 
@@ -374,8 +374,10 @@ class AutoApplyEngine:
 
     def _lamar(self, job: dict) -> bool:
         """Lamar satu lowongan. False = seluruh sesi harus berhenti."""
-        if kuota.habis(db):
-            console.print("[bold yellow]Batas lamaran harian tercapai.[/]")
+        if kuota.habis(db, situs="jobstreet"):
+            console.print(
+                "[bold yellow]Target/kuota harian JobStreet tercapai.[/]"
+            )
             return False
 
         if (
@@ -679,20 +681,22 @@ class AutoApplyEngine:
         # Bandingkan dulu, baru lamar: ambil hanya yang terbaik sebanyak sisa
         # kuota hari ini, supaya batas harian dipakai untuk lowongan paling
         # cocok — bukan untuk yang kebetulan ditemukan lebih dulu.
-        console.print(f"[cyan]{kuota.ringkasan(db)}[/]")
+        console.print(f"[cyan]{kuota.ringkasan(db, situs='jobstreet')}[/]")
 
-        if kuota.habis(db):
-            console.print(f"[bold yellow]{kuota.pesan_habis()}[/]")
+        if kuota.habis(db, situs="jobstreet"):
+            console.print(
+                f"[bold yellow]{kuota.pesan_habis('jobstreet')}[/]"
+            )
             return
 
-        sisa = kuota.sisa(db)
+        sisa = kuota.sisa(db, situs="jobstreet")
         if sisa is not None and len(kandidat) > sisa:
             console.print(
                 f"[bold]{len(kandidat)} kandidat[/] (dari seluruh "
                 f"kategori & lokasi) bersaing untuk [bold]{sisa} slot[/] "
                 f"— diambil {sisa} yang paling cocok."
             )
-            kandidat = kuota.potong(kandidat, db)
+            kandidat = kuota.potong(kandidat, db, situs="jobstreet")
 
         if not kandidat:
             console.print("[yellow]Tidak ada lowongan yang dilamar.[/]")
@@ -895,9 +899,9 @@ class AutoApplyEngine:
             ),
         )
         table.add_row(
-            "Batas lamaran per hari",
+            "Target lamaran per hari (per situs)",
             (
-                str(config.max_apply_per_day)
+                f"{config.max_apply_per_day} (JobStreet saja)"
                 if config.max_apply_per_day > 0
                 else "Tanpa batas"
             ),

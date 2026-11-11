@@ -347,10 +347,13 @@ def tampilkan_laporan(simpan: bool = False):
     table.add_row("Lowongan tersimpan", str(data["lowongan_tersimpan"]))
     table.add_row("Lamaran terkirim", str(data["lamaran_terkirim"]))
     table.add_row("Lamaran hari ini (WIB)", str(data["lamaran_hari_ini"]))
-    table.add_row(
-        "Sisa kuota",
-        "tanpa batas" if data["sisa_kuota"] is None else str(data["sisa_kuota"]),
-    )
+    for baris in data.get("kuota_situs") or []:
+        sisa = baris["sisa"]
+        table.add_row(
+            f"Kuota {baris['nama']}",
+            f"{baris['terpakai']}/{baris['batas']}"
+            + (" (tanpa batas)" if sisa is None else f" — sisa {sisa}"),
+        )
     table.add_row("Tingkat berhasil", f"{data['tingkat_berhasil']}%")
     console.print(table)
 
@@ -536,9 +539,13 @@ def tabel_situs(judul: str = "Status per situs"):
     table.add_column("Ditolak", justify="right")
     table.add_column("Kedaluwarsa", justify="right")
 
+    import kuota as kuota_modul
+
     for baris in daftar:
         table.add_row(
-            str(baris["situs"]).title(),
+            kuota_modul.NAMA_SITUS.get(
+                str(baris["situs"]).lower(), str(baris["situs"]).title()
+            ),
             str(baris["total"]),
             str(baris["terkirim"]),
             str(baris["perlu_manual"]),
@@ -558,7 +565,25 @@ def tampilkan_status_situs():
     try:
         import kuota
 
-        console.print(f"[cyan]{kuota.ringkasan()}[/]")
+        console.print()
+        kuota_tabel = Table(title="Target harian per situs (50 = wajib tercapai)")
+        kuota_tabel.add_column("Situs", style="cyan")
+        kuota_tabel.add_column("Hari ini", justify="right")
+        kuota_tabel.add_column("Target", justify="right")
+        kuota_tabel.add_column("Sisa", justify="right", style="yellow")
+        kuota_tabel.add_column("Status", style="green")
+
+        for baris in kuota.ringkasan_situs():
+            sisa = baris["sisa"]
+            kuota_tabel.add_row(
+                baris["nama"],
+                str(baris["terpakai"]),
+                "tanpa batas" if sisa is None else str(baris["batas"]),
+                "-" if sisa is None else str(sisa),
+                "tercapai" if sisa == 0 else "belum",
+            )
+
+        console.print(kuota_tabel)
     except Exception:
         pass
 
