@@ -8,7 +8,8 @@ Aturan Indeed **sama persis dengan JobStreet**:
 * saring dengan `JobFilter` yang sama (judul, lokasi, gaji `MIN_SALARY`,
   kualifikasi) + wajib logo perusahaan bila `REQUIRE_COMPANY_LOGO=true`,
 * skor 8 dimensi lalu ranking global, ambil yang terbaik sebanyak sisa kuota,
-* kuota harian dari `kuota.py` — **dipakai bersama** JobStreet dan Glints,
+* kuota harian dari `kuota.py` — dihitung **per situs** (Indeed punya
+  hitungan sendiri; tidak memakai jatah JobStreet/Glints),
 * `AUTO_APPLY_MAX_PER_SESSION`, `DELAY_BETWEEN_APPLY`,
 * lewati lowongan yang sudah pernah dilamar (tanda situs **dan** database),
 * mode manual `AUTO_APPLY=false`, login habis menghentikan sesi,
@@ -873,7 +874,9 @@ def tampilkan_konfigurasi() -> None:
     tabel.add_row("Mode lamar", mode)
     tabel.add_row(
         "Kuota lamaran",
-        f"{batas_harian} per hari" if batas_harian else "tanpa batas",
+        f"{batas_harian} per hari (khusus Indeed)"
+        if batas_harian
+        else "tanpa batas",
     )
     tabel.add_row(
         "Batas per sesi", f"{batas_sesi} lamaran" if batas_sesi else "tanpa batas"
@@ -968,13 +971,15 @@ def jalankan_indeed(max_pages: int = 0, keywords: list[str] | None = None,
             console.print("[yellow]Tidak ada lowongan Indeed yang lolos filter.[/]")
             return laporan
 
-        console.print(f"[cyan]{kuota.ringkasan(db)}[/]")
+        console.print(f"[cyan]{kuota.ringkasan(db, situs='indeed')}[/]")
 
-        if kuota.habis(db):
-            console.print(f"[bold yellow]{kuota.pesan_habis()}[/]")
+        if kuota.habis(db, situs="indeed"):
+            console.print(
+                f"[bold yellow]{kuota.pesan_habis('indeed')}[/]"
+            )
             return laporan
 
-        sisa = kuota.sisa(db)
+        sisa = kuota.sisa(db, situs="indeed")
         dipilih = pilih_teratas(layak, sisa or 0)
 
         if sisa is not None and len(layak) > sisa:
@@ -994,7 +999,7 @@ def jalankan_indeed(max_pages: int = 0, keywords: list[str] | None = None,
             if batas and laporan["dilamar"] >= batas:
                 console.print("[yellow]Batas lamaran sesi ini tercapai.[/]")
                 break
-            if kuota.habis(db):
+            if kuota.habis(db, situs="indeed"):
                 console.print("[yellow]Batas lamaran harian tercapai.[/]")
                 break
             if batas_sesi and laporan["dilamar"] >= batas_sesi:

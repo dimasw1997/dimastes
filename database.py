@@ -77,6 +77,27 @@ def sumber_dari_url(url: str) -> str:
     return host or "lainnya"
 
 
+def _situs_aplikasi_sql(alias_jobs: str = "j") -> str:
+    """Ekspresi SQL nama situs untuk tabel `applications`.
+
+    Baris lama bisa belum punya `jobs.sumber` (lowongan sudah dihapus), jadi
+    URL dan awalan `job_id` (`glints:…`, `indeed:…`) dipakai sebagai cadangan.
+    Lamaran tanpa penanda apa pun dianggap JobStreet — situs asal aplikasi ini.
+    """
+    j = alias_jobs
+
+    return (
+        f"CASE"
+        f" WHEN TRIM(COALESCE({j}.sumber, '')) <> ''"
+        f" THEN LOWER(TRIM({j}.sumber))"
+        f" WHEN {j}.url LIKE '%glints.%' THEN 'glints'"
+        f" WHEN a.job_id LIKE 'glints:%' THEN 'glints'"
+        f" WHEN {j}.url LIKE '%indeed.%' THEN 'indeed'"
+        f" WHEN a.job_id LIKE 'indeed:%' THEN 'indeed'"
+        " ELSE 'jobstreet' END"
+    )
+
+
 def _situs_sql(alias: str = "") -> str:
     """Ekspresi SQL nama situs: kolom `sumber`, URL sebagai cadangan.
 
@@ -784,23 +805,34 @@ class Database:
                 (job_id, status, notes),
             )
 
-    def get_today_apply_count(self) -> int:
-        """Jumlah lamaran terkirim hari ini (dipakai untuk batas harian).
+    def get_today_apply_count(self, situs: str = "") -> int:
+        """Jumlah lamaran terkirim hari ini (dipakai untuk kuota harian).
 
         Hari dihitung menurut WIB (pasal 9.2), bukan zona waktu komputer.
+        Sejak kuota dihitung per situs, `situs` (jobstreet/glints/indeed)
+        membatasi hitungan pada situs itu saja; kosong = semua situs.
         """
         placeholders = ", ".join("?" for _ in QUOTA_STATUSES)
         mulai, selesai = rentang_hari_wib()
+        situs = str(situs or "").strip().lower()
+
+        saringan = ""
+        parameter: list = [mulai, selesai, *QUOTA_STATUSES]
+        if situs:
+            saringan = f"AND {_situs_aplikasi_sql()} = ?"
+            parameter.append(situs)
 
         with self._get_conn() as conn:
             result = conn.execute(
                 f"""
                 SELECT COUNT(*) AS count
-                FROM applications
-                WHERE applied_at >= ? AND applied_at < ?
-                  AND status IN ({placeholders})
+                FROM applications a
+                LEFT JOIN jobs j ON a.job_id = j.job_id
+                WHERE a.applied_at >= ? AND a.applied_at < ?
+                  AND a.status IN ({placeholders})
+                  {saringan}
                 """,
-                (mulai, selesai, *QUOTA_STATUSES),
+                parameter,
             ).fetchone()
 
             return int(result["count"])
@@ -817,7 +849,7 @@ class Database:
         saringan = ""
         parameter: list = [TITLE_FALLBACK]
         if situs:
-            saringan = f"WHERE {_situs_sql('j')} = ?"
+            saringan = f"WHERE {_situs_aplikasi_sql()} = ?"
             parameter.append(situs)
         parameter.append(limit)
 

@@ -20,6 +20,33 @@ from database import db
 from notifier import notifier
 
 
+def _teks_kuota(kuota_situs: list[dict]) -> str:
+    """Ringkasan kuota per situs untuk berkas Markdown."""
+    if not kuota_situs:
+        return "tanpa batas"
+
+    bagian = []
+    for baris in kuota_situs:
+        sisa = baris.get("sisa")
+        sisa_teks = "tanpa batas" if sisa is None else f"sisa {sisa}"
+        bagian.append(
+            f"{baris.get('nama') or baris.get('situs')} "
+            f"{baris.get('terpakai', 0)}/{baris.get('batas', 0)} ({sisa_teks})"
+        )
+
+    return " · ".join(bagian)
+
+
+def _sisa_gabungan() -> int | None:
+    """Total sisa slot semua situs; None bila tidak ada batas sama sekali."""
+    sisa = [baris["sisa"] for baris in kuota.ringkasan_situs(db)]
+
+    if all(item is None for item in sisa):
+        return None
+
+    return sum(item or 0 for item in sisa)
+
+
 def ringkasan() -> dict:
     """Angka utama untuk laporan satu halaman."""
     stats = db.get_stats()
@@ -33,7 +60,10 @@ def ringkasan() -> dict:
         "lowongan_tersimpan": int(stats.get("total_jobs_found", 0)),
         "lamaran_terkirim": terkirim,
         "lamaran_hari_ini": int(stats.get("today_applied", 0)),
-        "sisa_kuota": kuota.sisa(db),
+        # Kuota dihitung per situs: JobStreet/Glints/Indeed masing-masing
+        # punya target harian sendiri.
+        "kuota_situs": kuota.ringkasan_situs(db),
+        "sisa_kuota": _sisa_gabungan(),
         "status_antrean": status,
         "per_lokasi": db.statistik_lokasi(10),
         "per_kategori": db.statistik_kategori(10),
@@ -65,8 +95,8 @@ def teks_markdown(data: dict | None = None) -> str:
         f"- Lowongan tersimpan: {data['lowongan_tersimpan']}",
         f"- Lamaran terkirim: {data['lamaran_terkirim']}",
         f"- Lamaran hari ini (WIB): {data['lamaran_hari_ini']}",
-        "- Sisa kuota: "
-        + ("tanpa batas" if data["sisa_kuota"] is None else str(data["sisa_kuota"])),
+        "- Kuota per situs: "
+        + _teks_kuota(data.get("kuota_situs") or []),
         f"- Tingkat berhasil: {data['tingkat_berhasil']}%",
         f"- Rasio duplikat (semua sesi): {rasio_duplikat}%",
         "",

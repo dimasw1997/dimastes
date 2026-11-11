@@ -372,3 +372,36 @@ Batas jujur: pengujian memakai elemen tiruan (HTML asli Glints tidak tersedia
 di sesi ini). Bila masih ada pertanyaan yang tidak terisi, jalankan sesi lagi
 setelah pembaruan; sekarang berkas `debug\*.html` benar-benar tersimpan
 (perbaikan E-15), dan kirimkan satu berkas itu untuk penyetelan selector.
+
+---
+
+## 10. Kuota harian per situs: 50 wajib, bukan batas bersama (2026-11-11)
+
+Permintaan pemakai: "JobStreet, Glints, dan Indeed wajib apply 50 lowongan
+setiap hari, bukan batas maksimal 50". Pilihan yang dipilih saat ditanya:
+**50 untuk tiap situs**, dan **berhenti di 50** (bukan terus melamar).
+
+| Sebelum | Sesudah |
+|---|---|
+| Satu hitungan 50 dipakai bersama; JobStreet 50 berarti Glints 0 | Tiap situs punya hitungan sendiri: JobStreet 50, Glints 50, Indeed 50 |
+| `get_today_apply_count()` tanpa parameter | `get_today_apply_count(situs)` dengan cadangan dari URL dan awalan `job_id` (`glints:…`, `indeed:…`) |
+| `kuota.sisa/habis/potong/ringkasan` global | menerima `situs=`; ditambah `target()`, `kurang()`, `ringkasan_situs()` |
+| Pesan "kuota habis" tanpa nama situs | "Kuota Glints hari ini sudah habis…" dan situs lain tetap jalan |
+| `MAX_APPLY_PER_DAY` bawaan kode 5 | 50 (sama dengan `.env.example`) |
+
+Tambahan supaya angka 50 benar-benar dikejar, bukan sekadar dibatasi:
+
+- akhir sesi `lamar` menampilkan `JobStreet: 12/50`, `Glints: 50/50`, dst. dan
+  peringatan "Target harian belum tercapai: JobStreet kurang 38";
+- perintah `status` punya tabel target per situs (hari ini / target / sisa /
+  status tercapai);
+- laporan harian (layar, Markdown, dashboard) menampilkan kuota per situs.
+
+Tes: `tests/test_kuota_situs.py` (10 tes) + penyesuaian
+`test_glints_aturan.py`, `test_laporan_harian.py`, `test_rank_kuota.py`.
+Suite penuh: **646 passed, 1 skipped**. Gate ruff bersih.
+
+Batas jujur: 50 per situs hanya bisa tercapai bila kandidatnya ada. Bila hasil
+riset habis sebelum 50 (mis. kata kunci terlalu sempit), sesi berhenti dan
+melaporkan kekurangannya — bukan memaksakan lowongan yang tidak memenuhi
+syarat.

@@ -1249,11 +1249,14 @@ class GlintsBot:
 # Alur utama
 # ----------------------------------------------------------------------
 def _batas_harian_tercapai() -> bool:
-    """Sama seperti JobStreet: satu aturan di modul `kuota`."""
-    if not kuota.habis(db):
+    """Kuota harian Glints saja — tidak memakai jatah JobStreet/Indeed."""
+    if not kuota.habis(db, situs="glints"):
         return False
 
-    console.print("[bold yellow]Batas lamaran harian tercapai.[/]")
+    console.print(
+        "[bold yellow]Target/kuota harian Glints tercapai "
+        f"({kuota.batas()} lamaran).[/]"
+    )
     return True
 
 
@@ -1261,7 +1264,11 @@ def tampilkan_konfigurasi_glints() -> None:
     """Ringkasan pengaturan aktif, isinya sama dengan banner JobStreet."""
     mode = "otomatis" if config.auto_apply else "manual (tinjau sendiri)"
     batas_harian = kuota.batas()
-    teks_kuota = f"{batas_harian} per hari" if batas_harian else "tanpa batas"
+    teks_kuota = (
+        f"{batas_harian} per hari (khusus Glints)"
+        if batas_harian
+        else "tanpa batas"
+    )
     batas_sesi = int(getattr(config, "auto_apply_max_per_session", 0) or 0)
     port = int(getattr(config, "chrome_debug_port", 0) or 0)
 
@@ -1463,15 +1470,19 @@ def jalankan_glints(max_pages: int = 0, keywords: list[str] | None = None,
             return laporan
 
         # Sisa kuota harian — modul `kuota` yang sama dengan JobStreet.
-        console.print(f"[cyan]{kuota.ringkasan(db)}[/]")
+        console.print(f"[cyan]{kuota.ringkasan(db, situs='glints')}[/]")
 
-        if kuota.habis(db):
-            console.print(f"[bold yellow]{kuota.pesan_habis()}[/]")
+        if kuota.habis(db, situs="glints"):
+            console.print(
+                f"[bold yellow]{kuota.pesan_habis('glints')}[/]"
+            )
             return laporan
 
-        dipilih = pilih_teratas(layak, kuota.sisa(db) or 0)
+        dipilih = pilih_teratas(
+            layak, kuota.sisa(db, situs="glints") or 0
+        )
 
-        sisa = kuota.sisa(db)
+        sisa = kuota.sisa(db, situs="glints")
         if sisa is not None and len(layak) > sisa:
             console.print(
                 f"[bold]{len(layak)} kandidat[/] bersaing untuk "

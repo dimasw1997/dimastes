@@ -247,8 +247,9 @@ class Config:
     # 0 = tanpa batas umur. Nilai yang didukung JobStreet: 1, 3, 7, 14, 31.
     max_age_days: int = _int_setting("MAX_AGE_DAYS", 0)
 
-    # 0 = tanpa batas harian.
-    max_apply_per_day: int = max(0, _int_setting("MAX_APPLY_PER_DAY", 5))
+    # Target sekaligus batas harian PER SITUS (JobStreet/Glints/Indeed
+    # masing-masing 50). 0 = tanpa batas harian.
+    max_apply_per_day: int = max(0, _int_setting("MAX_APPLY_PER_DAY", 50))
     delay_between_apply: int = _int_setting("DELAY_BETWEEN_APPLY", 3)
 
     # Auto recovery (master prompt pasal 10): kegagalan SEMENTARA (timeout,
