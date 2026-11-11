@@ -717,8 +717,24 @@ otomatis pada lamaran berikutnya. Jadi kuesioner berulang seperti ini:
 cukup Anda jawab **sekali**. Lamaran Glints/JobStreet berikutnya terisi sendiri,
 dan bot hanya berhenti bertanya untuk pertanyaan yang benar-benar baru.
 
-Yang dicatat: pilihan ganda (radio), dropdown, dan kolom teks — termasuk kolom
-gaji, tahun pengalaman, dan pendidikan bila Anda mengubahnya.
+Yang dicatat: pilihan ganda (radio), kotak centang (checkbox), dropdown, dan
+kolom teks — termasuk kolom gaji, tahun pengalaman, dan pendidikan bila Anda
+mengubahnya. Kotak centang disimpan sebagai satu daftar, mis. `Excel; SAP`,
+dan dipakai ulang apa adanya.
+
+Sejak pembaruan 2026-11-11 tiga celah yang membuat jawaban **tidak** terekam
+sudah ditutup:
+
+1. radio Glints sering berupa input asli yang **tersembunyi** di balik label —
+   dulu dilewati saat merekam;
+2. radio/checkbox yang **tanpa atribut `name`** — dulu diabaikan;
+3. formulir skala memakai **satu judul untuk beberapa keahlian**, sehingga
+   jawaban keahlian yang satu menimpa keahlian lain. Sekarang kuncinya
+   menyertakan nama keahlian, mis. `… — Microsoft Excel`.
+
+Formulir seperti pada tangkapan layar (Pelayanan Pelanggan / Kerja Tim /
+Microsoft Excel, masing-masing 4 tingkat) kini menyimpan tiga jawaban
+terpisah dan mengisinya kembali otomatis.
 
 Yang **tidak** dicatat: tebakan bot sendiri. Bila bot memilih "Dasar" lalu Anda
 mengubahnya menjadi "Ahli", yang diingat adalah "Ahli" (keadaan akhir formulir).
@@ -737,6 +753,9 @@ python cli.py jawaban --isi "Microsoft Excel=Ahli"     # isi manual
 python cli.py jawaban --hapus "Microsoft Excel"        # hapus satu
 python cli.py jawaban --reset                          # kosongkan
 ```
+
+Perintah `python cli.py status` menampilkan berapa jawaban yang sudah
+tersimpan, jadi Anda bisa memastikan ingatannya aktif sebelum menjalankan sesi.
 
 Matikan fitur ini dengan `python cli.py set-env INGAT_JAWABAN=false` bila ingin
 bot kembali menebak dari aturan bawaan setiap kali.
