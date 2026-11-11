@@ -1140,6 +1140,105 @@ class AutoApplier:
         return _norm(self._teks_terpilih(element)) in ("", _norm(target))
 
 
+    def _kunci_grup_tanpa_nama(self, element) -> str:
+        """Kunci kelompok untuk input tanpa atribut `name`.
+
+        Formulir Glints kadang tidak memberi `name` pada radio/checkbox.
+        Mengelompokkannya berdasarkan teks pertanyaan saja salah untuk
+        formulir skala: satu judul dipakai beberapa keahlian, sehingga semua
+        kelompok menyatu. Wadah terdekat yang teksnya berbeda dari label opsi
+        (yaitu kartu keahliannya) dipakai sebagai kunci.
+        """
+        label = _norm(self._label_untuk(element))
+        induk = element
+
+        for _ in range(3):
+            try:
+                induk = induk.find_element(By.XPATH, "..")
+            except Exception:
+                break
+
+            teks = _norm(self._raw_text(induk))
+            if teks and teks != label:
+                return teks[:160]
+
+        return _norm(self._pertanyaan(element, ())) or "tanpa-nama"
+
+    def _pertanyaan_grup(self, element, opsi=()) -> str:
+        """Pertanyaan + pembeda kelompok (mis. nama keahlian).
+
+        Glints menampilkan satu judul untuk beberapa keahlian sekaligus
+        ("Seberapa mahir kamu dengan keahlian berikut ini?") dengan kelompok
+        radio terpisah per keahlian. Tanpa pembeda, ingatan jawaban keahlian
+        yang satu menimpa keahlian lain sehingga jawaban tidak pernah dipakai
+        ulang.
+        """
+        pertanyaan = self._pertanyaan(element, opsi)
+        pembeda = self._pembeda_grup(element, pertanyaan, opsi)
+
+        if not pembeda:
+            return pertanyaan
+        if not pertanyaan:
+            return pembeda
+
+        return f"{pertanyaan} — {pembeda}"
+
+    def _pembeda_grup(self, element, pertanyaan: str, opsi=()) -> str:
+        """Teks pembeda milik satu kelompok opsi (hanya untuk pertanyaan skala).
+
+        Dibatasi pada kelompok berskala (>= 2 opsi tingkat) agar pertanyaan
+        ya/tidak tidak ikut berubah kuncinya.
+        """
+        opsi = [item for item in opsi or [] if item]
+
+        if len(opsi) < 3:
+            return ""
+
+        jumlah_skala = sum(
+            1
+            for item in opsi
+            if any(kata in _norm(item) for kata in SKALA_URUT)
+        )
+        if jumlah_skala < 2:
+            return ""
+
+        kunci_pertanyaan = _norm(pertanyaan)
+        kunci_opsi = {_norm(item) for item in opsi}
+        induk = element
+
+        for _ in range(4):
+            try:
+                induk = induk.find_element(By.XPATH, "..")
+            except Exception:
+                break
+
+            teks = " ".join(self._raw_text(induk).split())
+            if not teks:
+                continue
+
+            sisa = teks
+            for label in opsi:
+                sisa = re.sub(
+                    re.escape(label), " ", sisa, flags=re.IGNORECASE
+                )
+            if pertanyaan:
+                sisa = re.sub(
+                    re.escape(pertanyaan), " ", sisa, flags=re.IGNORECASE
+                )
+            sisa = " ".join(sisa.split())
+            kunci_sisa = _norm(sisa)
+
+            if not kunci_sisa or kunci_sisa in kunci_opsi:
+                continue
+            if kunci_pertanyaan and kunci_sisa in kunci_pertanyaan:
+                continue
+            if len(sisa) > 120:
+                continue
+
+            return sisa
+
+        return ""
+
     @staticmethod
     def _dari_ingatan(pertanyaan: str, opsi) -> tuple:
         """Pilih opsi dari ingatan jawaban pengguna. (pilihan, dari_ingatan)."""
@@ -1167,16 +1266,27 @@ class AutoApplier:
         """Isian formulir saat ini: {kunci pertanyaan: (pertanyaan, jawaban)}."""
         potret = {}
 
+        # Radio dikelompokkan seperti pada _jawab_radio: menerima input asli
+        # yang tersembunyi (label-nya terlihat) maupun yang tanpa atribut
+        # `name`. Dulu keduanya dilewati, sehingga jawaban yang diisi pengguna
+        # di formulir Glints tidak pernah terekam.
         grup = {}
         for element in self._find_all("input[type='radio']"):
-            if not self._visible(element):
+            if not self._enabled(element):
                 continue
+            if not self._visible(element) and not self._label_terlihat(element):
+                continue
+
             try:
                 nama = (element.get_attribute("name") or "").strip()
             except Exception:
                 nama = ""
+
             if nama:
-                grup.setdefault(nama, []).append(element)
+                grup.setdefault("nama:" + nama, []).append(element)
+            else:
+                kunci = self._kunci_grup_tanpa_nama(element)
+                grup.setdefault("grup:" + kunci, []).append(element)
 
         for elemen in grup.values():
             terpilih = [item for item in elemen if self._selected(item)]
@@ -1184,12 +1294,33 @@ class AutoApplier:
                 continue
 
             opsi = [self._label_untuk(item) for item in elemen]
-            pertanyaan = self._pertanyaan(elemen[0], opsi)
+            opsi = [item for item in opsi if item]
+            pertanyaan = self._pertanyaan_grup(elemen[0], opsi)
             kunci = jawaban.kunci_pertanyaan(pertanyaan)
             label = self._label_untuk(terpilih[0])
 
             if kunci and label:
                 potret[kunci] = (pertanyaan, label)
+
+        # Kotak centang multi-pilih: jawaban disimpan sebagai daftar
+        # dipisah titik koma ("Excel; SAP").
+        for elemen in self._kelompok_checkbox().values():
+            terpilih = [
+                self._label_untuk(item)
+                for item in elemen
+                if self._selected(item)
+            ]
+            terpilih = [item for item in terpilih if item]
+            if not terpilih:
+                continue
+
+            opsi = [self._label_untuk(item) for item in elemen]
+            opsi = [item for item in opsi if item]
+            pertanyaan = self._pertanyaan_grup(elemen[0], opsi)
+            kunci = jawaban.kunci_pertanyaan(pertanyaan)
+
+            if kunci:
+                potret[kunci] = (pertanyaan, "; ".join(terpilih))
 
         for element in self._find_all("select"):
             if not self._visible(element):
@@ -1322,10 +1453,10 @@ class AutoApplier:
             else:
                 # Sebagian formulir menghilangkan atribut name. Dulu radio
                 # seperti itu diabaikan total sehingga pertanyaannya tidak
-                # pernah dijawab. Sekarang dikelompokkan menurut teks
-                # pertanyaannya; kelompok berisi satu radio tetap dilewati.
-                kunci = _norm(self._pertanyaan(element, ())) or "tanpa-nama"
-                grup.setdefault("pertanyaan:" + kunci, []).append(element)
+                # pernah dijawab. Sekarang dikelompokkan menurut wadahnya
+                # (kartu keahlian), bukan hanya judul yang dipakai bersama.
+                kunci = self._kunci_grup_tanpa_nama(element)
+                grup.setdefault("grup:" + kunci, []).append(element)
 
         gagal = []
 
@@ -1346,7 +1477,7 @@ class AutoApplier:
 
             opsi = [label for _, label in pasangan]
 
-            pertanyaan = self._pertanyaan(element_grup[0], opsi)
+            pertanyaan = self._pertanyaan_grup(element_grup[0], opsi)
 
             # Pasal 8.4: persetujuan/hukum wajib dikonfirmasi pengguna.
             if jawaban.perlu_konfirmasi(pertanyaan):
@@ -1441,16 +1572,8 @@ class AutoApplier:
 
         return gagal
 
-    def _jawab_checkbox(self) -> list:
-        """Jawab pertanyaan centang (multi-pilih) yang aman dijawab.
-
-        Kebijakan (tidak mengklaim hal yang tidak benar):
-        1. centang opsi yang cocok dengan keterampilan pengguna
-           (SKILL_KEYWORDS / TITLE_KEYWORDS);
-        2. bila tidak ada yang cocok, centang opsi "tidak ada / none /
-           other" sebagai jawaban jujur;
-        3. selain itu biarkan untuk pengguna (masuk daftar manual).
-        """
+    def _kelompok_checkbox(self) -> dict:
+        """Kotak centang dikelompokkan per `name` atau per pertanyaannya."""
         grup = {}
 
         for element in self._find_all("input[type='checkbox']"):
@@ -1464,8 +1587,51 @@ class AutoApplier:
             except Exception:
                 nama = ""
 
-            kunci = nama or _norm(self._pertanyaan(element, ())) or "tanpa-nama"
+            kunci = nama or self._kunci_grup_tanpa_nama(element)
             grup.setdefault(kunci, []).append(element)
+
+        return grup
+
+    def _dari_ingatan_banyak(self, pertanyaan: str, opsi) -> list:
+        """Opsi yang pernah dipilih pengguna untuk kotak centang (bisa banyak)."""
+        ingat = jawaban.cari(pertanyaan)
+        if not ingat:
+            return []
+
+        diingat = {
+            jawaban.kunci_pertanyaan(bagian)
+            for bagian in str(ingat).split(";")
+            if bagian.strip()
+        }
+
+        hasil = [item for item in opsi if jawaban.kunci_pertanyaan(item) in diingat]
+
+        if hasil:
+            return hasil
+
+        # Toleransi ejaan/spasi seperti pada _dari_ingatan.
+        for item in opsi:
+            kunci_opsi = jawaban.kunci_pertanyaan(item)
+            if any(
+                kunci and kunci_opsi and (kunci in kunci_opsi or kunci_opsi in kunci)
+                for kunci in diingat
+            ):
+                hasil.append(item)
+
+        return hasil
+
+    def _jawab_checkbox(self) -> list:
+        """Jawab pertanyaan centang (multi-pilih) yang aman dijawab.
+
+        Kebijakan (tidak mengklaim hal yang tidak benar):
+        0. pakai jawaban yang pernah diberikan (ingatan) lebih dulu;
+        1. centang opsi yang cocok dengan keterampilan pengguna
+           (SKILL_KEYWORDS / TITLE_KEYWORDS);
+        2. bila tidak ada yang cocok, centang opsi "tidak ada / none /
+           other" sebagai jawaban jujur;
+        3. selain itu biarkan untuk pengguna (masuk daftar manual).
+        """
+        grup = self._kelompok_checkbox()
 
         gagal = []
         kata_kunci = [
@@ -1497,10 +1663,23 @@ class AutoApplier:
 
             opsi = [label for _, label in pasangan]
 
-            pertanyaan = self._pertanyaan(element_grup[0], opsi)
+            pertanyaan = self._pertanyaan_grup(element_grup[0], opsi)
 
             if jawaban.perlu_konfirmasi(pertanyaan):
                 gagal.append(pertanyaan or "pertanyaan persetujuan")
+                continue
+
+            dari_ingatan = self._dari_ingatan_banyak(pertanyaan, opsi)
+
+            if dari_ingatan:
+                for item, label in pasangan:
+                    if label not in dari_ingatan:
+                        continue
+                    if self._centang(item):
+                        console.print(
+                            f'[dim]   centang "{label}" (ingatan) untuk: '
+                            f"{pertanyaan[:70]}[/]"
+                        )
                 continue
 
             pilihan = [

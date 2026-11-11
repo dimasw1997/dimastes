@@ -570,6 +570,21 @@ def tampilkan_status_situs():
         + ", ".join(NAMA_SITUS.get(nama, nama) for nama in aktif)
     )
 
+    try:
+        import jawaban as ingatan
+
+        jumlah = ingatan.jumlah()
+        pesan = (
+            f"[cyan]Ingatan jawaban:[/] {jumlah} jawaban tersimpan"
+            if jumlah
+            else "[yellow]Ingatan jawaban:[/] belum ada jawaban tersimpan"
+        )
+        console.print(
+            f"{pesan} [dim](lihat: jalankan.bat jawaban)[/]"
+        )
+    except Exception:
+        pass
+
 
 def show_stats():
     stats = db.get_stats()

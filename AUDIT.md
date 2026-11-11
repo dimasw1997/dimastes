@@ -347,3 +347,28 @@ penulisan ulang baris. Semua penyaringan hanya `SELECT`.
 Tes: `tests/test_situs_terpisah.py` (17 tes) — pilihan situs, ringkasan per
 situs, tebakan situs dari URL, filter riwayat/antrean, dan routing `run`
 (JobStreet tetap bawaan; `--situs glints` tidak memanggil mesin JobStreet).
+
+---
+
+## 9. Ingatan jawaban formulir (2026-11-11)
+
+Keluhan pemakai: "setiap jawaban yang pernah saya isi kenapa tidak diingat,
+harus memasukkan lagi" — pada formulir Glints *Seberapa mahir kamu dengan
+keahlian berikut ini?* (Pelayanan Pelanggan / Kerja Tim / Microsoft Excel).
+
+| ID | Sebab | Perbaikan |
+|---|---|---|
+| E-16 | `_potret_jawaban()` (pencatat isian) hanya melihat radio yang **terlihat** dan punya atribut `name`. Input asli Glints tersembunyi di balik label, dan sebagian tanpa `name` → jawaban pengguna tidak pernah terekam, sehingga setiap lowongan menanyakannya lagi. | Pengelompokan disamakan dengan `_jawab_radio()`: menerima input tersembunyi selama labelnya terlihat, dan mengelompokkan yang tanpa `name` menurut wadahnya (`_kunci_grup_tanpa_nama`). |
+| E-17 | Satu judul skala dipakai untuk banyak keahlian, sehingga kunci ingatan sama untuk semuanya — jawaban keahlian A menimpa B (dan jawaban tersimpan bisa terpakai di keahlian yang salah). | `_pertanyaan_grup()` menambahkan pembeda (nama keahlian) pada kunci, mis. `Seberapa mahir … — Microsoft Excel`. Pembeda hanya dipakai untuk kelompok berskala (≥ 3 opsi, ≥ 2 tingkat), jadi pertanyaan ya/tidak tidak berubah kuncinya. |
+| E-18 | Kotak centang tidak pernah dicatat maupun dipakai ulang. | `_kelompok_checkbox()` dipakai bersama oleh `_jawab_checkbox()` dan `_potret_jawaban()`; jawaban disimpan sebagai `Excel; SAP` dan diisi ulang lewat `_dari_ingatan_banyak()`. |
+| E-19 | Sulit memastikan ingatan aktif. | `status` menampilkan "Ingatan jawaban: N tersimpan"; `jawaban` tetap bisa melihat/menghapus. |
+
+Tes: `tests/test_jawaban.py` (+4) — radio tersembunyi tanpa `name` terekam,
+dua keahlian tersimpan terpisah, pengisian ulang dari ingatan pada lamaran
+berikutnya, dan kotak centang dari ingatan. Suite penuh **636 passed, 1
+skipped**.
+
+Batas jujur: pengujian memakai elemen tiruan (HTML asli Glints tidak tersedia
+di sesi ini). Bila masih ada pertanyaan yang tidak terisi, jalankan sesi lagi
+setelah pembaruan; sekarang berkas `debug\*.html` benar-benar tersimpan
+(perbaikan E-15), dan kirimkan satu berkas itu untuk penyetelan selector.
