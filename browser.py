@@ -17,7 +17,6 @@ pesan galatnya berisi langkah perbaikan yang bisa langsung dijalankan.
 import contextlib
 import shutil
 from pathlib import Path
-from typing import List, Optional
 
 from rich.console import Console
 from selenium import webdriver
@@ -47,12 +46,12 @@ TANDA_DRIVER_MANUAL = (
 )
 
 
-def bersihkan_kunci_profil(profile: Path) -> List[str]:
+def bersihkan_kunci_profil(profile: Path) -> list[str]:
     """Hapus berkas kunci sisa Chrome yang mati.
 
     Kembalikan daftar nama berkas yang dihapus (kosong bila tidak ada).
     """
-    dihapus: List[str] = []
+    dihapus: list[str] = []
 
     if not profile.exists():
         return dihapus
@@ -127,7 +126,7 @@ def tutup_chrome(driver) -> None:
         driver.quit()
 
 
-def _opsi(headless: bool, profile: Optional[Path]) -> Options:
+def _opsi(headless: bool, profile: Path | None) -> Options:
     """Opsi Chrome yang dipakai semua percobaan."""
     options = Options()
     options.add_argument("--window-size=1400,900")
@@ -206,7 +205,7 @@ def _pesan_gagal(detail: str) -> str:
 def buka_chrome(
     profile_dir: str = "",
     use_profile: bool = True,
-    headless: Optional[bool] = None,
+    headless: bool | None = None,
     label: str = "Chrome",
 ):
     """Buka Chrome dan kembalikan driver-nya.
@@ -214,7 +213,7 @@ def buka_chrome(
     Melempar RuntimeError berisi langkah perbaikan bila semua percobaan gagal.
     """
     mode_headless = config.headless if headless is None else headless
-    profil: Optional[Path] = None
+    profil: Path | None = None
 
     if use_profile:
         teks_profil = str(profile_dir or config.profile_dir or "").strip()

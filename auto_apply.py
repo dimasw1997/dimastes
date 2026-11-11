@@ -14,7 +14,6 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 from urllib.parse import urlparse
 
 from rich.console import Console
@@ -137,10 +136,37 @@ KATA_SETUJU = (
     "do you", "are you", "menguasai", "mampu",
 )
 
+# Pertanyaan berskala ("how would you rate your japanese language skills?").
+# Dijawab dengan tingkat TERENDAH yang jujur, bukan dikosongkan dan bukan
+# dilebih-lebihkan.
+SKALA_KATA = (
+    "rate", "rating", "level", "tingkat", "skala", "proficiency",
+    "kemampuan", "how would you rate", "seberapa", "mahir",
+)
+SKALA_URUT = (
+    "no experience", "tidak ada pengalaman", "tanpa pengalaman", "belum ada",
+    "none", "tidak ada", "not at all",
+    "pemula", "beginner", "basic", "dasar", "novice", "elementary",
+    "intermediate", "menengah", "conversational", "cukup",
+    "advanced", "lanjutan", "upper intermediate",
+    "fluent", "mahir", "native", "expert", "ahli",
+)
+
 # Penanda atribut internal JobStreet, bukan pertanyaan.
 _ID_INTERNAL = re.compile(
     r"(questionnaire|\bID_Q_|\bQ_[0-9A-F]{6,}|\bquestion_?id\b)", re.IGNORECASE
 )
+
+
+def nama_berkas_aman(teks: str, maks: int = 80) -> str:
+    """Ubah teks menjadi nama berkas yang sah di Windows/Linux.
+
+    `job_id` Glints berbentuk `glints:<uuid>`. Titik dua tidak sah pada nama
+    berkas Windows, sehingga seluruh dump debug Glints sebelumnya gagal
+    ditulis tanpa pesan (padahal konsol mengaku sudah menyimpannya).
+    """
+    aman = re.sub(r"[^A-Za-z0-9._-]+", "-", str(teks or "")).strip("-.")
+    return (aman or "lowongan")[:maks]
 
 
 def tampak_id_internal(teks: str) -> bool:
@@ -210,7 +236,9 @@ def pilih_jawaban_radio(pertanyaan: str, opsi, cfg=None) -> str:
     teks = _norm(pertanyaan)
     ya = [
         item for item in opsi
-        if _norm(item) in ("ya", "yes", "iya", "benar", "true")
+        if re.match(r"^(ya|yes|iya|benar|true)\b", _norm(item))
+        and "belum" not in _norm(item)
+        and "not" not in _norm(item)
     ]
 
     if (
@@ -220,7 +248,26 @@ def pilih_jawaban_radio(pertanyaan: str, opsi, cfg=None) -> str:
     ):
         return ya[0]
 
+    # Pertanyaan berskala: pilih tingkat terendah (jujur, tanpa melebihkan).
+    if any(kata in teks for kata in SKALA_KATA):
+        return _pilih_skala_terendah(opsi)
+
     return ""
+
+
+def _pilih_skala_terendah(opsi) -> str:
+    """Pilih tingkat terendah pada pertanyaan berskala."""
+    terbaik = ""
+    peringkat = None
+
+    for item in opsi:
+        teks = _norm(item)
+        for posisi, kata in enumerate(SKALA_URUT):
+            if kata in teks and (peringkat is None or posisi < peringkat):
+                terbaik, peringkat = item, posisi
+                break
+
+    return terbaik
 
 
 VALIDATION_TEXTS = (
@@ -249,10 +296,11 @@ NOL_KATA = (
 
 
 def _norm(teks: str) -> str:
-    return " ".join(str(teks or "").lower().split())
+    """Bentuk baku teks untuk perbandingan (huruf kecil, tanpa karakter gaib)."""
+    return jawaban.bersihkan_teks(teks).lower()
 
 
-def parse_gaji_juta(teks: str) -> Optional[float]:
+def parse_gaji_juta(teks: str) -> float | None:
     """Ubah teks gaji menjadi angka juta (mis. "Rp 5 Jt" -> 5.0)."""
     teks = _norm(teks).replace(".", "").replace(",", ".")
     angka = re.findall(r"\d+(?:\.\d+)?", teks)
@@ -268,7 +316,7 @@ def parse_gaji_juta(teks: str) -> Optional[float]:
     return nilai
 
 
-def parse_tahun(teks: str) -> Optional[tuple]:
+def parse_tahun(teks: str) -> tuple | None:
     """Baca rentang pengalaman dari teks opsi (tahun)."""
     teks_awal = _norm(teks)
 
@@ -470,7 +518,7 @@ class AutoApplier:
             value = element.text or element.get_attribute("textContent") or ""
         except Exception:
             value = ""
-        return " ".join(str(value).split()).strip().lower()
+        return jawaban.bersihkan_teks(value).lower()
 
     def _url(self) -> str:
         try:
@@ -491,7 +539,7 @@ class AutoApplier:
         except Exception:
             return []
 
-    def _find_clickable(self, selectors, texts=()) -> Optional[object]:
+    def _find_clickable(self, selectors, texts=()) -> object | None:
         """Cari elemen pertama yang terlihat dan cocok dengan selector/teks."""
         for selector in selectors:
             for element in self._find_all(selector):
@@ -620,7 +668,7 @@ class AutoApplier:
             folder.mkdir(exist_ok=True)
 
             stamp = time.strftime("%Y%m%d-%H%M%S")
-            nama = f"{stamp}-{job.get('job_id') or 'lowongan'}"
+            nama = f"{stamp}-{nama_berkas_aman(job.get('job_id'))}"
             dasar = folder / nama
 
             try:
@@ -649,49 +697,98 @@ class AutoApplier:
             (dasar.with_suffix(".html")).write_text(
                 self.driver.page_source or "", encoding="utf-8"
             )
-            self.driver.save_screenshot(str(dasar.with_suffix(".png")))
+            with contextlib.suppress(Exception):
+                self.driver.save_screenshot(str(dasar.with_suffix(".png")))
             self.debug_dumps += 1
             console.print(
                 f"[dim]Halaman tidak dikenali; debug disimpan di "
                 f"debug/{nama}.html[/]"
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            console.print(
+                f"[dim]Debug gagal disimpan: {exc}[/]"
+            )
+
+    # Label yang TIDAK mungkin tombol kirim: langkah navigasi, tautan aplikasi,
+    # tombol kembali. "review and submit" adalah judul langkah di bilah kemajuan
+    # JobStreet, bukan tombol — dulu ia terpilih karena muncul lebih dulu di
+    # halaman sehingga lamaran tidak pernah benar-benar terkirim.
+    LABEL_BUKAN_KIRIM = (
+        "review",
+        "tinjau",
+        "open app",
+        "buka aplikasi",
+        "back",
+        "kembali",
+        "batal",
+        "cancel",
+        "hapus",
+        "delete",
+        "continue",
+        "lanjut",
+    )
+
+    def _boleh_jadi_tombol_kirim(self, element) -> bool:
+        label = self._text(element)
+        if not label:
+            return False
+        return not any(kata in label for kata in self.LABEL_BUKAN_KIRIM)
 
     def _find_submit_button(self, review_page: bool = False):
-        """Cari tombol kirim. Di halaman review, cakupannya lebih luas."""
-        button = self._find_clickable(self.submit_selectors, self.submit_texts)
-        if button is not None:
-            return button
+        """Cari tombol kirim. Di halaman review, cakupannya lebih luas.
 
-        if not review_page:
+        Urutan: selector resmi -> tombol bertipe submit -> pencocokan teks.
+        Setiap kandidat harus lulus saringan label (bukan langkah navigasi).
+        Bila ada beberapa kandidat teks, dipilih yang PALING BAWAH karena
+        tombol kirim selalu berada di ujung formulir.
+        """
+        if review_page:
+            # Di halaman review ada beberapa tombol mirip (mis. tombol
+            # "Submit" di tengah dan di ujung formulir). Yang benar adalah
+            # yang paling bawah, jadi seluruh kandidat dikumpulkan dulu.
+            kandidat = self._kandidat_tombol_kirim()
+            if kandidat:
+                return kandidat[-1]
             return None
 
-        negatif = ("back", "kembali", "batal", "cancel", "hapus", "delete")
-
-        # Tombol kirim di halaman review hampir selalu bertipe submit.
-        for element in self._find_all("button[type='submit']"):
-            if not self._visible(element) or not self._enabled(element):
-                continue
-            if any(kata in self._text(element) for kata in negatif):
-                continue
-            return element
-
-        # Hindari kata "lamar"/"apply": di halaman review tombol itu bisa
-        # berarti memulai ulang lamaran.
-        kata_kunci = ("submit", "kirim", "send application")
-
-        for selector in ("button", "[role='button']", "a"):
-            for element in self._find_all(selector):
-                if not self._visible(element) or not self._enabled(element):
-                    continue
-                label = self._text(element)
-                if any(kata in label for kata in negatif):
-                    continue
-                if any(kata in label for kata in kata_kunci):
-                    return element
+        button = self._find_clickable(self.submit_selectors, self.submit_texts)
+        if button is not None and self._boleh_jadi_tombol_kirim(button):
+            return button
 
         return None
+
+    def _kandidat_tombol_kirim(self) -> list:
+        """Semua tombol kirim yang layak, urut sesuai dokumen (atas -> bawah).
+
+        Kandidat = tombol bertipe submit, atau tombol yang teksnya cocok
+        dengan SUBMIT_TEXTS / memuat kata kunci kirim.
+        """
+        kata_kunci = ("submit", "kirim", "send application")
+        kandidat = []
+        terlihat = set()
+
+        for selector in ("button[type='submit']", *self.submit_selectors,
+                         "button", "[role='button']", "a"):
+            for element in self._find_all(selector):
+                if id(element) in terlihat:
+                    continue
+                if not self._visible(element) or not self._enabled(element):
+                    continue
+                if not self._boleh_jadi_tombol_kirim(element):
+                    continue
+
+                label = self._text(element)
+                cocok_teks = any(
+                    label == teks or label.startswith(teks)
+                    for teks in self.submit_texts
+                )
+                if selector == "button[type='submit']" or cocok_teks or any(
+                    kata in label for kata in kata_kunci
+                ):
+                    terlihat.add(id(element))
+                    kandidat.append(element)
+
+        return kandidat
 
     def _is_login_page(self) -> bool:
         try:
@@ -1221,19 +1318,33 @@ class AutoApplier:
                 nama = ""
 
             if nama:
-                grup.setdefault(nama, []).append(element)
+                grup.setdefault("nama:" + nama, []).append(element)
+            else:
+                # Sebagian formulir menghilangkan atribut name. Dulu radio
+                # seperti itu diabaikan total sehingga pertanyaannya tidak
+                # pernah dijawab. Sekarang dikelompokkan menurut teks
+                # pertanyaannya; kelompok berisi satu radio tetap dilewati.
+                kunci = _norm(self._pertanyaan(element, ())) or "tanpa-nama"
+                grup.setdefault("pertanyaan:" + kunci, []).append(element)
 
         gagal = []
 
         for element_grup in grup.values():
+            if len(element_grup) < 2:
+                continue
+
             if any(self._selected(item) for item in element_grup):
                 continue
 
-            opsi = []
+            # Pasangan (elemen, label) dijaga agar indeks tidak bergeser bila
+            # ada opsi tanpa label.
+            pasangan = []
             for item in element_grup:
                 label = self._label_untuk(item)
                 if label:
-                    opsi.append(label)
+                    pasangan.append((item, label))
+
+            opsi = [label for _, label in pasangan]
 
             pertanyaan = self._pertanyaan(element_grup[0], opsi)
 
@@ -1330,6 +1441,118 @@ class AutoApplier:
 
         return gagal
 
+    def _jawab_checkbox(self) -> list:
+        """Jawab pertanyaan centang (multi-pilih) yang aman dijawab.
+
+        Kebijakan (tidak mengklaim hal yang tidak benar):
+        1. centang opsi yang cocok dengan keterampilan pengguna
+           (SKILL_KEYWORDS / TITLE_KEYWORDS);
+        2. bila tidak ada yang cocok, centang opsi "tidak ada / none /
+           other" sebagai jawaban jujur;
+        3. selain itu biarkan untuk pengguna (masuk daftar manual).
+        """
+        grup = {}
+
+        for element in self._find_all("input[type='checkbox']"):
+            if not self._enabled(element):
+                continue
+            if not self._visible(element) and not self._label_terlihat(element):
+                continue
+
+            try:
+                nama = (element.get_attribute("name") or "").strip()
+            except Exception:
+                nama = ""
+
+            kunci = nama or _norm(self._pertanyaan(element, ())) or "tanpa-nama"
+            grup.setdefault(kunci, []).append(element)
+
+        gagal = []
+        kata_kunci = [
+            _norm(kata) for kata in (
+                list(getattr(config, "skill_keywords", ()) or ())
+                + list(getattr(config, "title_keywords", ()) or ())
+            )
+            if _norm(kata)
+        ]
+        kata_nol = (
+            "none", "no experience", "tidak ada", "tidak punya", "belum ada",
+            "other", "lainnya", "lain-lain", "tidak relevan", "not applicable",
+        )
+
+        for element_grup in grup.values():
+            if len(element_grup) < 2:
+                continue
+
+            if any(self._selected(item) for item in element_grup):
+                continue
+
+            # Pasangan (elemen, label) dijaga agar indeks tidak bergeser bila
+            # ada opsi tanpa label.
+            pasangan = []
+            for item in element_grup:
+                label = self._label_untuk(item)
+                if label:
+                    pasangan.append((item, label))
+
+            opsi = [label for _, label in pasangan]
+
+            pertanyaan = self._pertanyaan(element_grup[0], opsi)
+
+            if jawaban.perlu_konfirmasi(pertanyaan):
+                gagal.append(pertanyaan or "pertanyaan persetujuan")
+                continue
+
+            pilihan = [
+                label for label in opsi
+                if any(kata in _norm(label) for kata in kata_kunci)
+            ]
+
+            if not pilihan:
+                pilihan = [
+                    label for label in opsi
+                    if any(kata in _norm(label) for kata in kata_nol)
+                ]
+
+            if not pilihan:
+                gagal.append(pertanyaan or "pertanyaan centang")
+                continue
+
+            for item, label in pasangan:
+                if label not in pilihan:
+                    continue
+                if self._centang(item):
+                    console.print(
+                        f'[dim]   centang "{label}" untuk: {pertanyaan[:70]}[/]'
+                    )
+
+        return gagal
+
+    def _centang(self, element) -> bool:
+        """Centang satu kotak dan pastikan statusnya berubah."""
+        if self._selected(element):
+            return True
+
+        if self._click(element) and self._selected(element):
+            self._picu_perubahan(element)
+            return True
+
+        with contextlib.suppress(Exception):
+            id_el = (element.get_attribute("id") or "").strip()
+            if id_el:
+                for label in self._find_all(f"label[for='{id_el}']"):
+                    if self._click(label) and self._selected(element):
+                        self._picu_perubahan(element)
+                        return True
+
+        with contextlib.suppress(Exception):
+            induk = element.find_element(By.XPATH, "..")
+            if induk is not None and self._click(induk) and self._selected(element):
+                self._picu_perubahan(element)
+                return True
+
+        return self._selected(element)
+
     def jawab_pertanyaan(self) -> list:
         """Jawab pertanyaan formulir yang polanya dikenali.
 
@@ -1353,6 +1576,7 @@ class AutoApplier:
                 )
 
         gagal.extend(self._jawab_radio())
+        gagal.extend(self._jawab_checkbox())
         gagal.extend(self._jawab_teks())
 
         return gagal
@@ -1547,7 +1771,7 @@ class AutoApplier:
         try:
             self.driver.close()
             if handles_before:
-                self.driver.switch_to.window(list(handles_before)[0])
+                self.driver.switch_to.window(next(iter(handles_before)))
         except Exception:
             pass
 
@@ -1891,7 +2115,9 @@ class AutoApplier:
                     deadline = time.time() + self.step_timeout
                     continue
 
-            if self._is_success():
+            if self._is_success() or (
+                sudah_klik_kirim and self.is_already_applied()
+            ):
                 return ApplyResult(True, "applied", "Terkirim otomatis")
 
             self._dump_debug(job)

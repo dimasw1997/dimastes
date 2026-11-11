@@ -247,3 +247,76 @@ berkas sementara sehingga **menjalankan tes tidak pernah mengubah data Anda**.
 
 Sesuai pasal 12.5: batas gaji, batas 50/hari, kriteria logo, daftar lokasi,
 daftar kategori, data pribadi/CV, dan ketentuan inti apply.
+
+---
+
+## 7. Audit lanjutan 2026-11-03 — temuan E-1…E-13
+
+Audit ini dijalankan atas kode `ca1b5b5` (setelah PR #4). Setiap perbaikan
+disertai tes baru; angka di bawah diambil dari eksekusi nyata, bukan perkiraan.
+
+### 7.1 Ringkasan angka
+
+| Ukuran | Sebelum | Sesudah |
+|---|---|---|
+| `pytest -q` | 595 passed, 1 skipped | **615 passed, 1 skipped** |
+| Temuan `ruff check .` | 424 | **151** (semuanya pola pertahanan yang disengaja) |
+| Gate `ruff --select E9,F,E501,I,B,SIM,ISC` | bersih | bersih |
+| CI otomatis | tidak ada | `.github/workflows/uji.yml` |
+
+### 7.2 P1 — lamaran gagal terkirim (FIXED + TESTED)
+
+| ID | Temuan | Perbaikan | Tes |
+|---|---|---|---|
+| E-1 | Beberapa tombol cocok; yang diklik tombol atas (mis. "Review"), bukan tombol kirim di ujung formulir. Label navigasi seperti "Lanjut"/"Kembali"/"Batal" juga bisa terpilih. | `AutoApplier._kandidat_tombol_kirim()` mengumpulkan semua kandidat layak lalu **memilih yang paling bawah** di halaman review; `LABEL_BUKAN_KIRIM` + `_boleh_jadi_tombol_kirim()` menolak tombol navigasi. | `test_tombol_kirim_pilih_paling_bawah`, `test_tombol_navigasi_ditolak_sebagai_tombol_kirim` |
+| E-2 | Label berisi karakter tak terlihat (U+2060, U+001B…), NBSP, dan spasi ganda sehingga "Submit application" tidak dikenali. | `jawaban.bersihkan_teks()` membuang karakter tak terlihat, mengubah NBSP menjadi spasi, dan merapikan spasi; dipakai `kunci_pertanyaan()`, `_norm()`, dan `_text()`. | `test_karakter_tak_terlihat_dibuang_dari_label_tombol`, `test_kunci_pertanyaan_abaikan_karakter_tak_terlihat` |
+| E-3 | `input[type=checkbox]` tidak ditangani sama sekali → formulir skill multi-pilih selalu kosong. | `_jawab_checkbox()` + `_centang()`: centang opsi yang cocok dengan `SKILL_KEYWORDS`/`TITLE_KEYWORDS`; bila tidak ada yang cocok, centang opsi jujur ("None of the above"/"Tidak ada"); bila tetap tidak ada, lowongan masuk daftar manual (tidak menebak). Pertanyaan persetujuan tetap diblokir `jawaban.perlu_konfirmasi()`. | `test_checkbox_skill_pengguna_dicentang`, `test_checkbox_tanpa_kecocokan_pilih_none`, `test_checkbox_tak_dikenal_masuk_manual` |
+| E-4 | Pertanyaan berskala ("how would you rate…") tidak dijawab; varian "Yes, I have"/"Ya, benar" tidak dikenali; radio tanpa atribut `name` diabaikan total. | `SKALA_KATA` + `SKALA_URUT` + `_pilih_skala_terendah()` menjawab dengan tingkat **terendah** (jujur, tanpa melebihkan); regex Ya/Tidak menerima varian dan menolak yang memuat "belum"/"not"; radio tanpa `name` dikelompokkan menurut teks pertanyaannya (kelompok < 2 radio dilewati). | `test_skala_dijawab_tingkat_terendah`, `test_ya_tidak_varian_dikenali`, `test_radio_tanpa_name_dikelompokkan_per_pertanyaan` |
+
+### 7.3 P2 — ketahanan & pemeliharaan
+
+| ID | Temuan | Perbaikan | Status |
+|---|---|---|---|
+| E-5 | `PRAGMA foreign_keys` mati (0). | `Database._koneksi()` menjalankan `PRAGMA foreign_keys=ON`. Skema sekarang memang belum memakai `FOREIGN KEY`, jadi efeknya nol sampai relasi ditambahkan — tetapi biayanya juga nol. | FIXED + TESTED (`test_foreign_key_dipaksa_aktif`) |
+| E-6 | Log hanya dipangkas jumlah baris; setiap penulisan membaca ulang seluruh berkas, dan berkas tumbuh tanpa batas ukuran. | `log_aktivitas._rotasi()`: berkas > 512 KB diganti nama menjadi `aktivitas.log.1` (satu arsip, bukan menumpuk). Pemangkasan 2.000 baris tetap ada. | FIXED + TESTED (4 tes di `tests/test_log_aktivitas.py`) |
+| E-7 | Tidak ada CI; regresi hanya ketahuan saat dijalankan manual. | `.github/workflows/uji.yml`: pasang dependensi → gate ruff → `pytest -q` pada setiap push/PR. | FIXED (belum pernah berjalan di GitHub — lihat 7.5) |
+| E-8 | `DB_PATH` ada di `.env.example` tetapi tanpa penjelasan. | Komentar ditambahkan: lokasi database, arti nilai kosong, path relatif otomatis absolut. | FIXED (dokumentasi) |
+| E-9 | 424 temuan gaya `ruff`. | 272 diperbaiki (`--fix` yang aman + perbaikan manual); sisa 152: `BLE001` 124, `S112` 12, `S110` 7, `RUF100` 9. Semuanya **disengaja**: `except Exception` luas pada pembacaan DOM/tombol memang diperlukan agar perubahan HTML satu situs tidak menghentikan sesi, dan `# noqa` dipertahankan sebagai penanda alasan. | PARTIAL (disengaja) |
+| E-10 | Perintah uji Telegram tidak ada. | **Tidak diubah** — Anda sudah menetapkan agar kode/`.env` notifikasi Telegram tidak diutak-atik. | DITUNDA (sesuai instruksi) |
+| E-11 | Skor inventori/persediaan. | **Tidak diubah** — bagian dari prioritas stock/inventory yang Anda batalkan. | DITUNDA (sesuai instruksi) |
+
+### 7.4 P3 — perapian (belum dikerjakan)
+
+| ID | Temuan | Alasan ditunda |
+|---|---|---|
+| E-12 | Normalisasi teks tersebar di beberapa modul. | Bagian teks formulir sudah disatukan lewat `jawaban.bersihkan_teks()`. `scraper._norm_teks()` sengaja dibiarkan karena tugasnya berbeda (membuang semua non-alfanumerik untuk mencocokkan nama perusahaan); menyatukannya berisiko mengubah pengenalan logo/duplikat. |
+| E-13 | Riset memanggil situs berulang tanpa cache. | Cache bisa menyajikan lowongan yang sudah kedaluwarsa atau melewatkan lowongan baru; perlu desain masa berlaku dan tombol paksa-segar lebih dulu. Belum dikerjakan. |
+
+### 7.5 Batas yang perlu diketahui (jujur)
+
+- Perbaikan E-1…E-4 **teruji dengan driver/tiruan**, bukan di JobStreet/Glints
+  sungguhan. Uji browser nyata tetap harus dijalankan di PC Anda dengan
+  `.\jalankan.bat run --auto`.
+- Workflow CI baru ditulis; hasil pertama baru terlihat setelah ada push ke
+  GitHub.
+- E-3 memakai `SKILL_KEYWORDS`/`TITLE_KEYWORDS`. Bila formulir menanyakan
+  keahlian yang tidak ada di daftar itu, bot **tidak menebak** — lowongan masuk
+  daftar manual. Itu disengaja agar tidak ada klaim palsu di lamaran.
+
+### 7.6 Temuan dari sesi nyata 2026-11-11 (E-14, E-15)
+
+Bukti: tangkapan layar sesi `run --auto` pada Glints (PPIC, Megacon Bangun
+Perkasa). Terminal menulis `klik tombol kirim "kirim" (percobaan 1)` lalu
+`Dilewati: Tombol Kirim sudah diklik, tetapi konfirmasi tidak muncul dalam 45
+detik`, sementara halaman Glints menampilkan **"Kamu sudah melamar pekerjaan
+ini. Silakan cek aplikasi…"**.
+
+| ID | Temuan | Perbaikan | Tes |
+|---|---|---|---|
+| E-14 | Setelah Kirim diklik, Glints kembali ke halaman lowongan dengan banner "sudah melamar". Teks itu tidak ada di `SUKSES_GLINTS`, dan pemeriksaan `is_already_applied()` hanya berjalan **sebelum** tombol Lamar diklik — jadi bot menunggu 45 detik lalu menandai lowongan "perlu manual" padahal lamaran sudah masuk. | `SUKSES_GLINTS` + `SIBUK_TEXTS` memuat "kamu sudah melamar", "sudah melamar pekerjaan ini", "cek lamaran saya", "you have already applied". Setelah Kirim diklik, `is_already_applied()` kini juga dihitung sebagai **terkirim**. Banner yang sudah ada sejak awal tetap dianggap `already_applied` (tidak melamar dua kali). | `test_banner_sudah_melamar_dihitung_terkirim`, `test_banner_sudah_melamar_dikenali_sebagai_sukses`, `test_already_applied_tetap_dilewati_sebelum_klik` |
+| E-15 | Dump debug Glints **tidak pernah tersimpan**: `job_id` berbentuk `glints:<uuid>` dan titik dua tidak sah pada nama berkas Windows. Konsol tetap mengaku "debug disimpan di …", sehingga berkas yang diminta untuk diagnosa tidak ada. | `nama_berkas_aman()` mengganti karakter terlarang dengan `-`; pesan baru dicetak setelah berkas benar-benar tertulis, dan kegagalan menulis dilaporkan (dulu ditelan `except: pass`). | `test_nama_berkas_debug_aman_untuk_glints`, `test_dump_debug_tersimpan_untuk_job_id_glints` |
+
+Catatan jujur: E-14 menutup gejala yang terlihat, tetapi keadaan halaman tepat
+sebelum waktu tunggu habis tidak bisa saya periksa karena dump debug-nya (akibat
+E-15) tidak pernah ada di disk. Bila masih muncul, jalankan lagi setelah
+pembaruan ini — kini berkas `debug\*.html/.txt` benar-benar tersimpan.

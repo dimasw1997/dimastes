@@ -17,7 +17,6 @@ import contextlib
 import re
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
 from urllib.parse import quote_plus
 
 from rich.console import Console
@@ -146,6 +145,13 @@ SUKSES_GLINTS = (
     "lamaran terkirim",
     "lamaran kamu sudah terkirim",
     "lamaran anda sudah terkirim",
+    # Banner yang muncul di halaman lowongan setelah lamaran masuk.
+    "kamu sudah melamar",
+    "anda sudah melamar",
+    "sudah melamar pekerjaan ini",
+    "cek lamaran saya",
+    "you have already applied",
+    "already applied",
     "application submitted",
     "application sent",
     "you have successfully applied",
@@ -170,6 +176,8 @@ SIBUK_TEXTS = (
     "sudah pernah melamar",
     "kamu sudah melamar",
     "anda sudah melamar",
+    "sudah melamar pekerjaan ini",
+    "cek lamaran saya",
     "you have already applied",
 )
 
@@ -295,7 +303,7 @@ def halaman_per_kata_kunci(max_pages: int = 0) -> int:
     )
 
 
-def pilih_teratas(lowongan: List[Dict], batas: int = 0) -> List[Dict]:
+def pilih_teratas(lowongan: list[dict], batas: int = 0) -> list[dict]:
     """Urutkan kandidat seperti di JobStreet, lalu batasi sesuai sisa kuota.
 
     `RANK_BY=relevance` (bawaan) = kecocokan tertinggi dulu, `newest` =
@@ -321,7 +329,7 @@ def pilih_teratas(lowongan: List[Dict], batas: int = 0) -> List[Dict]:
     return lolos
 
 
-def tampilkan_rincian_skor(kandidat: List[Dict], maksimal: int = 3,
+def tampilkan_rincian_skor(kandidat: list[dict], maksimal: int = 3,
                            situs: str = "Glints"):
     """Rincian skor per dimensi (sama seperti tabel JobStreet)."""
     if not kandidat:
@@ -350,7 +358,7 @@ def tampilkan_rincian_skor(kandidat: List[Dict], maksimal: int = 3,
     console.print(table)
 
 
-def tampilkan_perbandingan(kandidat: List[Dict], maksimal: int = 10,
+def tampilkan_perbandingan(kandidat: list[dict], maksimal: int = 10,
                            situs: str = "Glints"):
     """Tabel kandidat teratas beserta skor kecocokannya."""
     if not kandidat:
@@ -396,7 +404,7 @@ _POLA_UMUR = (
 )
 
 
-def umur_dari_teks(teks: str) -> Optional[int]:
+def umur_dari_teks(teks: str) -> int | None:
     """Umur lowongan (hari) dari teks kartu Glints; None bila tak terbaca.
 
     Kartu Glints menulis hal seperti "3 hari lalu", "2 minggu lalu",
@@ -423,7 +431,7 @@ def umur_dari_teks(teks: str) -> Optional[int]:
     return None
 
 
-def label_umur(umur: Optional[int]) -> str:
+def label_umur(umur: int | None) -> str:
     """Teks tanggal publikasi untuk laporan & penyortiran."""
     if umur is None:
         return ""
@@ -432,7 +440,7 @@ def label_umur(umur: Optional[int]) -> str:
     return f"{umur} hari lalu"
 
 
-def rapikan_kartu(data: dict) -> Optional[Dict]:
+def rapikan_kartu(data: dict) -> dict | None:
     """Ubah hasil skrip kartu menjadi dict lowongan; None bila tidak layak."""
     if not isinstance(data, dict):
         return None
@@ -477,7 +485,7 @@ def khusus_aplikasi(teks: str) -> str:
 
     return ""
 
-def lokasi_cocok(lokasi: str, daftar: List[str]) -> bool:
+def lokasi_cocok(lokasi: str, daftar: list[str]) -> bool:
     """True bila teks lokasi kartu cocok dengan salah satu lokasi dicari."""
     if not daftar:
         return True
@@ -490,7 +498,7 @@ def lokasi_cocok(lokasi: str, daftar: List[str]) -> bool:
     return any(item.lower().strip() in teks for item in daftar if item.strip())
 
 
-def alasan_tidak_layak(job: Dict, saringan: Optional[JobFilter] = None) -> str:
+def alasan_tidak_layak(job: dict, saringan: JobFilter | None = None) -> str:
     """Alasan lowongan tidak dicoba dilamar ('' bila layak).
 
     Memakai aturan tunggal JobStreet (`job_filter.alasan_tidak_layak`): tidak
@@ -664,7 +672,7 @@ class GlintsBot:
         # Pola URL pencarian yang terbukti menghasilkan kartu.
         self.search_url = ""
         # Ringkasan diagnosa terakhir (dipakai tes & laporan).
-        self.diagnosa_terakhir: Dict = {}
+        self.diagnosa_terakhir: dict = {}
 
     # ------------------------------ browser ---------------------------
     def init_browser(self):
@@ -737,7 +745,7 @@ class GlintsBot:
             return " ".join(str(self.driver.title or "").split())
         return ""
 
-    def _tautan_kartu(self) -> List[str]:
+    def _tautan_kartu(self) -> list[str]:
         """Semua href yang mengarah ke halaman lowongan di halaman ini."""
         try:
             elemen = self.driver.find_elements(
@@ -794,7 +802,7 @@ class GlintsBot:
         )
         return False
 
-    def _tunggu_kartu(self, detik: Optional[int] = None) -> int:
+    def _tunggu_kartu(self, detik: int | None = None) -> int:
         """Tunggu sampai tautan lowongan muncul (SEARCH_WAIT detik)."""
         batas = time.time() + max(
             3, int(detik if detik is not None else config.search_wait)
@@ -817,7 +825,7 @@ class GlintsBot:
 
         return jumlah
 
-    def simpan_diagnosa(self, awalan: str = "glints", keyword: str = "") -> Dict:
+    def simpan_diagnosa(self, awalan: str = "glints", keyword: str = "") -> dict:
         """Simpan HTML + screenshot dan cetak ringkasan penyebab 0 kartu."""
         folder = folder_debug()
         cap = f"{awalan}-{time.strftime('%Y%m%d-%H%M%S')}"
@@ -976,7 +984,7 @@ class GlintsBot:
 
         return hasil if isinstance(hasil, list) else []
 
-    def cari(self, keyword: str, halaman: int = 0) -> List[Dict]:
+    def cari(self, keyword: str, halaman: int = 0) -> list[dict]:
         """Kembalikan daftar lowongan Glints untuk satu kata kunci."""
         if not self.buka_pencarian(keyword):
             return []
@@ -1295,7 +1303,7 @@ def tampilkan_konfigurasi_glints() -> None:
     console.print(tabel)
 
 
-def jalankan_glints(max_pages: int = 0, keywords: Optional[List[str]] = None,
+def jalankan_glints(max_pages: int = 0, keywords: list[str] | None = None,
                     batas: int = 0, laporan_harian: bool = True) -> dict:
     """Cari, saring, lalu lamar lowongan Glints secara otomatis."""
     kata_kunci = list(keywords) if keywords else config.keywords_riset
@@ -1325,7 +1333,7 @@ def jalankan_glints(max_pages: int = 0, keywords: Optional[List[str]] = None,
             console.print("[red]Login Glints belum selesai — dihentikan.[/]")
             return laporan
 
-        lowongan: List[Dict] = []
+        lowongan: list[dict] = []
         terlihat = set()
         duplikat = 0
 
@@ -1397,7 +1405,7 @@ def jalankan_glints(max_pages: int = 0, keywords: Optional[List[str]] = None,
         )
 
         # --- Saring dulu semuanya, baru bandingkan dan pilih yang terbaik ---
-        layak: List[Dict] = []
+        layak: list[dict] = []
 
         for job in lowongan:
             if job.get("khusus_aplikasi"):
@@ -1575,9 +1583,9 @@ def jalankan_glints(max_pages: int = 0, keywords: Optional[List[str]] = None,
     return laporan
 
 
-def kumpulkan_lowongan(bot, kata_kunci, halaman: int) -> List[Dict]:
+def kumpulkan_lowongan(bot, kata_kunci, halaman: int) -> list[dict]:
     """Baca semua kartu dari daftar kata kunci, tanpa duplikat."""
-    lowongan: List[Dict] = []
+    lowongan: list[dict] = []
     terlihat = set()
 
     for keyword in kata_kunci:
@@ -1594,8 +1602,8 @@ def kumpulkan_lowongan(bot, kata_kunci, halaman: int) -> List[Dict]:
     return dedupe_jobs(lowongan)
 
 
-def pilih_kandidat(lowongan: List[Dict], batas: int = 0,
-                   semuanya: bool = False) -> List[Dict]:
+def pilih_kandidat(lowongan: list[dict], batas: int = 0,
+                   semuanya: bool = False) -> list[dict]:
     """Saring lowongan yang layak dicoba (urutan tetap seperti di situs)."""
     saringan = JobFilter()
     hasil = []
@@ -1609,7 +1617,7 @@ def pilih_kandidat(lowongan: List[Dict], batas: int = 0,
 
     return hasil
 
-def diagnosa_glints(keyword: str = "") -> Dict:
+def diagnosa_glints(keyword: str = "") -> dict:
     """Periksa mengapa kartu lowongan Glints tidak terbaca.
 
     Membuka satu kata kunci di Chrome, mencoba semua bentuk URL pencarian,
@@ -1621,7 +1629,7 @@ def diagnosa_glints(keyword: str = "") -> Dict:
         kata = config.keywords[0] if config.keywords else "inventory"
 
     bot = GlintsBot()
-    info: Dict = {}
+    info: dict = {}
 
     try:
         bot.init_browser()
@@ -1697,9 +1705,9 @@ def pesan_url_salah(url: str) -> str:
     )
 
 
-def daftar_kandidat(keywords: Optional[List[str]] = None,
+def daftar_kandidat(keywords: list[str] | None = None,
                     max_pages: int = 1, batas: int = 10,
-                    semuanya: bool = False) -> List[Dict]:
+                    semuanya: bool = False) -> list[dict]:
     """Cari lowongan Glints lalu kembalikan yang layak dilamar (tanpa melamar)."""
     kata_kunci = list(keywords or config.keywords)
     bot = GlintsBot()
@@ -1714,7 +1722,7 @@ def daftar_kandidat(keywords: Optional[List[str]] = None,
     return pilih_kandidat(lowongan, batas=batas, semuanya=semuanya)
 
 
-def uji_otomatis(keywords: Optional[List[str]] = None,
+def uji_otomatis(keywords: list[str] | None = None,
                  max_pages: int = 1) -> tuple:
     """Pilih sendiri satu lowongan yang layak, lalu uji lamar di sana.
 
@@ -1786,7 +1794,7 @@ def uji_glints(url: str) -> ApplyResult:
 # ----------------------------------------------------------------------
 # Periksa kesehatan Glints (satu perintah, berurutan)
 # ----------------------------------------------------------------------
-def _setuju_lamar(jumlah: int, kandidat: List[Dict]) -> bool:
+def _setuju_lamar(jumlah: int, kandidat: list[dict]) -> bool:
     """Tanya sekali sebelum mengirim lamaran sungguhan saat `glints cek`."""
     console.print(
         f"[bold]Uji kirim {jumlah} lamaran SUNGGUHAN ke Glints.[/] "
@@ -1815,7 +1823,7 @@ def cek_glints(keyword: str = "", max_pages: int = 1, lamar: int = 0,
     if not kata:
         kata = (config.keywords_riset or ["inventory"])[0]
     halaman = max(1, min(int(max_pages or 1), MAKS_HALAMAN_RISET))
-    tahap: List[tuple] = []
+    tahap: list[tuple] = []
 
     def catat(nama: str, lulus: bool, keterangan: str) -> None:
         tahap.append((nama, bool(lulus), keterangan))
@@ -1824,7 +1832,7 @@ def cek_glints(keyword: str = "", max_pages: int = 1, lamar: int = 0,
             f"[{warna}]{'OK' if lulus else 'GAGAL'}[/] {nama} — {keterangan}"
         )
 
-    kandidat: List[Dict] = []
+    kandidat: list[dict] = []
     cloudflare = False
 
     console.print(

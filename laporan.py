@@ -13,7 +13,6 @@ Dipakai perintah `laporan` dan dashboard.
 
 from datetime import date
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import kuota
 from config import config
@@ -21,7 +20,7 @@ from database import db
 from notifier import notifier
 
 
-def ringkasan() -> Dict:
+def ringkasan() -> dict:
     """Angka utama untuk laporan satu halaman."""
     stats = db.get_stats()
     status = db.hitung_status_antrean()
@@ -52,7 +51,7 @@ def ringkasan() -> Dict:
 FOLDER_LAPORAN = Path(__file__).resolve().parent / "reports"
 
 
-def teks_markdown(data: Optional[Dict] = None) -> str:
+def teks_markdown(data: dict | None = None) -> str:
     """Laporan dalam bentuk teks Markdown (untuk berkas harian)."""
     data = data or ringkasan()
     hari = date.today().isoformat()
@@ -156,8 +155,8 @@ def teks_markdown(data: Optional[Dict] = None) -> str:
     return "\n".join(baris) + "\n"
 
 
-def simpan(folder: Optional[str | Path] = None,
-           data: Optional[Dict] = None) -> Path:
+def simpan(folder: str | Path | None = None,
+           data: dict | None = None) -> Path:
     """Simpan laporan harian ke `reports/laporan-YYYY-MM-DD.md`.
 
     Berkas hari yang sama ditimpa, jadi menjalankan beberapa kali dalam sehari
@@ -171,13 +170,13 @@ def simpan(folder: Optional[str | Path] = None,
     return berkas
 
 
-def saran(data: Dict) -> List[str]:
+def saran(data: dict) -> list[str]:
     """Saran singkat dari angka — bagian "continuous improvement" yang aman.
 
     Hanya berupa anjuran; tidak mengubah aturan apa pun secara otomatis
     (pasal 12.5).
     """
-    hasil: List[str] = []
+    hasil: list[str] = []
     status = data.get("status_antrean") or {}
 
     revisi = int(status.get("review_required", 0))
@@ -263,7 +262,7 @@ def saran(data: Dict) -> List[str]:
     return hasil
 
 
-def kirim_telegram(data: Dict) -> bool:
+def kirim_telegram(data: dict) -> bool:
     """Kirim ringkasan ke Telegram (opsional)."""
     try:
         notifier.send_daily_report(db.get_stats())
