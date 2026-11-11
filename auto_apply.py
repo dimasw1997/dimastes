@@ -158,6 +158,17 @@ _ID_INTERNAL = re.compile(
 )
 
 
+def nama_berkas_aman(teks: str, maks: int = 80) -> str:
+    """Ubah teks menjadi nama berkas yang sah di Windows/Linux.
+
+    `job_id` Glints berbentuk `glints:<uuid>`. Titik dua tidak sah pada nama
+    berkas Windows, sehingga seluruh dump debug Glints sebelumnya gagal
+    ditulis tanpa pesan (padahal konsol mengaku sudah menyimpannya).
+    """
+    aman = re.sub(r"[^A-Za-z0-9._-]+", "-", str(teks or "")).strip("-.")
+    return (aman or "lowongan")[:maks]
+
+
 def tampak_id_internal(teks: str) -> bool:
     """True bila teks itu ID internal (mis. questionnaire.ID_Q_…) bukan label."""
     return bool(_ID_INTERNAL.search(str(teks or "")))
@@ -657,7 +668,7 @@ class AutoApplier:
             folder.mkdir(exist_ok=True)
 
             stamp = time.strftime("%Y%m%d-%H%M%S")
-            nama = f"{stamp}-{job.get('job_id') or 'lowongan'}"
+            nama = f"{stamp}-{nama_berkas_aman(job.get('job_id'))}"
             dasar = folder / nama
 
             try:
@@ -686,14 +697,17 @@ class AutoApplier:
             (dasar.with_suffix(".html")).write_text(
                 self.driver.page_source or "", encoding="utf-8"
             )
-            self.driver.save_screenshot(str(dasar.with_suffix(".png")))
+            with contextlib.suppress(Exception):
+                self.driver.save_screenshot(str(dasar.with_suffix(".png")))
             self.debug_dumps += 1
             console.print(
                 f"[dim]Halaman tidak dikenali; debug disimpan di "
                 f"debug/{nama}.html[/]"
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            console.print(
+                f"[dim]Debug gagal disimpan: {exc}[/]"
+            )
 
     # Label yang TIDAK mungkin tombol kirim: langkah navigasi, tautan aplikasi,
     # tombol kembali. "review and submit" adalah judul langkah di bilah kemajuan
@@ -2101,7 +2115,9 @@ class AutoApplier:
                     deadline = time.time() + self.step_timeout
                     continue
 
-            if self._is_success():
+            if self._is_success() or (
+                sudah_klik_kirim and self.is_already_applied()
+            ):
                 return ApplyResult(True, "applied", "Terkirim otomatis")
 
             self._dump_debug(job)

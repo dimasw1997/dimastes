@@ -259,8 +259,8 @@ disertai tes baru; angka di bawah diambil dari eksekusi nyata, bukan perkiraan.
 
 | Ukuran | Sebelum | Sesudah |
 |---|---|---|
-| `pytest -q` | 595 passed, 1 skipped | **610 passed, 1 skipped** |
-| Temuan `ruff check .` | 424 | **152** (semuanya pola pertahanan yang disengaja) |
+| `pytest -q` | 595 passed, 1 skipped | **615 passed, 1 skipped** |
+| Temuan `ruff check .` | 424 | **151** (semuanya pola pertahanan yang disengaja) |
 | Gate `ruff --select E9,F,E501,I,B,SIM,ISC` | bersih | bersih |
 | CI otomatis | tidak ada | `.github/workflows/uji.yml` |
 
@@ -302,3 +302,21 @@ disertai tes baru; angka di bawah diambil dari eksekusi nyata, bukan perkiraan.
 - E-3 memakai `SKILL_KEYWORDS`/`TITLE_KEYWORDS`. Bila formulir menanyakan
   keahlian yang tidak ada di daftar itu, bot **tidak menebak** — lowongan masuk
   daftar manual. Itu disengaja agar tidak ada klaim palsu di lamaran.
+
+### 7.6 Temuan dari sesi nyata 2026-11-11 (E-14, E-15)
+
+Bukti: tangkapan layar sesi `run --auto` pada Glints (PPIC, Megacon Bangun
+Perkasa). Terminal menulis `klik tombol kirim "kirim" (percobaan 1)` lalu
+`Dilewati: Tombol Kirim sudah diklik, tetapi konfirmasi tidak muncul dalam 45
+detik`, sementara halaman Glints menampilkan **"Kamu sudah melamar pekerjaan
+ini. Silakan cek aplikasi…"**.
+
+| ID | Temuan | Perbaikan | Tes |
+|---|---|---|---|
+| E-14 | Setelah Kirim diklik, Glints kembali ke halaman lowongan dengan banner "sudah melamar". Teks itu tidak ada di `SUKSES_GLINTS`, dan pemeriksaan `is_already_applied()` hanya berjalan **sebelum** tombol Lamar diklik — jadi bot menunggu 45 detik lalu menandai lowongan "perlu manual" padahal lamaran sudah masuk. | `SUKSES_GLINTS` + `SIBUK_TEXTS` memuat "kamu sudah melamar", "sudah melamar pekerjaan ini", "cek lamaran saya", "you have already applied". Setelah Kirim diklik, `is_already_applied()` kini juga dihitung sebagai **terkirim**. Banner yang sudah ada sejak awal tetap dianggap `already_applied` (tidak melamar dua kali). | `test_banner_sudah_melamar_dihitung_terkirim`, `test_banner_sudah_melamar_dikenali_sebagai_sukses`, `test_already_applied_tetap_dilewati_sebelum_klik` |
+| E-15 | Dump debug Glints **tidak pernah tersimpan**: `job_id` berbentuk `glints:<uuid>` dan titik dua tidak sah pada nama berkas Windows. Konsol tetap mengaku "debug disimpan di …", sehingga berkas yang diminta untuk diagnosa tidak ada. | `nama_berkas_aman()` mengganti karakter terlarang dengan `-`; pesan baru dicetak setelah berkas benar-benar tertulis, dan kegagalan menulis dilaporkan (dulu ditelan `except: pass`). | `test_nama_berkas_debug_aman_untuk_glints`, `test_dump_debug_tersimpan_untuk_job_id_glints` |
+
+Catatan jujur: E-14 menutup gejala yang terlihat, tetapi keadaan halaman tepat
+sebelum waktu tunggu habis tidak bisa saya periksa karena dump debug-nya (akibat
+E-15) tidak pernah ada di disk. Bila masih muncul, jalankan lagi setelah
+pembaruan ini — kini berkas `debug\*.html/.txt` benar-benar tersimpan.

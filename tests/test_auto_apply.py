@@ -1532,3 +1532,29 @@ def test_checkbox_tak_dikenal_masuk_manual(monkeypatch):
 
     assert gagal == ["Which skills do you have?"]
     assert [item.is_selected() for item in kotak] == [False, False]
+
+
+def test_nama_berkas_debug_aman_untuk_glints():
+    """job_id Glints berbentuk "glints:<uuid>" — titik dua tidak sah di Windows.
+
+    Dulu dump debug Glints selalu gagal ditulis tanpa pesan.
+    """
+    assert auto_apply.nama_berkas_aman("glints:441c0814-5d02") == (
+        "glints-441c0814-5d02"
+    )
+    assert auto_apply.nama_berkas_aman("") == "lowongan"
+    assert auto_apply.nama_berkas_aman("  a/b\\c  ") == "a-b-c"
+
+
+def test_dump_debug_tersimpan_untuk_job_id_glints(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "auto_apply_debug", True)
+    monkeypatch.chdir(tmp_path)
+
+    applier = AutoApplier(FakeDriver(body="Halaman aneh"))
+    applier._dump_debug({"job_id": "glints:441c0814", "title": "PPIC"})
+
+    berkastxt = list((tmp_path / "debug").glob("*.txt"))
+
+    assert len(berkastxt) == 1
+    assert ":" not in berkastxt[0].name
+    assert berkastxt[0].read_text(encoding="utf-8").startswith("URL:")

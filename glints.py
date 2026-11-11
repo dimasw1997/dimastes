@@ -145,6 +145,13 @@ SUKSES_GLINTS = (
     "lamaran terkirim",
     "lamaran kamu sudah terkirim",
     "lamaran anda sudah terkirim",
+    # Banner yang muncul di halaman lowongan setelah lamaran masuk.
+    "kamu sudah melamar",
+    "anda sudah melamar",
+    "sudah melamar pekerjaan ini",
+    "cek lamaran saya",
+    "you have already applied",
+    "already applied",
     "application submitted",
     "application sent",
     "you have successfully applied",
@@ -169,6 +176,8 @@ SIBUK_TEXTS = (
     "sudah pernah melamar",
     "kamu sudah melamar",
     "anda sudah melamar",
+    "sudah melamar pekerjaan ini",
+    "cek lamaran saya",
     "you have already applied",
 )
 
