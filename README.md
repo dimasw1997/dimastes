@@ -1140,6 +1140,35 @@ Opsi bisa ditambahkan pada berkas mana pun:
 .\Lamar Otomatis.bat --situs jobstreet,indeed
 ```
 
+### Situs tetap terpisah (JobStreet / Glints / Indeed)
+
+JobStreet yang sudah selesai **tidak ikut tersentuh** saat Anda mengerjakan
+Glints atau Indeed. Setiap situs punya pencatat sendiri: lowongan dikenali dari
+`job_id` + `sumber`, dan perintah di bawah hanya membaca/menulis situs yang
+disebut.
+
+| Perintah | Yang dijalankan |
+|---|---|
+| `python cli.py run --auto` | **JobStreet saja** (perilaku lama, tidak berubah) |
+| `python cli.py run --auto --situs glints` | Glints saja |
+| `python cli.py run --auto --situs indeed` | Indeed saja |
+| `python cli.py run --auto --situs semua` | JobStreet → Glints → Indeed |
+| `python cli.py status` | ringkasan **terpisah per situs** (tanpa membuka browser) |
+| `python cli.py history --situs glints` | riwayat lamaran Glints saja |
+| `python cli.py antrean --situs indeed` | antrean Indeed saja |
+| `python cli.py stats` | total keseluruhan + tabel per situs |
+
+Contoh keluaran `status` (angka diambil dari database Anda sendiri):
+
+```powershell
+python cli.py status
+```
+
+Tabelnya memuat, per situs: jumlah lowongan, terkirim, perlu manual, gagal,
+ditolak, dan kedaluwarsa. `run` juga selalu mencetak baris pertama
+`Situs: ... — situs lain tidak dibuka`, jadi tidak ada lagi kebingungan situs
+mana yang sedang berjalan.
+
 Ingin ikon di Desktop? Jalankan sekali — keempat pintasan dibuat sekaligus:
 
 ```powershell

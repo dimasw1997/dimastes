@@ -77,6 +77,24 @@ def sumber_dari_url(url: str) -> str:
     return host or "lainnya"
 
 
+def _situs_sql(alias: str = "") -> str:
+    """Ekspresi SQL nama situs: kolom `sumber`, URL sebagai cadangan.
+
+    Baris lama bisa belum punya `sumber`, jadi URL dipakai untuk menebak
+    situsnya. Hasilnya selalu salah satu dari jobstreet/glints/indeed atau
+    nama host lain.
+    """
+    awalan = f"{alias}." if alias else ""
+    return (
+        f"COALESCE(NULLIF(LOWER(TRIM({awalan}sumber)), ''), CASE"
+        f" WHEN {awalan}url LIKE '%indeed.%' THEN 'indeed'"
+        f" WHEN {awalan}url LIKE '%glints.%' THEN 'glints'"
+        f" WHEN {awalan}url LIKE '%jobstreet.%'"
+        f" OR {awalan}url LIKE '%jobsdb.%' THEN 'jobstreet'"
+        " ELSE 'lainnya' END)"
+    )
+
+
 class Database:
     def __init__(self, db_path: str | None = None):
         # Path absolut supaya database tidak "hilang" ketika program
@@ -630,20 +648,69 @@ class Database:
             )
             return int(cursor.rowcount or 0)
 
-    def hitung_status_antrean(self) -> dict:
-        """Jumlah lowongan per status antrean (untuk dashboard)."""
+    def hitung_status_antrean(self, situs: str = "") -> dict:
+        """Jumlah lowongan per status antrean (untuk dashboard).
+
+        `situs` (opsional) membatasi hitungan pada satu situs saja.
+        """
         hasil = {status: 0 for status in STATUS_ANTREAN}
+        situs = str(situs or "").strip().lower()
+
+        saringan = ""
+        parameter: list = []
+        if situs:
+            saringan = f"WHERE {_situs_sql()} = ?"
+            parameter.append(situs)
 
         with self._get_conn() as conn:
             for row in conn.execute(
-                """
+                f"""
                 SELECT COALESCE(NULLIF(status_antrean, ''), 'found') AS status,
                        COUNT(*) AS jumlah
                   FROM jobs
+                {saringan}
                  GROUP BY status
-                """
+                """,
+                parameter,
             ):
                 hasil[str(row["status"])] = int(row["jumlah"])
+
+        return hasil
+
+    def ringkasan_per_situs(self) -> list[dict]:
+        """Ringkasan tiap situs terpisah: lowongan, terkirim, perlu manual, dsb."""
+        situs = _situs_sql()
+
+        with self._get_conn() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT {situs} AS situs,
+                       COUNT(*) AS total,
+                       SUM(CASE WHEN status_antrean = 'applied'
+                                THEN 1 ELSE 0 END) AS terkirim,
+                       SUM(CASE WHEN status_antrean = 'review_required'
+                                THEN 1 ELSE 0 END) AS perlu_manual,
+                       SUM(CASE WHEN status_antrean = 'qualified'
+                                THEN 1 ELSE 0 END) AS siap,
+                       SUM(CASE WHEN status_antrean = 'failed'
+                                THEN 1 ELSE 0 END) AS gagal,
+                       SUM(CASE WHEN status_antrean = 'rejected'
+                                THEN 1 ELSE 0 END) AS ditolak,
+                       SUM(CASE WHEN status_antrean = 'expired'
+                                THEN 1 ELSE 0 END) AS kedaluwarsa
+                  FROM jobs
+                 GROUP BY situs
+                 ORDER BY total DESC, situs
+                """
+            ).fetchall()
+
+        hasil = []
+        for row in rows:
+            item = dict(row)
+            for kunci, nilai in list(item.items()):
+                if kunci != "situs":
+                    item[kunci] = int(nilai or 0)
+            hasil.append(item)
 
         return hasil
 
@@ -738,13 +805,25 @@ class Database:
 
             return int(result["count"])
 
-    def get_recent_applications(self, limit: int = 50) -> list[dict]:
-        """Riwayat lamaran; judul/perusahaan kosong diberi teks pengganti."""
+    def get_recent_applications(self, limit: int = 50,
+                                situs: str = "") -> list[dict]:
+        """Riwayat lamaran; judul/perusahaan kosong diberi teks pengganti.
+
+        `situs` (opsional) menyaring satu situs saja: jobstreet/glints/indeed.
+        """
         limit = max(1, int(limit))
+        situs = str(situs or "").strip().lower()
+
+        saringan = ""
+        parameter: list = [TITLE_FALLBACK]
+        if situs:
+            saringan = f"WHERE {_situs_sql('j')} = ?"
+            parameter.append(situs)
+        parameter.append(limit)
 
         with self._get_conn() as conn:
             rows = conn.execute(
-                """
+                f"""
                 SELECT a.applied_at,
                        COALESCE(NULLIF(TRIM(j.title), ''), ?) AS title,
                        COALESCE(NULLIF(TRIM(j.company), ''), 'Tidak diketahui')
@@ -753,10 +832,11 @@ class Database:
                        COALESCE(j.url, '') AS url
                 FROM applications a
                 LEFT JOIN jobs j ON a.job_id = j.job_id
+                {saringan}
                 ORDER BY a.applied_at DESC, a.id DESC
                 LIMIT ?
                 """,
-                (TITLE_FALLBACK, limit),
+                parameter,
             ).fetchall()
 
         result = []

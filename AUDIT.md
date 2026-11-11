@@ -320,3 +320,30 @@ Catatan jujur: E-14 menutup gejala yang terlihat, tetapi keadaan halaman tepat
 sebelum waktu tunggu habis tidak bisa saya periksa karena dump debug-nya (akibat
 E-15) tidak pernah ada di disk. Bila masih muncul, jalankan lagi setelah
 pembaruan ini — kini berkas `debug\*.html/.txt` benar-benar tersimpan.
+
+---
+
+## 8. Pemisahan situs (2026-11-11)
+
+Keluhan pemakai: `run --auto` membuka JobStreet padahal JobStreet sudah selesai
+dan yang ingin dikerjakan adalah Glints.
+
+**Sebabnya bukan bug:** perintah `run` memang mesin JobStreet sejak awal,
+sedangkan `lamar`/`Lamar *.bat` adalah jalur semua situs. Yang kurang adalah
+penanda yang jelas dan cara melihat data per situs. Perbaikannya:
+
+| Perubahan | Keterangan |
+|---|---|
+| `run --situs {jobstreet,glints,indeed,semua}` | bawaan tetap **jobstreet**; situs lain dijalankan lewat jalur `lamar_semua` yang sama dengan `Lamar Glints.bat` |
+| Baris `Situs: … — situs lain tidak dibuka` | tercetak setiap `run`, menghilangkan salah sangka |
+| Perintah baru `status` | tabel per situs: lowongan, terkirim, perlu manual, gagal, ditolak, kedaluwarsa |
+| `history --situs` dan `antrean --situs` | data per situs tidak lagi tercampur di layar |
+| `stats` | menampilkan total keseluruhan **dan** tabel per situs |
+| `Database.ringkasan_per_situs()`, `hitung_status_antrean(situs)`, `get_recent_applications(situs)` | dasar angkanya; situs lama ditebak dari URL bila kolom `sumber` kosong |
+
+Data JobStreet tidak diubah sama sekali: tidak ada migrasi, penghapusan, atau
+penulisan ulang baris. Semua penyaringan hanya `SELECT`.
+
+Tes: `tests/test_situs_terpisah.py` (17 tes) — pilihan situs, ringkasan per
+situs, tebakan situs dari URL, filter riwayat/antrean, dan routing `run`
+(JobStreet tetap bawaan; `--situs glints` tidak memanggil mesin JobStreet).
