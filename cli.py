@@ -566,11 +566,14 @@ def tampilkan_status_situs():
         import kuota
 
         console.print()
-        kuota_tabel = Table(title="Target harian per situs (50 = wajib tercapai)")
+        kuota_tabel = Table(
+            title="Kuota per situs — siklus 24 jam (50 wajib tercapai)"
+        )
         kuota_tabel.add_column("Situs", style="cyan")
-        kuota_tabel.add_column("Hari ini", justify="right")
+        kuota_tabel.add_column("Siklus ini", justify="right")
         kuota_tabel.add_column("Target", justify="right")
         kuota_tabel.add_column("Sisa", justify="right", style="yellow")
+        kuota_tabel.add_column("Reset berikutnya", style="blue")
         kuota_tabel.add_column("Status", style="green")
 
         for baris in kuota.ringkasan_situs():
@@ -580,6 +583,7 @@ def tampilkan_status_situs():
                 str(baris["terpakai"]),
                 "tanpa batas" if sisa is None else str(baris["batas"]),
                 "-" if sisa is None else str(sisa),
+                baris["berakhir"] or "-",
                 "tercapai" if sisa == 0 else "belum",
             )
 

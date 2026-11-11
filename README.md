@@ -180,7 +180,7 @@ cp .env.example .env
 | `EXCLUDE_KEYWORDS` | `principal,director,head,senior,lead` | Kata yang membuat judul otomatis ditolak |
 | `STRICT_LOCATION` | `false` | `true` = tolak lowongan yang lokasinya di luar `LOCATION` |
 | `REQUIRE_COMPANY_LOGO` | `true` | Wajib logo/gambar di **JobStreet & Glints**; Indeed dikecualikan karena kartunya tidak memuat logo |
-| `MAX_APPLY_PER_DAY` | `50` | Target **sekaligus batas** lamaran per hari **untuk tiap situs** (JobStreet 50, Glints 50, Indeed 50; hitungan terpisah). `0` = tanpa batas. Riset & penilaian tetap tanpa batas |
+| `MAX_APPLY_PER_DAY` | `50` | Target **sekaligus batas** lamaran **per situs per siklus 24 jam** (JobStreet 50, Glints 50, Indeed 50; hitungan terpisah, siklus dimulai dari lamaran pertama). `0` = tanpa batas. Riset & penilaian tetap tanpa batas |
 | `DELAY_BETWEEN_APPLY` | `3` | Jeda (detik) antar lowongan |
 | `MAKS_ULANG` | `2` | Auto recovery: berapa kali lowongan yang gagal karena sebab **sementara** (timeout, internet putus, Chrome lambat) dicoba ulang sebelum dicatat `failed`. `0` = tanpa ulang, maksimum `5`. Kesalahan permanen (mis. login habis) tidak pernah diulang |
 | `JEDA_ULANG` | `3` | Jeda (detik) sebelum mencoba ulang lowongan yang gagal sementara |
@@ -809,7 +809,7 @@ meninjau sendiri.
 5. Di akhir sesi muncul daftar lowongan yang dilewati beserta alasannya —
    hanya informasi, tidak perlu Anda kerjakan.
 
-Batas pengaman: `MAX_APPLY_PER_DAY` (harian **per situs**, bawaan **50**;
+Batas pengaman: `MAX_APPLY_PER_DAY` (**50 per situs per siklus 24 jam**,
 `0` = tanpa batas), `AUTO_APPLY_MAX_PER_SESSION` (per sesi, bawaan **0** =
 tanpa batas), dan `DELAY_BETWEEN_APPLY` (jeda antar lamaran, tetap **3** detik
 agar tidak terlihat seperti bot).
@@ -854,8 +854,9 @@ nilai kecocokan → peringkat → ambil TOP 50 → apply maksimal 50/hari
    di kartu tidak dihukum.
 4. **Peringkat.** `RANK_BY=relevance` (bawaan) = skor tertinggi dulu, bila
    sama yang paling baru. `RANK_BY=newest` = tanggal terbaru dulu.
-5. **50 per situs.** Sisa kuota situs ini = `MAX_APPLY_PER_DAY` − lamaran
-   situs itu yang sudah terkirim hari ini. Hanya **sebanyak sisa kuota**
+5. **50 per situs per siklus.** Sisa kuota situs ini = `MAX_APPLY_PER_DAY` −
+   lamaran situs itu pada siklus 24 jam yang sedang berjalan. Hanya
+   **sebanyak sisa kuota**
    kandidat teratas yang dilamar — dipilih **global** dari seluruh kategori
    dan lokasi pada situs tersebut, bukan 50 per kategori/lokasi. Bila kandidat
    yang memenuhi kriteria kurang dari 50, semuanya dilamar dan akhir sesi
@@ -922,11 +923,13 @@ Cara mempercepat (pilih sesuai kebutuhan):
 | `.\jalankan.bat set-env AUTO_ANSWER_WAIT=10` | Memotong waktu tunggu kuesioner per lowongan (20 → 10 detik) |
 | `.\jalankan.bat set-env DELAY_BETWEEN_APPLY=2` | Menghemat ±50 detik untuk 50 lamaran |
 
-Catatan: `MAX_APPLY_PER_DAY` adalah batas **per hari kalender per situs**
-yang dihitung dari database, jadi menjalankan `run` dua kali dalam sehari tidak
-menambah kuota — sisanya yang dipakai. Bila kuota satu situs habis, hanya situs
-itu yang berhenti; situs lain tetap jalan. Contoh pesan: `Kuota Glints hari ini
-sudah habis`.
+Catatan: `MAX_APPLY_PER_DAY` memakai **siklus 24 jam bergulir per situs**,
+bukan hari kalender. Siklus dimulai pada lamaran pertama; slot ke-51 baru bisa
+dikirim 24 jam setelahnya. Contoh: mulai 20:30 → berikutnya besok 20:30, bukan
+besok 00:00. Menjalankan `run` dua kali dalam siklus yang sama tidak menambah
+slot — sisanya yang dipakai. Bila kuota satu situs habis, hanya situs itu yang
+berhenti; situs lain tetap jalan. Contoh pesan: `Kuota Glints untuk siklus 24
+jam ini sudah habis. Siklus baru dibuka besok 20:30.`
 
 Ingin kembali melamar sambil mencari (lebih cepat, tanpa perbandingan)?
 Itu hanya berlaku bila tidak ada batas harian:
