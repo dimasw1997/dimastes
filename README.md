@@ -858,6 +858,21 @@ Kolom **Alasan** berisi catatan bot untuk tiap lamaran (mis. "Tombol Lamar
 tidak ditemukan di halaman" atau "Lowongan menggunakan 'Lamar di situs
 perusahaan'"), sehingga penyebabnya bisa dipastikan dari data, bukan dugaan.
 
+Bila tombol Lamar **tidak ditemukan**, bot sekarang:
+
+1. membedakan tiga penyebab yang sering tertukar — sesi login habis
+   ("Indeed meminta login sebelum melamar"), halaman verifikasi
+   ("Indeed menampilkan verifikasi/captcha…"), atau halaman yang memang tanpa
+   tombol Lamar. Pada kasus login, sesi Indeed **dihentikan** agar tidak
+   menghabiskan 84 percobaan sia-sia;
+2. menyimpan bukti halaman ke folder `debug/` (HTML + screenshot + daftar
+   tombol yang terlihat) walau `AUTO_APPLY_DEBUG` tidak diisi — maksimal 5
+   berkas per sesi.
+
+Kalau Indeed masih gagal, kirimkan satu berkas `.txt` dari `debug/`: isinya
+URL, cuplikan halaman, dan daftar tombol yang benar-benar ada. Dari situ
+selector bisa diperbaiki berdasarkan HTML asli, bukan tebakan.
+
 ### Chrome antar-situs
 
 JobStreet, Glints, dan Indeed memakai profil Chrome yang sama agar sesi login

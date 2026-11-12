@@ -95,12 +95,15 @@ SUKSES_INDEED = (
 )
 
 # Teks khas Indeed saat lowongan sudah pernah dilamar.
+# Catatan: kata "applied" sendirian sengaja TIDAK dipakai — di halaman Indeed
+# kata itu muncul di banyak tempat ("applied filters", "Applied"), sehingga
+# lowongan yang belum pernah dilamar bisa tercatat sudah dilamar.
 SUDAH_DILAMAR_TEXTS = (
     "anda sudah melamar",
     "sudah pernah melamar",
     "you have already applied",
+    "you've applied",
     "sudah dilamar",
-    "applied",
 )
 
 # Skrip pembaca kartu: dibaca dari tautan `jk=` agar tahan perubahan kelas CSS.
@@ -352,12 +355,77 @@ class IndeedApplier(AutoApplier):
     )
     kerangka_lamaran_host = ("indeed.com", "indeedapply")
 
+    # Indeed menampilkan ajakan masuk, bukan tombol Lamar, bila sesi login
+    # habis. Tanpa deteksi ini, 84 lamaran tercatat "tombol tidak ditemukan"
+    # padahal penyebabnya login — dan sesi tidak berhenti.
+    petunjuk_login = (
+        "masuk untuk melamar",
+        "masuk untuk melanjutkan",
+        "sign in to apply",
+        "sign in to continue",
+        "log in to apply",
+        "masuk atau daftar",
+        "masuk ke indeed",
+        "sign in to indeed",
+    )
+
+    # Halaman verifikasi/captcha Indeed pada halaman lowongan.
+    petunjuk_verifikasi = (
+        "verifikasi anda",
+        "verify you are human",
+        "are you a human",
+        "unusual traffic",
+        "captcha",
+        "konfirmasi bahwa anda",
+    )
+
     def __init__(self, driver, wait=None):
         super().__init__(driver, wait)
 
         # Formulir Indeed (termasuk Indeed Apply) dimuat bertahap.
         self.step_timeout = max(self.step_timeout, 12)
         self.submit_timeout = max(self.submit_timeout, 30)
+
+    def _ada_tombol_lamar(self) -> bool:
+        return self._cari_tombol_lamar() is not None
+
+    def _is_login_page(self) -> bool:
+        """Halaman Indeed meminta masuk, bukan menawarkan Lamar."""
+        if super()._is_login_page():
+            return True
+
+        # Ajakan masuk bisa muncul sebagai panel di halaman lowongan (tanpa
+        # kolom sandi), jadi teks halaman yang diperiksa. Pemeriksaan teks
+        # didahulukan supaya halaman normal (mayoritas) tidak perlu memindai
+        # seluruh tombol — pemindaian itu mahal di halaman Indeed yang besar.
+        teks = self._body_text()
+        if not any(pola in teks for pola in self.petunjuk_login):
+            return False
+
+        # Bila tombol Lamar tetap ada, ajakan masuk itu hanya hiasan halaman.
+        return not self._ada_tombol_lamar()
+
+    def _blocker(self) -> str:
+        """Alasan yang lebih jelas daripada "tombol Lamar tidak ditemukan"."""
+        alasan = super()._blocker()
+        if alasan:
+            return alasan
+
+        teks = self._body_text()
+
+        if any(pola in teks for pola in self.petunjuk_verifikasi):
+            return (
+                "Indeed menampilkan verifikasi/captcha saat membuka lowongan — "
+                "selesaikan di jendela Chrome lalu jalankan ulang"
+            )
+
+        if any(pola in teks for pola in self.petunjuk_login):
+            return (
+                "Indeed meminta login sebelum melamar — login di jendela "
+                "Chrome (profil bot) lalu jalankan ulang"
+            )
+
+        return ""
 
 
 class IndeedBot:

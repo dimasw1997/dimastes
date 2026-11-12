@@ -563,3 +563,30 @@ Tes: 694 → **731 passed, 1 skipped** (+37: 23 konflik jawaban, 10 kerangka
 iframe, 4 riwayat alasan). Gate ruff `E9,F,E501,I,B,SIM,ISC` bersih untuk
 `jawaban.py`, `auto_apply.py`, `indeed.py`, `cli.py`, `database.py`, dan tes
 baru.
+
+---
+
+## 15. Sesi lanjutan: Indeed "tombol Lamar tidak ditemukan" (data nyata)
+
+Data dari PC pemakai (`history --situs indeed --alasan`, kode `cd18f62`):
+**20 dari 20** lamaran Indeed gagal dengan alasan yang persis sama —
+"Tombol Lamar tidak ditemukan di halaman". Tidak ada satu pun pesan
+"dialihkan ke situs lain", jadi halaman lowongan memang terbuka normal tetapi
+tidak menawarkan tombol Lamar.
+
+Koreksi: perbaikan iframe (bagian 14.2) **bukan penghalang pertama** — iframe
+baru relevan setelah tombol Lamar diklik. Dua penyebab yang tersisa: sesi
+login Indeed habis (ajakan "Masuk untuk melamar") atau halaman verifikasi.
+
+| Gejala | Penyebab | Perbaikan | Status |
+|---|---|---|---|
+| 84 lamaran Indeed "perlu manual", alasan selalu "tombol tidak ditemukan" | Ajakan masuk / halaman verifikasi tidak dikenali sebagai penyebab, jadi alur berjalan 12 detik lalu menyerah dengan pesan generik | `IndeedApplier._is_login_page()` mendeteksi ajakan masuk (sesi dihentikan, `login_required`) dan `_blocker()` memberi alasan spesifik untuk verifikasi/login | FIXED + TESTED (`tests/test_indeed_login_verifikasi.py`) |
+| Penyebab tidak bisa dibuktikan | Jalur "tombol tidak ditemukan" satu-satunya yang **tidak** menyimpan `debug/` | `_dump_debug(job, paksa=True)` di jalur itu; batas 5 berkas/sesi, tetap menghormati `AUTO_APPLY_DEBUG` untuk jalur lain | FIXED + TESTED |
+| Risiko lowongan baru dicap "sudah dilamar" | `SUDAH_DILAMAR_TEXTS` memuat kata "applied" sendirian, yang muncul di banyak tempat di halaman Indeed | Token itu dibuang; frasa panjang dipertahankan | FIXED + TESTED |
+
+Batas jujur: penyebab sebenarnya (login habis vs verifikasi) **belum
+terkonfirmasi** — tes memakai driver tiruan. Bukti akan tersedia otomatis di
+`debug/*.txt` pada sesi Indeed berikutnya; dari berkas itu selector bisa
+diperbaiki berdasarkan HTML asli.
+
+Tes: 731 → **746 passed, 1 skipped** (+15), gate ruff bersih.
