@@ -201,7 +201,7 @@ class BotPalsu:
     def login(self):
         return True
 
-    def cari(self, keyword, nomor=0):
+    def cari(self, keyword, nomor=0, location=""):
         return list(self.kartu.get((keyword, nomor), []))
 
     def lamar(self, job):

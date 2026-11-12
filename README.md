@@ -1099,15 +1099,19 @@ JobStreet dipakai sebagai acuan; Glints mengikuti aturan yang sama:
 | Mode manual `AUTO_APPLY=false` (tinjau lalu konfirmasi) | ya | ya |
 | Login habis → sesi berhenti + notifikasi Telegram | ya | ya |
 | Laporan harian Telegram di akhir sesi | ya | ya |
-| Pencarian per lokasi | `LOCATIONS` × kata kunci | satu pencarian nasional per kata kunci, hasil disaring `LOCATIONS` |
+| Pencarian per lokasi | `LOCATIONS` × kata kunci | `LOCATIONS` × kata kunci (parameter `location` di URL explore) |
 
 Dua perbedaan yang memang disengaja:
 
 1. **Glints selalu riset dulu** (tidak ada mode "lamar sambil mencari"),
    karena TOP 50 global hanya bisa ditentukan setelah semua hasil dinilai.
-2. **Pencarian Glints tidak per lokasi** — alamat explore-nya nasional
-   (`countryCode=ID`), jadi hasilnya lebih luas lalu disaring dengan
-   `LOCATIONS`. Aturan "semua lokasi tercakup" tetap terpenuhi.
+2. **Pencarian Glints kini per lokasi, sama seperti JobStreet.** Jumlah
+   kombinasi = kata kunci × lokasi (mis. 20 × 9 = 180), dengan parameter
+   `location` pada URL explore. Bila ternyata Glints mengabaikan parameter itu
+   (tidak ada kartu), bot otomatis kembali ke pencarian nasional per kata
+   kunci — sisa lokasi dilewati agar tidak mengulang kartu yang sama — dan
+   lokasi tetap disaring dari teks kartu (`STRICT_LOCATION`). Penyesuaian ini
+   terlihat di terminal: *"Glints mengabaikan parameter lokasi…"*.
 
 ### Paritas aturan Apply: JobStreet = Glints = Indeed
 

@@ -113,7 +113,7 @@ class BotGlintsPalsu:
     def __init__(self):
         self.panggilan = 0
 
-    def cari(self, kata, halaman, **_):
+    def cari(self, kata, halaman, location="", **_):
         self.panggilan += 1
         return [_lowongan(1), _lowongan(2)]
 
@@ -124,12 +124,15 @@ def test_riset_glints_memakai_cache_pada_panggilan_kedua(database, monkeypatch):
     )
     bot = BotGlintsPalsu()
 
-    pertama = glints.kumpulkan_lowongan(bot, ["ppic"], 1)
-    kedua = glints.kumpulkan_lowongan(bot, ["ppic"], 1)
+    pertama = glints.kumpulkan_lowongan(bot, ["ppic"], 1, lokasi=["Bandung"])
+    sesudah_pertama = bot.panggilan
+    kedua = glints.kumpulkan_lowongan(bot, ["ppic"], 1, lokasi=["Bandung"])
 
     assert len(pertama) == 2
     assert [job["job_id"] for job in kedua] == [job["job_id"] for job in pertama]
-    assert bot.panggilan == 1  # panggilan kedua dilayani cache
+    assert sesudah_pertama == 1
+    # Panggilan kedua dilayani cache: tidak ada permintaan baru.
+    assert bot.panggilan == sesudah_pertama
 
 
 class BotIndeedPalsu(BotGlintsPalsu):
@@ -154,7 +157,7 @@ def test_cache_glints_dan_indeed_tidak_tercampur(database, monkeypatch):
     bot_glints = BotGlintsPalsu()
     bot_indeed = BotIndeedPalsu()
 
-    glints.kumpulkan_lowongan(bot_glints, ["ppic"], 1)
+    glints.kumpulkan_lowongan(bot_glints, ["ppic"], 1, lokasi=["Bandung"])
     indeed.kumpulkan_lowongan(bot_indeed, ["ppic"], 1, lokasi=["Bandung"])
 
     assert bot_glints.panggilan == 1
