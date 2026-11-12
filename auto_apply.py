@@ -731,9 +731,15 @@ class AutoApplier:
                          "tinjau dan kirim")
         )
 
-    def _dump_debug(self, job: dict):
-        """Simpan HTML + screenshot agar selector mudah diperbaiki."""
-        if not config.auto_apply_debug or self.debug_dumps >= 5:
+    def _dump_debug(self, job: dict, paksa: bool = False):
+        """Simpan HTML + screenshot agar selector mudah diperbaiki.
+
+        `paksa=True` dipakai saat tombol Lamar tidak ditemukan: justru jalur
+        itulah yang paling sering gagal (Indeed 84 dari 84 percobaan), jadi
+        bukti halaman harus tersimpan walau AUTO_APPLY_DEBUG tidak diisi.
+        Batas 5 berkas per sesi tetap berlaku.
+        """
+        if (not config.auto_apply_debug and not paksa) or self.debug_dumps >= 5:
             return
 
         try:
@@ -2118,8 +2124,11 @@ class AutoApplier:
 
             if apply_button is None:
                 # Bisa jadi halaman memang tidak menawarkan lamar di web
-                # (mis. Glints "Lamar 1x tap di aplikasi").
+                # (mis. Glints "Lamar 1x tap di aplikasi"), atau situs meminta
+                # login/verifikasi lebih dulu. Simpan bukti halaman supaya
+                # penyebabnya terbaca, bukan ditebak.
                 alasan = self._blocker()
+                self._dump_debug(job, paksa=True)
 
                 return ApplyResult(
                     False,
