@@ -498,3 +498,29 @@ bersih.
 Batas jujur: semuanya teruji dengan objek tiruan (tanpa Chrome). Perilaku di
 situs sungguhan — terutama apakah cache 60 menit cukup segar untuk lowongan
 baru — baru ketahuan setelah dijalankan di PC Anda.
+
+---
+
+## 13. Perbaikan dari sesi nyata 12 Nov 2026 (JobStreet 2 lamaran dari 28 kandidat)
+
+Log sesi nyata dikirim pemakai. Tiga penyebab utama 50 lamaran/situs tidak
+tercapai, semuanya diperbaiki di sini.
+
+| Gejala di log | Penyebab | Perbaikan | Status |
+|---|---|---|---|
+| 26 dari 28 kandidat dilewati: "please address the following issues: how many years' experience …" | Ingatan jawaban hanya mencocokkan kalimat yang mirip ≥ 86%; JobStreet menanyakan hal sama dengan kalimat berbeda ("as a Purchasing Specialist" vs "in a Purchasing role") | `jawaban.maksud()` + `_cari_berdasarkan_maksud()`: cocokkan jenis pertanyaan (pengalaman/gaji/pendidikan/bahasa/hak kerja/industri/ketersediaan/SIM) + subjeknya, tanpa mengarang jawaban baru | FIXED + TESTED (`tests/test_jawaban_maksud.py`) |
+| Pertanyaan gaji tetap kosong walau ingatan berisi "Rp 5 Jt" | Pilihan formulir berbunyi "Rp 5 jt"/"Rp 5 million"/"Rp 5.000.000", pencocokan hanya berbasis teks | `jawaban.angka_dari_teks()` + `sama_nilai()`; `AutoApplier._dari_ingatan` memilih opsi dengan nilai yang sama | FIXED + TESTED |
+| Indeed: captcha di setiap pencarian, 3 jam untuk 0 lowongan | Setelah menunggu 60 detik, bot tetap melanjutkan 180 kombinasi | `IndeedBot.captcha_berturut`; riset berhenti setelah 2 captcha berturut-turut dengan pesan yang jelas | FIXED + TESTED (`tests/test_indeed_captcha.py`) |
+| Glints: "Chrome instance exited" → profil baru → login diminta → 0 lamaran | Profil Chrome situs sebelumnya belum dilepas | `browser.profil_terkunci()` + `tunggu_profil_bebas()` (maks 8 detik) dan pesan agar menutup Chrome | FIXED + TESTED (`tests/test_profil_chrome.py`) |
+
+Keputusan pemakai pada sesi ini:
+- pencocokan jawaban: **berdasarkan maksud, tanpa mengarang jawaban baru**;
+- panjang riset: **tidak diubah** (tetap menyeluruh), jadi riset masih bisa
+  memakan 2+ jam bila kata kunci × lokasi banyak.
+
+Tes: 678 → **694 passed, 1 skipped** (+16: 8 maksud/angka, 2 captcha Indeed,
+6 profil Chrome). Gate ruff bersih.
+
+Batas jujur: semua diuji dengan objek tiruan. Efek nyata — berapa kandidat yang
+berhasil dikirim setelah pencocokan maksud — hanya ketahuan dari sesi
+berikutnya di PC Anda; kirimkan log lagi bila angkanya belum membaik.

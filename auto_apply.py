@@ -1260,6 +1260,13 @@ class AutoApplier:
             ):
                 return item, True
 
+        # Toleransi angka: "Rp 5 Jt" == "Rp 5 jt" == "Rp 5 million" ==
+        # "Rp 5.000.000". Ini yang membuat pertanyaan gaji berhenti dilewati
+        # padahal jawabannya sudah pernah diberikan.
+        for item in opsi or []:
+            if jawaban.sama_nilai(ingat, item):
+                return item, True
+
         return "", False
 
     def _potret_jawaban(self) -> dict:

@@ -352,11 +352,16 @@ class IndeedApplier(AutoApplier):
 class IndeedBot:
     """Mesin Indeed: buka pencarian, baca kartu, lalu melamar."""
 
+    # Setelah sekian halaman berturut-turut tetap captcha, riset dihentikan:
+    # menunggu 60 detik × 180 kombinasi = 3 jam untuk nol lowongan.
+    BATAS_CAPTCHA_BERTURUT = 2
+
     def __init__(self):
         self.driver = None
         self.filters = JobFilter()
         self.login_expired = False
         self.diagnosa_terakhir: dict = {}
+        self.captcha_berturut = 0
 
     # ------------------------------ browser ---------------------------
     def init_browser(self):
@@ -472,6 +477,13 @@ class IndeedBot:
             batas = time.time() + 60
             while time.time() < batas and self.kena_captcha():
                 time.sleep(2)
+
+            if self.kena_captcha():
+                self.captcha_berturut += 1
+            else:
+                self.captcha_berturut = 0
+        else:
+            self.captcha_berturut = 0
 
         jumlah = self._tunggu_kartu()
         if jumlah:
@@ -809,6 +821,9 @@ def kumpulkan_lowongan(bot: IndeedBot, kata_kunci: list[str],
     total = len(daftar_lokasi) * len(kata_kunci)
     selesai = 0
     mulai = time.monotonic()
+    batas_captcha = getattr(
+        bot, "BATAS_CAPTCHA_BERTURUT", IndeedBot.BATAS_CAPTCHA_BERTURUT
+    )
 
     console.print(
         f"[bold blue]RISET INDEED[/] — {len(kata_kunci)} kata kunci × "
@@ -817,7 +832,13 @@ def kumpulkan_lowongan(bot: IndeedBot, kata_kunci: list[str],
     )
 
     for location in daftar_lokasi:
+        if getattr(bot, "captcha_berturut", 0) >= batas_captcha:
+            break
+
         for keyword in kata_kunci:
+            if getattr(bot, "captcha_berturut", 0) >= batas_captcha:
+                break
+
             kata = str(keyword or "").strip()
             if not kata:
                 continue
@@ -866,6 +887,14 @@ def kumpulkan_lowongan(bot: IndeedBot, kata_kunci: list[str],
                 f"{len(lowongan)} lowongan, {lama:.0f} detik berlalu — "
                 f"perkiraan sisa {sisa:.0f} detik.[/]"
             )
+
+    if getattr(bot, "captcha_berturut", 0) >= batas_captcha:
+        console.print(
+            "[bold yellow]Riset Indeed dihentikan:[/] captcha/verifikasi muncul "
+            f"{batas_captcha} kali berturut-turut. Selesaikan verifikasi di "
+            "jendela Chrome (atau tunggu beberapa saat), lalu jalankan "
+            "Indeed lagi — sisa kuota tidak terpengaruh."
+        )
 
     sebelum = len(lowongan)
     lowongan = dedupe_jobs(lowongan)
