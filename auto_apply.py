@@ -488,12 +488,20 @@ class AutoApplier:
     already_texts = ALREADY_TEXTS
     galat_situs_texts = GALAT_SITUS_TEXTS
 
+    # Formulir lamaran yang berada di dalam iframe (Indeed Apply / smartapply).
+    # JobStreet memakai satu halaman penuh, jadi daftar ini kosong di sana dan
+    # seluruh alur lama berjalan seperti sebelumnya.
+    kerangka_lamaran_selectors: tuple = ()
+    kerangka_lamaran_host: tuple = ()
+    kerangka_timeout: float = 8.0
+
     def __init__(self, driver, wait=None):
         self.driver = driver
         self.wait = wait
         self.step_timeout = config.auto_apply_step_timeout
         self.submit_timeout = config.auto_apply_submit_timeout
         self.debug_dumps = 0
+        self.di_kerangka = False
 
     # ------------------------------------------------------------------
     # Utilitas elemen
@@ -619,6 +627,71 @@ class AutoApplier:
     def _cari_tombol_lamar(self):
         """Tombol untuk masuk ke alur lamaran."""
         return self._find_clickable(self.apply_selectors, self.apply_texts)
+
+    def _keluar_kerangka(self) -> None:
+        """Kembali ke dokumen utama sebelum membuka lowongan berikutnya."""
+        self.di_kerangka = False
+        with contextlib.suppress(Exception):
+            self.driver.switch_to.default_content()
+
+    def _masuk_kerangka_lamaran(self) -> str:
+        """Masuk ke iframe formulir lamaran bila situs memakainya.
+
+        Beberapa situs (Indeed Apply / smartapply.indeed.com) menaruh formulir
+        lamaran di dalam iframe. Tanpa masuk ke iframe, seluruh pencarian
+        tombol dan isian hanya melihat halaman luar, sehingga alur berakhir
+        "tidak dikenali" dan lamaran tidak pernah terkirim.
+
+        Kembalikan "" bila tidak ada iframe (perilaku JobStreet tidak berubah)
+        atau bila berhasil masuk; kembalikan alasan bila gagal.
+        """
+        selectors = getattr(self, "kerangka_lamaran_selectors", ())
+        if not selectors:
+            return ""
+
+        batas = time.time() + self.kerangka_timeout
+        galat = ""
+
+        while time.time() < batas:
+            for selector in selectors:
+                for element in self._find_all(selector):
+                    if not self._visible(element):
+                        continue
+
+                    alamat = ""
+                    with contextlib.suppress(Exception):
+                        alamat = (element.get_attribute("src") or "").strip()
+
+                    if not self._kerangka_diizinkan(alamat):
+                        continue
+
+                    try:
+                        self.driver.switch_to.frame(element)
+                    except Exception as exc:
+                        galat = (
+                            "Formulir lamaran ada di dalam iframe tetapi tidak "
+                            f"bisa dibuka otomatis: {exc}"
+                        )
+                        continue
+
+                    self.di_kerangka = True
+                    console.print(
+                        "[dim]   formulir lamaran ada di iframe; masuk ke iframe[/]"
+                    )
+                    return ""
+
+            time.sleep(0.4)
+
+        return galat
+
+    def _kerangka_diizinkan(self, alamat: str) -> bool:
+        """Saring iframe: hanya iframe formulir milik situs ini."""
+        host = getattr(self, "kerangka_lamaran_host", ())
+        if not host:
+            return True
+        if not alamat:
+            return True
+        return any(nama in alamat for nama in host)
 
     def _sedang_memproses(self) -> bool:
         """True bila halaman menampilkan penanda "sedang dikirim"."""
@@ -1994,6 +2067,9 @@ class AutoApplier:
         if not url:
             return ApplyResult(False, "error", "URL lowongan kosong")
 
+        # Lowongan sebelumnya bisa saja meninggalkan browser di dalam iframe.
+        self._keluar_kerangka()
+
         try:
             self.driver.get(url)
             time.sleep(0.8)
@@ -2066,6 +2142,13 @@ class AutoApplier:
                     "Lamaran dialihkan ke situs lain "
                     f"({self._external_host()}) — dilewati",
                 )
+
+            # Indeed Apply menampilkan formulirnya di iframe; masuk dulu agar
+            # isian dan tombol Kirim bisa ditemukan.
+            galat_kerangka = self._masuk_kerangka_lamaran()
+            if galat_kerangka:
+                self._dump_debug(job)
+                return ApplyResult(False, "manual_required", galat_kerangka)
 
             review_page = self._is_review_page()
             deadline = time.time() + (

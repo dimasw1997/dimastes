@@ -341,6 +341,17 @@ class IndeedApplier(AutoApplier):
     success_texts = SUKSES_INDEED
     already_texts = SUDAH_DILAMAR_TEXTS
 
+    # Indeed Apply menampilkan formulir lamaran di dalam iframe smartapply.
+    # Tanpa masuk ke iframe ini, tombol "Lanjutkan"/"Kirim lamaran" tidak
+    # pernah terlihat sehingga semua lamaran berakhir "perlu manual".
+    kerangka_lamaran_selectors = (
+        "iframe#indeedapply-modal-iframe",
+        "iframe[id*='indeedapply']",
+        "iframe[src*='indeedapply']",
+        "iframe[src*='smartapply']",
+    )
+    kerangka_lamaran_host = ("indeed.com", "indeedapply")
+
     def __init__(self, driver, wait=None):
         super().__init__(driver, wait)
 

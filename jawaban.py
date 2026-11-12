@@ -344,7 +344,7 @@ def _cari_berdasarkan_maksud(pertanyaan: str) -> str | None:
     if not jenis:
         return None
 
-    inti = subjek(pertanyaan)
+    inti = subjek_utama(pertanyaan)
     terbaik = None
     skor_terbaik = -1.0
 
@@ -355,11 +355,16 @@ def _cari_berdasarkan_maksud(pertanyaan: str) -> str | None:
         if not jawaban_lama or keluarga(kunci_lama) != jenis:
             continue
 
-        inti_lama = subjek(kunci_lama)
+        inti_lama = subjek_utama(kunci_lama)
         if not _subjek_cocok(inti, inti_lama):
             continue
 
+        # Subjek dibandingkan tanpa kata tingkat jabatan, supaya "purchasing
+        # staff" dan "purchasing specialist" bernilai sama dan pemenangnya
+        # ditentukan jumlah pemakaian (ajek, bukan tebak-tebakan).
         skor = SequenceMatcher(None, inti, inti_lama).ratio()
+        skor += min(int(baris.get("dipakai") or 0), 20) / 1000  # stabil
+
         if skor > skor_terbaik:
             terbaik, skor_terbaik = baris, skor
 
@@ -436,8 +441,27 @@ def angka_dari_teks(teks) -> tuple[float, str] | None:
     return None
 
 
+# Ungkapan yang membatasi nilai: "kurang dari 1 tahun" BUKAN "1 tahun".
+_PENYANGKAL_NILAI = (
+    "kurang dari",
+    "less than",
+    "no experience",
+    "tanpa pengalaman",
+    "tidak berpengalaman",
+    "belum berpengalaman",
+)
+
+
+def _bersyarat(teks) -> bool:
+    teks = bersihkan_teks(teks).casefold()
+    return any(pola in teks for pola in _PENYANGKAL_NILAI)
+
+
 def sama_nilai(a, b) -> bool:
     """Dua teks menyebut angka & satuan yang sama ("Rp 5 Jt" = "Rp 5 million")."""
+    if _bersyarat(a) or _bersyarat(b):
+        return kunci_pertanyaan(a) == kunci_pertanyaan(b)
+
     nilai_a = angka_dari_teks(a)
     nilai_b = angka_dari_teks(b)
 
@@ -447,8 +471,11 @@ def sama_nilai(a, b) -> bool:
     if nilai_a[1] != nilai_b[1]:
         return False
 
+    # Toleransi hanya pembulatan relatif 1%: "2 tahun" dan "3 tahun" BUKAN
+    # nilai yang sama. Toleransi absolut 1 (versi sebelumnya) membuat semua
+    # angka 0-4 tahun dianggap sama.
     selisih = abs(nilai_a[0] - nilai_b[0])
-    return selisih <= max(1.0, nilai_a[0] * 0.01)
+    return selisih <= max(1e-9, nilai_a[0] * 0.01)
 
 
 def _aktif() -> bool:
@@ -479,12 +506,24 @@ def cari(pertanyaan: str) -> str | None:
         db.tandai_jawaban_dipakai(kunci)
         return str(tersimpan["jawaban"])
 
-    # Cadangan: pertanyaan yang mirip (mis. salah ketik / tanda baca berubah).
+    # Cadangan 1: pertanyaan sejenis dengan kalimat berbeda
+    # ("as a Purchasing Specialist" vs "in a Purchasing role"). Didahulukan
+    # sebelum pencocokan kemiripan teks karena cara ini membandingkan MAKSUD
+    # (jenis + subjek) sehingga tidak bergantung pada selisih kata "staff"
+    # atau "specialist" — sumber pilihan yang berubah-ubah.
+    hasil = _cari_berdasarkan_maksud(pertanyaan)
+    if hasil:
+        return hasil
+
+    # Cadangan 2: pertanyaan yang mirip (mis. salah ketik / tanda baca berubah).
     terbaik = None
     skor_terbaik = 0.0
 
     for baris in db.daftar_jawaban():
         skor = _mirip_kunci(pertanyaan, baris.get("kunci") or "")
+        # Imbuhan kecil dari jumlah pemakaian: kalau dua pertanyaan sama
+        # miripnya, jawaban yang paling sering dipakai yang menang (ajek).
+        skor += min(int(baris.get("dipakai") or 0), 20) / 1000
         if skor > skor_terbaik:
             terbaik, skor_terbaik = baris, skor
 
@@ -492,9 +531,7 @@ def cari(pertanyaan: str) -> str | None:
         db.tandai_jawaban_dipakai(terbaik["kunci"])
         return str(terbaik["jawaban"])
 
-    # Cadangan terakhir: pertanyaan sejenis dengan kalimat berbeda
-    # ("as a Purchasing Specialist" vs "in a Purchasing role").
-    return _cari_berdasarkan_maksud(pertanyaan)
+    return None
 
 
 def ingat(pertanyaan: str, jawaban: str, jenis: str = "",
@@ -517,6 +554,154 @@ def ingat(pertanyaan: str, jawaban: str, jenis: str = "",
 def daftar() -> list[dict]:
     """Semua jawaban tersimpan (untuk ditampilkan / diperiksa)."""
     return db.daftar_jawaban()
+
+
+# Kata tingkat jabatan yang tidak mengubah subjek pembicaraan
+# ("purchasing staff" dan "purchasing specialist" sama-sama soal purchasing).
+_KATA_JABATAN = frozenset(
+    (
+        "staff", "staf", "specialist", "spesialis", "officer",
+        "executive", "assistant", "asisten", "supervisor", "spv",
+        "manager", "manajer", "admin", "administrator", "representative",
+        "rep", "clerk", "helper", "analyst", "analys",
+        "senior", "junior", "intern", "magang", "role",
+        "posisi",
+    )
+)
+
+# Jenis pertanyaan yang tidak perlu dibedakan subjeknya: semua pertanyaan gaji
+# pada dasarnya satu pertanyaan.
+_KELUARGA_TANPA_SUBJEK = frozenset(("gaji", "hak_kerja", "ketersediaan", "sim"))
+
+
+def subjek_utama(pertanyaan: str) -> str:
+    """Subjek tanpa kata tingkat jabatan: "purchasing specialist" → "purchasing"."""
+    kata = [k for k in subjek(pertanyaan).split() if k not in _KATA_JABATAN]
+    return " ".join(kata)
+
+
+# ---------------------------------------------------------- rapikan konflik ---
+def konflik(daftar: list[dict] | None = None) -> list[dict]:
+    """Kelompok jawaban yang maksudnya sama tetapi nilainya berbeda.
+
+    Contoh nyata (sesi 12 Nov 2026): pertanyaan pengalaman purchasing dijawab
+    "Less than 1 year", "1 year", "2 tahun", dan "3 years" di lowongan
+    berbeda. Dengan pencocokan berdasarkan maksud, bot bisa memilih salah
+    satunya secara berubah-ubah — jadi konfliknya harus dirapikan dulu.
+    """
+    baris = daftar if daftar is not None else db.daftar_jawaban()
+    kelompok: dict[tuple[str, str], dict] = {}
+
+    for item in baris:
+        pertanyaan = str(item.get("pertanyaan") or item.get("kunci") or "")
+        nilai = str(item.get("jawaban") or "").strip()
+        jenis = keluarga(pertanyaan)
+
+        if not jenis or not nilai:
+            continue
+
+        inti = "" if jenis in _KELUARGA_TANPA_SUBJEK else subjek_utama(pertanyaan)
+        kunci_kelompok = (jenis, inti)
+
+        data = kelompok.setdefault(
+            kunci_kelompok,
+            {"keluarga": jenis, "subjek": inti, "nilai": {}, "pertanyaan": []},
+        )
+        for nilai_lain in list(data["nilai"]):
+            if sama_nilai(nilai, nilai_lain) or (
+                kunci_pertanyaan(nilai) == kunci_pertanyaan(nilai_lain)
+            ):
+                nilai = nilai_lain
+                break
+
+        catatan = data["nilai"].setdefault(nilai, {"jumlah": 0, "dipakai": 0})
+        catatan["jumlah"] += 1
+        catatan["dipakai"] += int(item.get("dipakai") or 0)
+        data["pertanyaan"].append(pertanyaan)
+
+    hasil = []
+
+    for data in kelompok.values():
+        if len(data["nilai"]) < 2:
+            continue
+
+        data["jumlah"] = len(data["pertanyaan"])
+        hasil.append(data)
+
+    hasil.sort(key=lambda item: (-item["jumlah"], item["subjek"]))
+    return hasil
+
+
+def _nilai_terbanyak(nilai: dict) -> str:
+    """Nilai yang paling sering dipakai (tie-break: jumlah lalu abjad)."""
+    return sorted(
+        nilai.items(),
+        key=lambda item: (-item[1]["dipakai"], -item[1]["jumlah"], item[0]),
+    )[0][0]
+
+
+def tetapkan(subjek_dicari: str, nilai_baru: str,
+            daftar: list[dict] | None = None) -> int:
+    """Samakan semua jawaban dalam satu kelompok menjadi satu nilai.
+
+    Kembalikan jumlah jawaban yang diubah. `subjek_dicari` boleh sebagian,
+    mis. "purchasing" akan mengenai "purchasing specialist" juga. Hanya
+    jawaban dengan jenis pertanyaan yang sama yang diubah, supaya nilai
+    "3 years" tidak ikut masuk ke pertanyaan soal industri purchasing.
+    """
+    nilai_baru = str(nilai_baru or "").strip()
+    if not nilai_baru:
+        return 0
+
+    dicari = (
+        subjek_utama(subjek_dicari)
+        or subjek(subjek_dicari)
+        or str(subjek_dicari or "").strip().casefold()
+    )
+    if not dicari:
+        return 0
+
+    baris = daftar if daftar is not None else db.daftar_jawaban()
+
+    # Kumpulkan calon sasaran, kelompokkan per jenis pertanyaan.
+    calon: dict[str, list[dict]] = {}
+    for item in baris:
+        pertanyaan = str(item.get("pertanyaan") or item.get("kunci") or "")
+        inti = subjek_utama(pertanyaan) or subjek_utama(str(item.get("kunci") or ""))
+        jenis = keluarga(pertanyaan)
+
+        cocok = dicari in inti or inti in dicari or dicari == jenis
+        if not cocok or not jenis:
+            continue
+
+        calon.setdefault(jenis, []).append(item)
+
+    if not calon:
+        return 0
+
+    # Bila beberapa jenis ikut cocok, pilih yang paling banyak barisnya.
+    jenis_terpilih = sorted(calon, key=lambda j: (-len(calon[j]), j))[0]
+
+    jumlah = 0
+    for item in calon[jenis_terpilih]:
+        pertanyaan = str(item.get("pertanyaan") or "")
+        kunci = str(item.get("kunci") or "")
+        if not kunci:
+            continue
+
+        if str(item.get("jawaban") or "").strip() == nilai_baru:
+            continue
+
+        if db.simpan_jawaban(
+            kunci,
+            pertanyaan or kunci,
+            nilai_baru,
+            str(item.get("jenis") or ""),
+            "manual",
+        ):
+            jumlah += 1
+
+    return jumlah
 
 
 def lupakan(pertanyaan: str) -> bool:

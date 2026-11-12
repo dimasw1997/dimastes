@@ -524,3 +524,42 @@ Tes: 678 → **694 passed, 1 skipped** (+16: 8 maksud/angka, 2 captcha Indeed,
 Batas jujur: semua diuji dengan objek tiruan. Efek nyata — berapa kandidat yang
 berhasil dikirim setelah pencocokan maksud — hanya ketahuan dari sesi
 berikutnya di PC Anda; kirimkan log lagi bila angkanya belum membaik.
+
+---
+
+## 14. Sesi 12 Nov 2026 (lanjutan): jawaban bertentangan & Indeed 0 terkirim
+
+Angka sesi nyata yang dilaporkan pemakai: JobStreet 68 terkirim, Glints 38,
+**Indeed 0 dari 381** (297 disaring filter, 84 "perlu manual", 0 gagal).
+
+### 14.1 Jawaban bertentangan (prasyarat sebelum menelusuri Indeed)
+
+| Gejala | Penyebab | Perbaikan | Status |
+|---|---|---|---|
+| Pertanyaan pengalaman purchasing dijawab berbeda-beda: "Less than 1 year", "1 year", "2 tahun", "3 years" | Ingatan menyimpan satu nilai per kalimat; kalimat berbeda = baris berbeda | `jawaban.konflik()` mengelompokkan per jenis+subjek (tanpa kata tingkat jabatan, jadi purchasing staff/specialist ikut satu kelompok) | FIXED + TESTED (`tests/test_jawaban_konflik.py`) |
+| Nilai terpilih berubah-ubah antar lamaran | `_cari_berdasarkan_maksud` memakai kemiripan teks; selisih kata "staff"/"specialist" menentukan pemenang | Subjek dibandingkan tanpa kata jabatan + tie-break `min(dipakai,20)/1000`; pencocokan maksud didahulukan sebelum kemiripan teks | FIXED + TESTED |
+| "Rp 5 Jt" dan "Rp 5 million" dulu dianggap sama, **tetapi** "2 tahun" juga dianggap sama dengan "3 tahun" | `sama_nilai` punya toleransi absolut 1 | Toleransi jadi relatif 1%; "kurang dari/less than" tidak disamakan dengan angka polos | FIXED + TESTED |
+| Tidak ada cara menyamakan jawaban tanpa mengarang | — | `jawaban.tetapkan()` + `cli.py jawaban --tetapkan "subjek=nilai"`, dan `--rapikan` untuk tabel konflik | FIXED + TESTED |
+
+**Nilai resmi per subjek belum ditetapkan** — itu keputusan pemakai. `--rapikan`
+hanya menampilkan usulan (nilai yang paling sering dipakai), bukan memilih
+sendiri.
+
+### 14.2 Indeed 0 terkirim
+
+| Gejala | Penyebab yang bisa dipastikan dari kode | Perbaikan | Status |
+|---|---|---|---|
+| 84 lamaran Indeed berakhir "perlu manual", 0 terkirim | Indeed Apply menaruh formulir di iframe `smartapply.indeed.com`; `AutoApplier` hanya mencari tombol/isian di dokumen utama, jadi alur tidak pernah dikenali | Hook aditif `_masuk_kerangka_lamaran()` (default kosong → JobStreet tidak berubah) + selector iframe Indeed; `_keluar_kerangka()` sebelum tiap lowongan | FIXED + TESTED (driver tiruan, `tests/test_indeed_kerangka.py`) |
+| Penyebab pasti per lowongan tidak terlihat dari `history` | Riwayat hanya menampilkan status, bukan `applications.notes` | `history --alasan` menampilkan kolom Alasan | FIXED + TESTED (`tests/test_riwayat_alasan.py`) |
+
+Batas jujur: perbaikan iframe **belum teruji di situs sungguhan**. Bila Indeed
+masih 0 setelah sesi berikutnya, jalankan
+`python cli.py history --situs indeed --alasan --limit 20` dan kirimkan
+hasilnya — kolom Alasan menyebut penyebabnya apa adanya (mis. "Tombol Lamar
+tidak ditemukan", "Lamar di situs perusahaan", atau "Formulir meminta isian
+yang belum bisa dijawab otomatis: …").
+
+Tes: 694 → **731 passed, 1 skipped** (+37: 23 konflik jawaban, 10 kerangka
+iframe, 4 riwayat alasan). Gate ruff `E9,F,E501,I,B,SIM,ISC` bersih untuk
+`jawaban.py`, `auto_apply.py`, `indeed.py`, `cli.py`, `database.py`, dan tes
+baru.

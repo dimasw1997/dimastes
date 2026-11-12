@@ -1051,6 +1051,7 @@ class Database:
                        COALESCE(NULLIF(TRIM(j.company), ''), 'Tidak diketahui')
                            AS company,
                        a.status,
+                       COALESCE(a.notes, '') AS notes,
                        COALESCE(j.url, '') AS url
                 FROM applications a
                 LEFT JOIN jobs j ON a.job_id = j.job_id

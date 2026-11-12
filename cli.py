@@ -463,9 +463,18 @@ def buka_dashboard(port: int = 0, tanpa_browser: bool = False):
 
 
 def kelola_jawaban(hapus: str = "", reset: bool = False,
-                   isi: str = ""):
-    """Lihat, tambah, atau hapus ingatan jawaban formulir."""
+                   isi: str = "", rapikan: bool = False,
+                   tetapkan: str = ""):
+    """Lihat, tambah, hapus, atau rapikan ingatan jawaban formulir."""
     import jawaban as memori
+
+    if rapikan:
+        _tampilkan_konflik(memori)
+        return
+
+    if tetapkan:
+        _tetapkan_jawaban(memori, tetapkan)
+        return
 
     if reset:
         jumlah = memori.lupakan_semua()
@@ -522,6 +531,79 @@ def kelola_jawaban(hapus: str = "", reset: bool = False,
         '[dim]Hapus satu: jawaban --hapus "teks pertanyaan" · '
         "kosongkan: jawaban --reset[/]"
     )
+
+
+def _tampilkan_konflik(memori) -> None:
+    """Tabel kelompok jawaban yang maksudnya sama tetapi nilainya berbeda."""
+    daftar = memori.konflik()
+
+    if not daftar:
+        console.print(
+            "[green]Tidak ada jawaban yang bertentangan.[/] Semua pertanyaan "
+            "sejenis sudah dijawab dengan nilai yang sama."
+        )
+        return
+
+    tabel = Table(
+        title=f"Jawaban bertentangan ({len(daftar)} kelompok)",
+        caption=(
+            'Pilih satu nilai resmi per kelompok, lalu jalankan: '
+            'jalankan.bat jawaban --tetapkan "subjek=nilai"'
+        ),
+    )
+    tabel.add_column("Jenis", style="cyan")
+    tabel.add_column("Subjek", style="cyan", overflow="fold")
+    tabel.add_column("Nilai yang tersimpan", overflow="fold")
+    tabel.add_column("Disarankan", overflow="fold")
+
+    for kelompok in daftar:
+        nilai = "\n".join(
+            f"{teks} (dipakai {info['dipakai']}x, {info['jumlah']} baris)"
+            for teks, info in sorted(
+                kelompok["nilai"].items(),
+                key=lambda item: (-item[1]["dipakai"], -item[1]["jumlah"], item[0]),
+            )
+        )
+        tabel.add_row(
+            kelompok["keluarga"],
+            kelompok["subjek"] or "(semua)",
+            nilai,
+            memori._nilai_terbanyak(kelompok["nilai"]),
+        )
+
+    console.print(tabel)
+    console.print(
+        "[dim]Disarankan = nilai yang paling sering dipakai. Ini hanya usulan; "
+        "jawaban resmi tetap Anda yang menentukan.[/]"
+    )
+
+
+def _tetapkan_jawaban(memori, isi: str) -> None:
+    """Samakan semua jawaban satu subjek: `--tetapkan "purchasing=3 years"`."""
+    if "=" not in isi:
+        console.print(
+            '[red]Format: jawaban --tetapkan "subjek=nilai"[/] '
+            'contoh: jawaban --tetapkan "purchasing=3 years"'
+        )
+        return
+
+    subjek, nilai = isi.split("=", 1)
+    subjek, nilai = subjek.strip(), nilai.strip()
+
+    if not subjek or not nilai:
+        console.print('[red]Subjek dan nilai tidak boleh kosong.[/]')
+        return
+
+    jumlah = memori.tetapkan(subjek, nilai)
+
+    if jumlah:
+        console.print(
+            f"[green]{jumlah} jawaban disamakan:[/] {subjek} = {nilai}"
+        )
+    else:
+        console.print(
+            f"[yellow]Tidak ada jawaban yang cocok dengan subjek:[/] {subjek}"
+        )
 
 
 def tabel_situs(judul: str = "Status per situs"):
@@ -1221,7 +1303,8 @@ def jalankan_run(situs: str = "jobstreet", max_pages: int = 0) -> None:
     )
 
 
-def show_applications(limit: int = 50, situs: str = ""):
+def show_applications(limit: int = 50, situs: str = "",
+                      alasan: bool = False):
     rows = db.get_recent_applications(limit, situs=situs)
 
     judul = f"Riwayat Lamaran ({limit} terakhir)"
@@ -1232,18 +1315,25 @@ def show_applications(limit: int = 50, situs: str = ""):
     table.add_column("Posisi", style="white")
     table.add_column("Perusahaan", style="yellow")
     table.add_column("Status", style="green", no_wrap=True)
+    if alasan:
+        # Alasan yang dicatat bot dipakai untuk menelusuri kenapa lamaran
+        # berakhir "perlu manual" dan tidak pernah terkirim.
+        table.add_column("Alasan", overflow="fold")
 
     if not rows:
         console.print("[dim]Belum ada lamaran yang tercatat.[/]")
         return
 
     for row in rows:
-        table.add_row(
+        kolom = [
             row["applied_at"][:19],
             row["title"][:40],
             row["company"][:25],
             row["status"],
-        )
+        ]
+        if alasan:
+            kolom.append(str(row.get("notes") or ""))
+        table.add_row(*kolom)
 
     console.print(table)
 
@@ -1415,6 +1505,11 @@ if __name__ == "__main__":
         "--situs",
         default="",
         help="Saring satu situs: jobstreet, glints, indeed (kosong = semua)",
+    )
+    history_parser.add_argument(
+        "--alasan",
+        action="store_true",
+        help="Tampilkan alasan yang dicatat bot (untuk menelusuri kegagalan)",
     )
 
     uji_parser = subparsers.add_parser(
@@ -1690,6 +1785,16 @@ if __name__ == "__main__":
     jawab_parser.add_argument(
         "--isi", default="", help='Tambah manual: "pertanyaan=jawaban"'
     )
+    jawab_parser.add_argument(
+        "--rapikan",
+        action="store_true",
+        help="Tampilkan jawaban sejenis yang nilainya bertentangan",
+    )
+    jawab_parser.add_argument(
+        "--tetapkan",
+        default="",
+        help='Samakan satu kelompok: "subjek=nilai" (mis. "purchasing=3 years")',
+    )
 
     bl_parser = subparsers.add_parser(
         "blacklist",
@@ -1771,7 +1876,11 @@ if __name__ == "__main__":
     elif args.command == "set-env":
         atur_env(args.pasangan)
     elif args.command == "history":
-        show_applications(args.limit, getattr(args, "situs", ""))
+        show_applications(
+            args.limit,
+            getattr(args, "situs", ""),
+            getattr(args, "alasan", False),
+        )
     elif args.command == "uji-lamar":
         uji_lamar(args.url)
     elif args.command == "cek-logo":
@@ -1828,7 +1937,13 @@ if __name__ == "__main__":
         else:
             indeed_parser.print_help()
     elif args.command == "jawaban":
-        kelola_jawaban(args.hapus, args.reset, args.isi)
+        kelola_jawaban(
+            args.hapus,
+            args.reset,
+            args.isi,
+            getattr(args, "rapikan", False),
+            getattr(args, "tetapkan", ""),
+        )
     elif args.command == "blacklist":
         if args.hapus:
             nama = args.hapus.strip()
