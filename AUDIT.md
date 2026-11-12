@@ -624,3 +624,29 @@ bila verifikasi berulang di Chrome biasa sekalipun, itu penilaian jaringan,
 bukan bug aplikasi.
 
 Tes: 746 → **757 passed, 1 skipped** (+11), gate ruff bersih.
+
+---
+
+## 17. Paritas kombinasi riset Glints = JobStreet
+
+Permintaan pemakai: jumlah kombinasi riset Glints disamakan dengan JobStreet.
+Sebelumnya Glints hanya mencari per kata kunci (URL explore tanpa lokasi),
+jadi 20 kata kunci = 20 pencarian, sementara JobStreet 20 kata kunci x
+9 lokasi = 180 kombinasi. Itu juga sebabnya JobStreet mengumpulkan 3304
+lowongan dan Glints 1059.
+
+| Perubahan | Rincian |
+|---|---|
+| URL per lokasi | `.../explore?keyword=…&countryCode=ID&location=…` (plus satu bentuk cadangan) dicoba lebih dulu |
+| Kombinasi | `kumpulkan_lowongan()` dan loop riset `jalankan_glints()` kini `kata kunci × lokasi`, sama seperti JobStreet |
+| Cache | kunci cache membedakan lokasi, jadi hasil satu kota tidak menimpa kota lain |
+| Fallback aman | bila Glints mengabaikan `location` (tidak ada kartu), bot menandai `lokasi_didukung = False`, kembali ke pencarian nasional per kata kunci, dan **melewati sisa lokasi** supaya tidak mengulang kartu yang sama (bukan 9x kerja sia-sia) |
+| Tampilan | `glints run` mencetak "X kata kunci x Y lokasi = Z kombinasi" dan memberi tahu bila lokasi diabaikan |
+
+Batas jujur: dukungan parameter `location` di Glints **belum diuji di situs
+sungguhan** (tes memakai driver tiruan). Bila diabaikan, perilaku kembali
+seperti sebelumnya tanpa kerugian — hanya satu pesan tambahan di terminal.
+
+Tes: 757 → **767 passed, 1 skipped** (+10 di `tests/test_glints_lokasi.py`),
+ditambah penyesuaian 6 tes lama yang memakai bot tiruan (tanda tangan
+`cari()` kini menerima `location`). Gate ruff bersih.
