@@ -1303,7 +1303,8 @@ def jalankan_run(situs: str = "jobstreet", max_pages: int = 0) -> None:
     )
 
 
-def show_applications(limit: int = 50, situs: str = ""):
+def show_applications(limit: int = 50, situs: str = "",
+                      alasan: bool = False):
     rows = db.get_recent_applications(limit, situs=situs)
 
     judul = f"Riwayat Lamaran ({limit} terakhir)"
@@ -1314,18 +1315,25 @@ def show_applications(limit: int = 50, situs: str = ""):
     table.add_column("Posisi", style="white")
     table.add_column("Perusahaan", style="yellow")
     table.add_column("Status", style="green", no_wrap=True)
+    if alasan:
+        # Alasan yang dicatat bot dipakai untuk menelusuri kenapa lamaran
+        # berakhir "perlu manual" dan tidak pernah terkirim.
+        table.add_column("Alasan", overflow="fold")
 
     if not rows:
         console.print("[dim]Belum ada lamaran yang tercatat.[/]")
         return
 
     for row in rows:
-        table.add_row(
+        kolom = [
             row["applied_at"][:19],
             row["title"][:40],
             row["company"][:25],
             row["status"],
-        )
+        ]
+        if alasan:
+            kolom.append(str(row.get("notes") or ""))
+        table.add_row(*kolom)
 
     console.print(table)
 
@@ -1497,6 +1505,11 @@ if __name__ == "__main__":
         "--situs",
         default="",
         help="Saring satu situs: jobstreet, glints, indeed (kosong = semua)",
+    )
+    history_parser.add_argument(
+        "--alasan",
+        action="store_true",
+        help="Tampilkan alasan yang dicatat bot (untuk menelusuri kegagalan)",
     )
 
     uji_parser = subparsers.add_parser(
@@ -1863,7 +1876,11 @@ if __name__ == "__main__":
     elif args.command == "set-env":
         atur_env(args.pasangan)
     elif args.command == "history":
-        show_applications(args.limit, getattr(args, "situs", ""))
+        show_applications(
+            args.limit,
+            getattr(args, "situs", ""),
+            getattr(args, "alasan", False),
+        )
     elif args.command == "uji-lamar":
         uji_lamar(args.url)
     elif args.command == "cek-logo":

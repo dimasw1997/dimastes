@@ -753,7 +753,32 @@ python cli.py jawaban                                  # lihat semua
 python cli.py jawaban --isi "Microsoft Excel=Ahli"     # isi manual
 python cli.py jawaban --hapus "Microsoft Excel"        # hapus satu
 python cli.py jawaban --reset                          # kosongkan
+python cli.py jawaban --rapikan                        # lihat jawaban bertentangan
+python cli.py jawaban --tetapkan "purchasing=3 years"  # samakan satu kelompok
 ```
+
+#### Jawaban bertentangan: `--rapikan` lalu `--tetapkan`
+
+Karena pertanyaan yang maksudnya sama bisa dijawab berbeda di lowongan
+berbeda, ingatan bisa berisi beberapa nilai untuk satu hal — misalnya
+pengalaman purchasing tercatat "Less than 1 year", "1 year", "2 tahun", dan
+"3 years". Dengan pencocokan berdasarkan maksud, nilai yang terpilih bisa
+berubah-ubah antar-lowongan.
+
+`--rapikan` menampilkan tabel kelompok yang bertentangan beserta berapa kali
+tiap nilai dipakai, dan kolom **Disarankan** berisi nilai yang paling sering
+dipakai. Itu hanya usulan — **nilai resminya Anda yang menentukan**. Setelah
+memilih, samakan semuanya dengan `--tetapkan`:
+
+```bash
+python cli.py jawaban --rapikan
+python cli.py jawaban --tetapkan "purchasing=3 years"
+```
+
+Perintah `--tetapkan` hanya mengubah pertanyaan dengan jenis yang sama
+(pengalaman tidak akan diisi nilai gaji) dan menyamakan semua tingkat jabatan
+("purchasing staff", "purchasing specialist", asal subjeknya sama). Nilai yang
+setara angkanya ("Rp 5 Jt" dengan "Rp 5 million") tidak dianggap bertentangan.
 
 Perintah `python cli.py status` menampilkan berapa jawaban yang sudah
 tersimpan, jadi Anda bisa memastikan ingatannya aktif sebelum menjalankan sesi.
@@ -813,6 +838,25 @@ pada dua pencarian berturut-turut, **riset Indeed dihentikan** dengan pesan
 jelas — sebelumnya bot tetap mencoba 180 kombinasi (sekitar 3 jam) tanpa satu
 lowongan pun. Selesaikan verifikasi, lalu jalankan Indeed lagi; sisa kuota
 tidak terpengaruh.
+
+### Indeed: formulir lamaran ada di dalam iframe
+
+Indeed Apply menampilkan formulir lamarannya di **iframe** `smartapply.indeed.com`,
+bukan di halaman utama. Sebelumnya bot mencari tombol "Lanjutkan"/"Kirim
+lamaran" hanya di dokumen utama, sehingga alur tidak pernah dikenali dan
+lamaran Indeed berakhir "perlu manual" — di sesi 12 Nov 2026: 84 perlu manual,
+**0 terkirim**. Sekarang bot masuk ke iframe itu lebih dulu (maks 8 detik),
+lalu kembali ke dokumen utama sebelum membuka lowongan berikutnya.
+
+Bila setelah pembaruan ini Indeed masih 0 terkirim, jalankan
+
+```bash
+python cli.py history --situs indeed --alasan --limit 20
+```
+
+Kolom **Alasan** berisi catatan bot untuk tiap lamaran (mis. "Tombol Lamar
+tidak ditemukan di halaman" atau "Lowongan menggunakan 'Lamar di situs
+perusahaan'"), sehingga penyebabnya bisa dipastikan dari data, bukan dugaan.
 
 ### Chrome antar-situs
 
@@ -1237,6 +1281,7 @@ disebut.
 | `python cli.py run --auto --situs semua` | JobStreet → Glints → Indeed |
 | `python cli.py status` | ringkasan **terpisah per situs** (tanpa membuka browser) |
 | `python cli.py history --situs glints` | riwayat lamaran Glints saja |
+| `python cli.py history --situs indeed --alasan` | riwayat Indeed + alasan yang dicatat bot |
 | `python cli.py antrean --situs indeed` | antrean Indeed saja |
 | `python cli.py stats` | total keseluruhan + tabel per situs |
 
