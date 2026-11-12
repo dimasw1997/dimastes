@@ -16,6 +16,7 @@ pesan galatnya berisi langkah perbaikan yang bisa langsung dijalankan.
 
 import contextlib
 import shutil
+import time
 from pathlib import Path
 
 from rich.console import Console
@@ -69,6 +70,44 @@ def bersihkan_kunci_profil(profile: Path) -> list[str]:
             dihapus.append(nama)
 
     return dihapus
+
+
+def profil_terkunci(profile: Path) -> bool:
+    """True bila profil Chrome masih memegang berkas kunci (Chrome lain jalan)."""
+    if not profile.exists():
+        return False
+
+    for nama in BERKAS_KUNCI:
+        berkas = profile / nama
+        if berkas.exists() or berkas.is_symlink():
+            return True
+
+    return False
+
+
+def tunggu_profil_bebas(profile: Path, batas_detik: float = 8.0,
+                        jeda: float = 1.0) -> bool:
+    """Tunggu sampai profil tidak dikunci lagi; True bila akhirnya bebas.
+
+    Chrome yang baru ditutup butuh beberapa detik untuk melepas profil. Tanpa
+    jeda ini, situs berikutnya (Glints/Indeed) gagal membuka profil yang sama,
+    lalu turun ke profil baru yang belum login — sesi login hilang.
+    """
+    if not profil_terkunci(profile):
+        return True
+
+    batas = max(0.0, float(batas_detik))
+    langkah = max(0.1, float(jeda))
+    menunggu = 0.0
+
+    while menunggu < batas:
+        time.sleep(langkah)
+        menunggu += langkah
+
+        if not profil_terkunci(profile):
+            return True
+
+    return False
 
 
 def sembunyikan_otomasi(driver):
@@ -281,6 +320,18 @@ def buka_chrome(
 
         if path_profil is not None:
             console.print(f"[dim]Profil Chrome: {path_profil}[/]")
+
+            if not bersihkan and profil_terkunci(path_profil):
+                console.print(
+                    "[yellow]Profil Chrome masih dipakai Chrome lain — "
+                    "menunggu sampai tertutup...[/]"
+                )
+                if not tunggu_profil_bebas(path_profil):
+                    console.print(
+                        "[yellow]Profil masih terkunci setelah 8 detik. "
+                        "Tutup semua jendela Chrome lalu jalankan lagi agar "
+                        "sesi login tidak hilang.[/]"
+                    )
 
         try:
             driver = _buka(_opsi(headless_ke, path_profil))

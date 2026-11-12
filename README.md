@@ -766,6 +766,25 @@ baca, dan masih mengenali pertanyaan yang berubah sedikit (kemiripan teks
 ≥ 86%). Pertanyaan berbeda tetap dianggap berbeda — "Manajemen Rantai Pasokan"
 tidak akan memakai jawaban "Manajemen Persediaan".
 
+Sejak pembaruan 2026-11-12 ada pencocokan **berdasarkan maksud** untuk jenis
+pertanyaan terstruktur (pengalaman, gaji, pendidikan, bahasa, hak kerja,
+industri, ketersediaan, SIM). JobStreet sering menanyakan hal yang sama dengan
+kalimat berbeda:
+
+| Pertanyaan di lowongan | Jawaban yang dipakai |
+|---|---|
+| "How many years' experience do you have as a Purchasing Specialist?" | 1 year |
+| "How many years of experience do you have in a Purchasing role?" | 1 year (dipakai ulang) |
+| "Berapa tahun pengalaman kerjamu di bidang pengadaan?" | 1 year (dipakai ulang) |
+
+Untuk pilihan ganda bernilai angka, jawaban lama dicocokkan lewat nilainya —
+"Rp 5 Jt" = "Rp 5 million" = "Rp 5.000.000" — sehingga pertanyaan gaji tidak
+lagi dilewati hanya karena format angkanya berbeda.
+
+Aturan penting: bot **tidak mengarang jawaban baru**. Kalau jenis pertanyaannya
+belum pernah dijawab, lowongan tetap dilewati seperti sebelumnya. Pertanyaan
+persetujuan/hukum tetap tidak pernah diisi otomatis.
+
 ### Isian lamaran otomatis
 
 Bila formulir meminta cover letter atau berkas CV, isi dulu di `.env`:
@@ -783,6 +802,27 @@ manual).
 Pertanyaan pilihan wajib dari perusahaan (radio/select) **tidak** ditebak
 jawabannya, karena salah jawab lebih merugikan daripada tidak melamar.
 Lowongan seperti itu dilewati otomatis dan hanya dicatat di akhir sesi.
+Karena itu, makin lengkap ingatan jawaban Anda, makin sedikit lowongan yang
+dilewati — isi sekali lewat `python cli.py jawaban --isi "…=…"`.
+
+### Indeed: captcha berulang
+
+Indeed kadang menampilkan captcha/verifikasi. Bot menunggu sampai 60 detik
+supaya Anda bisa menyelesaikannya di jendela Chrome. Bila captcha tetap muncul
+pada dua pencarian berturut-turut, **riset Indeed dihentikan** dengan pesan
+jelas — sebelumnya bot tetap mencoba 180 kombinasi (sekitar 3 jam) tanpa satu
+lowongan pun. Selesaikan verifikasi, lalu jalankan Indeed lagi; sisa kuota
+tidak terpengaruh.
+
+### Chrome antar-situs
+
+JobStreet, Glints, dan Indeed memakai profil Chrome yang sama agar sesi login
+tersimpan. Setelah satu situs selesai, Chrome-nya ditutup, tetapi butuh
+beberapa detik untuk melepas profil. Bila profil masih terkunci, bot sekarang
+**menunggu sampai 8 detik** dan memberi tahu; sebelumnya ia langsung pindah ke
+profil baru yang belum login sehingga sesi Glints berakhir tanpa lamaran.
+Kalau pesan "Profil masih terkunci" muncul, tutup semua jendela Chrome lalu
+jalankan lagi.
 
 ### Mode otomatis (default)
 

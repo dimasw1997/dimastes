@@ -213,6 +213,244 @@ def perlu_konfirmasi(pertanyaan: str) -> bool:
     return bool(_konfirmasi.search(str(pertanyaan or "")))
 
 
+
+# ---------------------------------------------------------------------------
+# Pencocokan berdasarkan MAKSUD pertanyaan (keputusan pemakai 2026-11-12)
+#
+# JobStreet menanyakan hal yang sama dengan kalimat berbeda di tiap lowongan:
+#   "How many years' experience do you have as a Purchasing Specialist?"
+#   "How many years of experience do you have in a Purchasing role?"
+#   "Berapa tahun pengalaman kerjamu di bidang pengadaan?"
+# Kemiripan teksnya di bawah AMBANG_MIRIP sehingga jawaban yang SUDAH pernah
+# diberikan tidak terpakai, dan lamaran berhenti sebagai "perlu manual".
+#
+# Aturan ini hanya MEMAKAI ULANG jawaban yang sudah ada. Tidak ada jawaban
+# baru yang dikarang: kalau jenis pertanyaannya belum pernah dijawab, tetap
+# dikembalikan None dan lowongan dilewati seperti sebelumnya.
+# ---------------------------------------------------------------------------
+
+# Frasa pembuka yang tidak mengubah maksud pertanyaan.
+_PENGISI_MAKSUD = (
+    (
+        r"how many years of [a-z' ]{0,40}experience do you have"
+        r"( as| in| with| for)?"
+    ),
+    (
+        r"how many years'? [a-z' ]{0,40}experience do you have"
+        r"( as| in| with| for)?"
+    ),
+    (
+        r"berapa tahun pengalaman( kerja)?( mu| anda| kamu)?"
+        r"( sebagai| di bidang| dalam| untuk)?"
+    ),
+    r"do you have (any )?experience( in| with| as| working)?",
+    r"apakah (kamu|anda) (memiliki|punya) pengalaman( kerja)?( di| dalam)?",
+    r"have you (ever )?worked( in a role which requires experience with| as| in)?",
+    r"pernahkah (kamu|anda) bekerja( dalam peran| sebagai| di)?",
+    r"pengalaman( kerja)?( mu| anda| kamu)?( di| dalam| sebagai)?",
+    r"\b(role|posisi|peran|sebagai|as an?|in an?)\b",
+)
+
+_PENGISI_RE = re.compile("|".join(_PENGISI_MAKSUD), re.IGNORECASE)
+
+# Jenis pertanyaan terstruktur. Hanya jenis ini yang boleh dicocokkan lewat
+# maksud; pertanyaan terbuka/cerita tetap harus persis atau mirip sekali.
+KELUARGA_PERTANYAAN = (
+    ("pengalaman", r"\b(pengalaman|experience)\b"),
+    ("gaji", r"\b(gaji|salary|upah|pendapatan|compensation|remuneration)\b"),
+    (
+        "pendidikan",
+        r"\b(pendidikan|education|kualifikasi|qualification|gelar|degree)\b",
+    ),
+    ("bahasa", r"\b(bahasa|language|english|inggris|mandarin|jepang|japanese)\b"),
+    (
+        "hak_kerja",
+        r"\b(hak|right to work|warga negara|citizen|izin kerja|work permit)\b",
+    ),
+    ("industri", r"\b(industri|industry)\b"),
+    (
+        "ketersediaan",
+        r"\b(bersedia|kesediaan|available|availability|relokasi|relocate|shift)\b",
+    ),
+    ("sim", r"\b(sim|driving license)\b"),
+)
+
+_KELUARGA_RE = tuple(
+    (nama, re.compile(pola, re.IGNORECASE)) for nama, pola in KELUARGA_PERTANYAAN
+)
+
+# Ambang kemiripan subjek (mis. "purchasing" vs "purchasing specialist").
+AMBANG_SUBJEK = 0.70
+
+
+def keluarga(pertanyaan: str) -> str:
+    """Jenis pertanyaan: pengalaman, gaji, pendidikan, ... ("" bila umum)."""
+    teks = bersihkan_teks(pertanyaan)
+
+    for nama, pola in _KELUARGA_RE:
+        if pola.search(teks):
+            return nama
+
+    return ""
+
+
+# Istilah jabatan lintas bahasa, supaya "di bidang pengadaan" dan
+# "purchasing role" dianggap subjek yang sama.
+PADANAN_SUBJEK = {
+    "pengadaan": "purchasing",
+    "pembelian": "purchasing",
+    "gudang": "warehouse",
+    "persediaan": "inventory",
+    "perencanaan produksi": "production planning",
+    "administrasi": "admin",
+    "sumber daya manusia": "hr",
+    "keuangan": "finance",
+    "akuntansi": "accounting",
+}
+
+
+def subjek(pertanyaan: str) -> str:
+    """Inti pertanyaan tanpa frasa pembuka, mis. "purchasing specialist"."""
+    teks = bersihkan_teks(pertanyaan).casefold()
+    teks = _PENGISI_RE.sub(" ", teks)
+    teks = _TANDA_BACA.sub(" ", teks)
+    kata = [k for k in teks.split() if k not in _KATA_UMUM]
+    hasil = " ".join(kata)
+
+    for istilah, ganti in PADANAN_SUBJEK.items():
+        hasil = re.sub(rf"\b{istilah}\b", ganti, hasil)
+
+    return hasil.strip()
+
+
+def maksud(pertanyaan: str) -> tuple[str, str]:
+    return keluarga(pertanyaan), subjek(pertanyaan)
+
+
+def _subjek_cocok(a: str, b: str) -> bool:
+    """Dua subjek dianggap sama bila salah satu memuat yang lain."""
+    if not a or not b:
+        return True
+
+    if a in b or b in a:
+        return True
+
+    return SequenceMatcher(None, a, b).ratio() >= AMBANG_SUBJEK
+
+
+def _cari_berdasarkan_maksud(pertanyaan: str) -> str | None:
+    """Pakai jawaban lama untuk pertanyaan sejenis walau kalimatnya berbeda."""
+    jenis = keluarga(pertanyaan)
+    if not jenis:
+        return None
+
+    inti = subjek(pertanyaan)
+    terbaik = None
+    skor_terbaik = -1.0
+
+    for baris in db.daftar_jawaban():
+        jawaban_lama = str(baris.get("jawaban") or "").strip()
+        kunci_lama = str(baris.get("kunci") or "")
+
+        if not jawaban_lama or keluarga(kunci_lama) != jenis:
+            continue
+
+        inti_lama = subjek(kunci_lama)
+        if not _subjek_cocok(inti, inti_lama):
+            continue
+
+        skor = SequenceMatcher(None, inti, inti_lama).ratio()
+        if skor > skor_terbaik:
+            terbaik, skor_terbaik = baris, skor
+
+    if terbaik and terbaik.get("jawaban"):
+        db.tandai_jawaban_dipakai(terbaik["kunci"])
+        return str(terbaik["jawaban"])
+
+    return None
+
+
+# --------------------------------------------------------------- angka/nilai --
+# "Rp 5 Jt", "Rp 5 million", "Rp 5.000.000", "5 juta" → 5_000_000.
+_SATUAN_ANGKA = {
+    "jt": 1_000_000,
+    "juta": 1_000_000,
+    "jtan": 1_000_000,
+    "million": 1_000_000,
+    "mio": 1_000_000,
+    "rb": 1_000,
+    "ribu": 1_000,
+    "k": 1_000,
+    "tahun": 1,
+    "thn": 1,
+    "year": 1,
+    "years": 1,
+    "tahun)": 1,
+}
+
+_RIBUAAN = re.compile(r"^(\d{1,3})((?:[.,]\d{3})+)$")
+_ANGKA_SATUAN = re.compile(
+    r"(\d+(?:[.,]\d+)?)\s*(jt|juta|jtan|million|mio|ribu|rb|k|tahun|thn|years?|year)?"
+)
+
+# Kata yang tidak membedakan maksud pertanyaan.
+_KATA_UMUM = frozenset((
+    "a", "an", "the", "of", "in", "on", "for", "with", "you", "your",
+    "do", "does", "have", "has", "how", "many", "much", "kamu", "anda",
+    "mu", "yang", "di", "ke", "dari", "dan", "atau", "ini", "itu",
+    "adalah", "apakah", "berapa", "bidang", "role", "posisi", "peran",
+    "sebagai",
+))
+
+
+def angka_dari_teks(teks) -> tuple[float, str] | None:
+    """Nilai angka + satuan dari teks jawaban/opsi; None bila tidak ada angka."""
+    teks_bersih = bersihkan_teks(teks).casefold().replace("rp", " ")
+
+    for potong in re.split(r"[;/|]", teks_bersih):
+        potongan = potong.strip()
+        if not potongan:
+            continue
+
+        ribuan = _RIBUAAN.match(potongan.replace(" ", ""))
+        if ribuan:
+            return float(ribuan.group(1) + ribuan.group(2).replace(".", "")
+                         .replace(",", "")), "rupiah"
+
+        cocok = _ANGKA_SATUAN.search(potongan)
+        if not cocok:
+            continue
+
+        teks_angka = cocok.group(1).replace(",", ".")
+        satuan = (cocok.group(2) or "").strip()
+        nilai = float(teks_angka)
+        faktor = _SATUAN_ANGKA.get(satuan)
+
+        if faktor is None:
+            if "." in potongan and len(teks_angka.split(".")[-1]) == 3:
+                continue
+            return nilai, ""
+
+        return nilai * faktor, ("rupiah" if faktor >= 1_000 else "tahun")
+
+    return None
+
+
+def sama_nilai(a, b) -> bool:
+    """Dua teks menyebut angka & satuan yang sama ("Rp 5 Jt" = "Rp 5 million")."""
+    nilai_a = angka_dari_teks(a)
+    nilai_b = angka_dari_teks(b)
+
+    if not nilai_a or not nilai_b:
+        return False
+
+    if nilai_a[1] != nilai_b[1]:
+        return False
+
+    selisih = abs(nilai_a[0] - nilai_b[0])
+    return selisih <= max(1.0, nilai_a[0] * 0.01)
+
+
 def _aktif() -> bool:
     return bool(getattr(config, "ingat_jawaban", True))
 
@@ -254,7 +492,9 @@ def cari(pertanyaan: str) -> str | None:
         db.tandai_jawaban_dipakai(terbaik["kunci"])
         return str(terbaik["jawaban"])
 
-    return None
+    # Cadangan terakhir: pertanyaan sejenis dengan kalimat berbeda
+    # ("as a Purchasing Specialist" vs "in a Purchasing role").
+    return _cari_berdasarkan_maksud(pertanyaan)
 
 
 def ingat(pertanyaan: str, jawaban: str, jenis: str = "",
