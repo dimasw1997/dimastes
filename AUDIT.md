@@ -590,3 +590,37 @@ terkonfirmasi** — tes memakai driver tiruan. Bukti akan tersedia otomatis di
 diperbaiki berdasarkan HTML asli.
 
 Tes: 731 → **746 passed, 1 skipped** (+15), gate ruff bersih.
+
+---
+
+## 16. Blokir Cloudflare pada Indeed (bukti layar, 2026-11-08)
+
+Pemakai mengirim tangkapan layar: jendela Chrome bot menampilkan
+**"Diperlukan Verifikasi Tambahan"** milik Cloudflare (ID Ray
+`a5956cc5fbed9fad`) dengan *spinner* "Melakukan verifikasi…", sementara
+terminal mencatat `Indeed menampilkan verifikasi/captcha` pada setiap
+kombinasi (1/180, 0 lowongan, perkiraan sisa ±5943 detik).
+
+Dua koreksi penting atas analisis sebelumnya:
+
+1. Dugaan "sesi login habis" **tidak terbukti** — pada layar, Indeed
+   menampilkan tombol "Masuk", jadi memang tidak login; tetapi penyebab
+   kegagalan 84 lamaran adalah **halaman tantangan Cloudflare** yang tidak
+   punya tombol Lamar sama sekali, bukan tombol yang salah selector.
+2. Perbaikan deteksi verifikasi (`28ed3e2`) **tidak mengenali** halaman ini:
+   tokennya `"verifikasi anda"`, sedangkan halaman berbunyi
+   *"Diperlukan Verifikasi Tambahan"*. Celah ini ditutup di bagian ini.
+
+| Gejala | Penyebab | Perbaikan | Status |
+|---|---|---|---|
+| Riset Indeed 1/180, 0 lowongan, ±5943 detik | Bot menunggu 60 detik lalu lanjut ke kombinasi berikutnya; tantangan Cloudflare muncul di semua kombinasi | `PENANDA_BLOKIR_CLOUDFLARE` (teks + judul tab) dan `_laporkan_blokir()`; blokir dihitung sebagai captcha yang sudah mencapai batas sehingga riset berhenti **seketika** | FIXED + TESTED (`tests/test_indeed_blokir_cloudflare.py`) |
+| Alasan "tombol Lamar tidak ditemukan" menyesatkan | Halaman lowongan juga halaman tantangan | `IndeedApplier._blocker()` mendeteksi Cloudflare lebih dulu dan melaporkan penyebab sebenarnya | FIXED + TESTED |
+| Tidak ada bukti saat diblokir | Tidak ada penyimpanan pada jalur blokir | `simpan_diagnosa("blokir-cloudflare", …)` sekali per sesi (HTML + PNG) | FIXED + TESTED |
+
+Batas jujur: blokir Cloudflare **tidak bisa dilewati kode**. Yang dijamin di
+sini hanya: dikenali dengan benar, berhenti cepat, bukti tersimpan, dan
+instruksi jelas. Lolos/tidaknya bergantung pada reputasi IP dan profil Chrome —
+bila verifikasi berulang di Chrome biasa sekalipun, itu penilaian jaringan,
+bukan bug aplikasi.
+
+Tes: 746 → **757 passed, 1 skipped** (+11), gate ruff bersih.

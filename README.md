@@ -873,6 +873,26 @@ Kalau Indeed masih gagal, kirimkan satu berkas `.txt` dari `debug/`: isinya
 URL, cuplikan halaman, dan daftar tombol yang benar-benar ada. Dari situ
 selector bisa diperbaiki berdasarkan HTML asli, bukan tebakan.
 
+### Indeed: blokir Cloudflare (bukan captcha biasa)
+
+Bila Indeed menampilkan halaman **"Diperlukan Verifikasi Tambahan"** (ID Ray,
+logo Cloudflare), itu **bukan** captcha biasa: tidak ada centang yang bisa
+diselesaikan program, dan halaman akan muncul lagi selama reputasi IP/profil
+dianggap bot. Bot sekarang:
+
+1. mengenali halaman itu dari teks **dan** judul tab ("Tunggu sebentar…",
+   "Just a moment…");
+2. **berhenti seketika** — tidak menunggu 60 detik untuk setiap kombinasi.
+   Sebelumnya 180 kombinasi × 60 detik ≈ 5943 detik berakhir nol lowongan;
+3. menyimpan bukti `debug/blokir-cloudflare-*.html` (+ PNG) sekali per sesi;
+4. memberi langkah lanjutan: selesaikan verifikasi di jendela Chrome, bila
+   berulang ganti jaringan (hotspot HP) atau tunggu 30–60 menit, lalu uji satu
+   halaman dengan `jalankan.bat indeed diagnosa`.
+
+Jumlah kombinasi riset **tidak dikurangi** — penghentian hanya karena blokir
+yang sedang berlangsung, dan sesi berikutnya tetap mengulang kombinasi yang
+belum tercakup.
+
 ### Chrome antar-situs
 
 JobStreet, Glints, dan Indeed memakai profil Chrome yang sama agar sesi login

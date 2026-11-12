@@ -84,6 +84,23 @@ TEKS_SITUS_LAIN = (
     "melamar di situs perusahaan",
 )
 
+# Halaman tantangan Cloudflare ("Diperlukan Verifikasi Tambahan" dengan ID Ray).
+# Ini BUKAN captcha biasa: tidak ada centang yang bisa diklik program dan
+# halaman akan muncul lagi selama reputasi IP/profil dianggap bot. Dikenali
+# dari badan halaman maupun judul tab, karena halaman ini memakai judul
+# jenisnya sendiri ("Tunggu sebentar...", "Just a moment...").
+PENANDA_BLOKIR_CLOUDFLARE = (
+    "verifikasi tambahan",
+    "additional verification",
+    "melakukan verifikasi",
+    "verify you are human",
+    "verifikasi anda",
+    "just a moment",
+    "tunggu sebentar",
+    "attention required",
+    "cloudflare",
+)
+
 # Teks khas Indeed saat lamaran sudah terkirim.
 SUKSES_INDEED = (
     "lamaran anda telah dikirim",
@@ -369,15 +386,14 @@ class IndeedApplier(AutoApplier):
         "sign in to indeed",
     )
 
-    # Halaman verifikasi/captcha Indeed pada halaman lowongan.
+    # Halaman verifikasi/captcha Indeed pada halaman lowongan, termasuk
+    # tantangan Cloudflare ("Diperlukan Verifikasi Tambahan").
     petunjuk_verifikasi = (
-        "verifikasi anda",
-        "verify you are human",
         "are you a human",
         "unusual traffic",
         "captcha",
         "konfirmasi bahwa anda",
-    )
+    ) + PENANDA_BLOKIR_CLOUDFLARE
 
     def __init__(self, driver, wait=None):
         super().__init__(driver, wait)
@@ -412,6 +428,13 @@ class IndeedApplier(AutoApplier):
             return alasan
 
         teks = self._body_text()
+
+        if any(pola in teks for pola in PENANDA_BLOKIR_CLOUDFLARE):
+            return (
+                "Indeed diblokir Cloudflare (halaman \"Diperlukan Verifikasi "
+                "Tambahan\") — selesaikan verifikasi di jendela Chrome; bila "
+                "berulang, ganti jaringan atau tunggu 30-60 menit"
+            )
 
         if any(pola in teks for pola in self.petunjuk_verifikasi):
             return (
@@ -548,6 +571,12 @@ class IndeedBot:
         self.driver.get(url)
         time.sleep(1)
 
+        # Tantangan Cloudflare dicek lebih dulu: menunggu 60 detik tidak akan
+        # menolong, dan setiap kombinasi berikutnya hanya menambah skor bot.
+        if self.diblokir_cloudflare():
+            self._laporkan_blokir(url)
+            return False
+
         if self.kena_captcha():
             console.print(
                 "[bold yellow]Indeed menampilkan verifikasi/captcha. "
@@ -580,6 +609,44 @@ class IndeedBot:
             tanda in teks
             for tanda in ("unusual traffic", "captcha", "verifikasi")
         )
+
+    def diblokir_cloudflare(self) -> bool:
+        """True bila halaman ini halaman tantangan Cloudflare."""
+        gabungan = f"{self._teks_halaman()} {self._judul_halaman().lower()}"
+        return any(tanda in gabungan for tanda in PENANDA_BLOKIR_CLOUDFLARE)
+
+    def _laporkan_blokir(self, url: str = "") -> None:
+        """Laporkan blokir Cloudflare sekali per sesi, lalu hentikan riset.
+
+        Tanpa ini, bot menunggu 60 detik untuk setiap kombinasi kata kunci ×
+        lokasi (180 kombinasi ≈ 5943 detik) dan menghasilkan nol lowongan.
+        """
+        # Blokir dihitung sebagai captcha yang sudah mencapai batas, sehingga
+        # semua pemeriksaan penghentian yang ada langsung berlaku.
+        self.captcha_berturut = self.BATAS_CAPTCHA_BERTURUT
+
+        if getattr(self, "blokir_dilaporkan", False):
+            return
+
+        self.blokir_dilaporkan = True
+        console.print(
+            "[bold red]Indeed diblokir Cloudflare[/] — halaman "
+            '"Diperlukan Verifikasi Tambahan" (bukan captcha biasa).'
+        )
+        console.print(
+            "[yellow]Halaman ini tidak bisa diselesaikan otomatis dan "
+            "muncul lagi selama reputasi IP/profil dianggap bot.[/]"
+        )
+        if url:
+            console.print(f"[dim]Halaman: {url}[/]")
+        console.print(
+            "[dim]Langkah: 1) selesaikan verifikasi di jendela Chrome; "
+            "2) bila berulang, ganti jaringan (hotspot HP) atau tunggu "
+            "30-60 menit; 3) uji satu halaman dulu dengan "
+            'jalankan.bat indeed diagnosa[/]'
+        )
+        with contextlib.suppress(Exception):
+            self.simpan_diagnosa("blokir-cloudflare", "")
 
     def _halaman_berikutnya(self) -> bool:
         """Klik tombol halaman berikutnya; False bila tidak ada."""
@@ -967,7 +1034,16 @@ def kumpulkan_lowongan(bot: IndeedBot, kata_kunci: list[str],
                 f"perkiraan sisa {sisa:.0f} detik.[/]"
             )
 
-    if getattr(bot, "captcha_berturut", 0) >= batas_captcha:
+    if getattr(bot, "blokir_dilaporkan", False):
+        console.print(
+            "[bold red]Riset Indeed dihentikan:[/] Cloudflare memblokir "
+            "pencarian, jadi kombinasi berikutnya tidak dijalankan. Selesaikan "
+            "verifikasi di jendela Chrome (atau ganti jaringan/tunggu "
+            "30-60 menit), lalu jalankan Indeed lagi — sisa kuota tidak "
+            "terpengaruh dan riset akan mengulang dari kombinasi yang belum "
+            "tercakup."
+        )
+    elif getattr(bot, "captcha_berturut", 0) >= batas_captcha:
         console.print(
             "[bold yellow]Riset Indeed dihentikan:[/] captcha/verifikasi muncul "
             f"{batas_captcha} kali berturut-turut. Selesaikan verifikasi di "
