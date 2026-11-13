@@ -821,8 +821,12 @@ class JobStreetBot:
 
     def close(self):
         if self.driver:
-            tutup_chrome(self.driver)
+            # Pesan hanya dicetak bila Chrome benar-benar ditutup; dulu selalu
+            # "Chrome ditutup." walau Chrome dibiarkan hidup, sehingga sesi
+            # berikutnya gagal membuka profil yang masih terkunci.
+            benar_tertutup = tutup_chrome(self.driver)
             self.driver = None
             self.wait = None
 
-            console.print("[blue]Chrome ditutup.[/]")
+            if benar_tertutup:
+                console.print("[blue]Chrome ditutup.[/]")
