@@ -897,11 +897,22 @@ belum tercakup.
 
 JobStreet, Glints, dan Indeed memakai profil Chrome yang sama agar sesi login
 tersimpan. Setelah satu situs selesai, Chrome-nya ditutup, tetapi butuh
-beberapa detik untuk melepas profil. Bila profil masih terkunci, bot sekarang
-**menunggu sampai 8 detik** dan memberi tahu; sebelumnya ia langsung pindah ke
-profil baru yang belum login sehingga sesi Glints berakhir tanpa lamaran.
-Kalau pesan "Profil masih terkunci" muncul, tutup semua jendela Chrome lalu
-jalankan lagi.
+beberapa detik untuk melepas profil. Yang berlaku sekarang:
+
+1. Chrome buatan bot **selalu ditutup** di akhir situs. Dulu, bila
+   `CHROME_DEBUG_PORT` diisi tetapi menempel ke Chrome Anda gagal, Chrome
+   buatan bot itu dibiarkan hidup — profilnya tetap terkunci dan situs
+   berikutnya hangus (log 2026-11-13: Glints dan Indeed 0 lamaran).
+2. Sebelum situs berikutnya, bot menunggu sampai **20 detik** agar profil
+   dilepas.
+3. Bila masih terkunci, bot menutup Chrome **sisa sesi sebelumnya** yang
+   memakai folder profil bot (di Windows, lewat daftar proses) — Chrome pribadi
+   Anda dengan profil lain tidak tersentuh — lalu menunggu 10 detik lagi.
+4. Baru sesudah itu, bila profil benar-benar tidak bisa dipakai, bot turun ke
+   profil cadangan dan memberi tahu bahwa login perlu diulang.
+
+Kalau pesan "Profil masih terkunci" tetap muncul, tutup semua jendela Chrome
+lalu jalankan lagi.
 
 ### Mode otomatis (default)
 

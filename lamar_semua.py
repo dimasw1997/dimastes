@@ -158,6 +158,42 @@ def _jalankan_situs(nama: str, max_pages: int, batas: int) -> dict:
     return jalankan_indeed(max_pages=max_pages, batas=batas, laporan_harian=False)
 
 
+def _lepas_profil_sebelum_situs_berikut() -> None:
+    """Pastikan Chrome situs sebelumnya sudah melepas profil bersama.
+
+    Ketiga situs memakai folder profil yang sama (`config.profile_dir`). Bila
+    Chrome situs sebelumnya belum benar-benar tertutup, situs berikutnya tidak
+    bisa membukanya dan turun ke profil baru tanpa sesi login — persis yang
+    membuat Glints "Login belum selesai" dan Indeed 0 lowongan pada log
+    2026-11-13.
+    """
+    from pathlib import Path as _Path
+
+    teks = str(getattr(config, "profile_dir", "") or "").strip()
+    if not teks:
+        return
+
+    import browser
+
+    profil = _Path(teks).expanduser()
+    if not browser.profil_terkunci(profil):
+        return
+
+    console.print(
+        "[dim]Chrome situs sebelumnya masih memegang profil; menunggu...[/]"
+    )
+    if browser.tunggu_profil_bebas(profil, batas_detik=20.0):
+        return
+
+    jumlah = browser.tutup_chrome_bot_tertinggal(profil)
+    if jumlah:
+        console.print(
+            f"[yellow]{jumlah} proses Chrome sisa ditutup agar situs "
+            "berikutnya bisa memakai profil yang sama.[/]"
+        )
+        browser.tunggu_profil_bebas(profil, batas_detik=10.0)
+
+
 # --------------------------------------------------------------- ringkasan ---
 def _tabel(hasil: dict[str, dict], dilewati: dict[str, str]) -> None:
     tabel = Table(title="Ringkasan lamar otomatis")
@@ -243,7 +279,10 @@ def jalankan(
     hasil: dict[str, dict] = {}
     dilewati: dict[str, str] = {}
 
-    for nama in daftar:
+    for urutan_ke, nama in enumerate(daftar):
+        if urutan_ke:
+            _lepas_profil_sebelum_situs_berikut()
+
         if kuota.habis(situs=nama):
             pesan = kuota.pesan_habis(nama)
             dilewati[nama] = pesan

@@ -650,3 +650,34 @@ seperti sebelumnya tanpa kerugian — hanya satu pesan tambahan di terminal.
 Tes: 757 → **767 passed, 1 skipped** (+10 di `tests/test_glints_lokasi.py`),
 ditambah penyesuaian 6 tes lama yang memakai bot tiruan (tanda tangan
 `cari()` kini menerima `location`). Gate ruff bersih.
+
+---
+
+## 18. Profil Chrome terkunci: Chrome bot dibiarkan hidup, dua situs hangus
+
+Gejala dari log sesi 2026-11-13 (`run --situs semua`, versi `f1e04f0`):
+
+- JobStreet selesai: 24 terkirim dari kuota 50.
+- Glints: "Profil masih terkunci setelah 8 detik" (2x), "Chrome instance
+  exited", lalu pindah ke `chrome-profile-baru` dan berhenti dengan
+  "Login Glints belum selesai" → **0 lamaran**.
+- Indeed: memakai profil baru yang sama (belum login), lalu diblokir
+  Cloudflare pada kombinasi 1/180 → **0 lowongan**.
+
+Penyebabnya bukan login, bukan selector, melainkan satu baris di
+`browser.tutup_chrome()`:
+
+| Gejala | Penyebab | Perbaikan |
+|---|---|---|
+| Chrome buatan bot dibiarkan hidup setelah JobStreet | `tutup_chrome()` memutuskan "jangan tutup" dari **nilai** `CHROME_DEBUG_PORT`, bukan dari **hasil** menempel. Menempel gagal (Chrome debug belum jalan) → bot membuka Chrome sendiri → Chrome itu tetap hidup dan memegang `chrome-profile` | Driver hasil menempel ditandai `_dimastes_tertempel`; `tutup_chrome()` memakai tanda itu. Hasil fungsi kini `bool` |
+| Pesan "Chrome ditutup." walau Chrome hidup | `scraper.close()` mencetak pesan tanpa memeriksa hasil | Pesan hanya dicetak bila Chrome benar-benar ditutup |
+| Profil tetap terkunci walau Chrome sudah ditutup | Batas tunggu 8 detik terlalu pendek | Batas 20 detik |
+| Chrome sisa sesi lama (zombie) memegang profil | Tidak ada pembersihan | `tutup_chrome_bot_tertinggal()`: di Windows mencari `chrome.exe` yang **baris perintahnya memuat folder profil bot** lalu `taskkill /F`. Chrome pribadi pengguna (profil lain) tidak tersentuh |
+| Situs berikutnya langsung jalan tanpa memeriksa | `lamar_semua.jalankan()` tidak menjeda | `_lepas_profil_sebelum_situs_berikut()`: tunggu 20 dtk → bila masih terkunci, tutup Chrome sisa → tunggu 10 dtk |
+
+Batas jujur: bagian `taskkill` hanya aktif di Windows dan hanya menyasar
+proses yang memakai folder profil bot; di Linux/macOS fungsi pembersih itu
+mengembalikan 0 (tidak melakukan apa pun). Semua di atas teruji unit dengan
+driver tiruan — **belum** diuji pada sesi `run --situs semua` sungguhan.
+
+Tes: 767 → **777 passed, 1 skipped** (+10), gate ruff bersih.
