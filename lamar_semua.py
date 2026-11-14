@@ -40,7 +40,7 @@ NAMA_SITUS = {
 }
 
 REMOTE_BAKU = "arena"
-CABANG_BAKU = "arena/4ab2b9fa-dimastes"
+CABANG_BAKU = "main"
 URL_ARENA = "https://github.com/dimasw1997/dimastes.git"
 
 
@@ -100,9 +100,31 @@ def perbarui_kode(remote: str = "", cabang: str = "") -> tuple[bool, str]:
         if disimpan:
             _git("stash", "pop")
 
+        # Cabang yang diminta bisa saja sudah usang atau sudah dihapus di
+        # GitHub (mis. sisa sesi pengembangan lama). Dulu sesi berhenti di
+        # "kode sudah paling baru" padahal perbaikan terbaru ada di `main`
+        # sehingga PC ini tetap menjalankan kode lama. Sekarang dibandingkan
+        # dengan `main` dan ditarik bila tertinggal.
+        tertinggal = _git("rev-list", "--count", f"HEAD..{remote}/main")
+        jumlah = (tertinggal.stdout or "0").strip()
+        if tertinggal.returncode == 0 and jumlah.isdigit() and int(jumlah) > 0:
+            console.print(
+                f"[cyan]Ada {jumlah} pembaruan di {remote}/main — "
+                "menarik juga.[/]"
+            )
+            tambahan = _git("merge", "--no-edit", f"{remote}/main")
+            if tambahan.returncode != 0:
+                _git("merge", "--abort")
+                return False, (
+                    f"penggabungan {remote}/main bentrok — jalankan tarik.bat"
+                )
+            versi = _git("rev-parse", "--short", "HEAD").stdout.strip()
+            return True, f"kode diperbarui ke {versi}"
+
+        versi = _git("rev-parse", "--short", "HEAD").stdout.strip()
         if "Already up to date" in (gabung.stdout or ""):
-            return True, "kode sudah paling baru"
-        return True, "kode diperbarui"
+            return True, f"kode sudah paling baru ({versi})"
+        return True, f"kode diperbarui ke {versi}"
     except subprocess.TimeoutExpired:
         return False, "pembaruan kelamaan — dilewati"
     except (OSError, subprocess.SubprocessError) as exc:

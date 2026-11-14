@@ -681,3 +681,37 @@ mengembalikan 0 (tidak melakukan apa pun). Semua di atas teruji unit dengan
 driver tiruan — **belum** diuji pada sesi `run --situs semua` sungguhan.
 
 Tes: 767 → **777 passed, 1 skipped** (+10), gate ruff bersih.
+
+---
+
+## 19. `tarik.bat` menarik cabang lama → perbaikan tidak pernah sampai
+
+Gejala dari terminal pengguna (2026-11-13, sesudah PR #16 di-merge):
+
+```
+[2/2] Menggabungkan arena/arena/4ab2b9fa-dimastes ke cabang ini...
+Already up to date.
+```
+
+`4ab2b9fa` adalah cabang sesi pengembangan lama yang **sudah dihapus** di
+GitHub. Variabel `ARENA_CABANG` di terminal pengguna masih menunjuk ke sana
+(bawaannya di `pantau.bat`, `pantau.sh`, dan `tarik.sh` juga cabang itu), jadi
+`git merge` menjawab "Already up to date" selamanya: PC pengguna tetap
+menjalankan kode lama meski semua perbaikan sudah masuk `main`.
+
+| Gejala | Penyebab | Perbaikan |
+|---|---|---|
+| "Already up to date" padahal ada perbaikan | Bawaan `ARENA_CABANG` = cabang sesi lama | Bawaan diganti `main` di `tarik.bat`, `tarik.sh`, `pantau.bat`, `pantau.sh`, dan `lamar_semua.CABANG_BAKU` |
+| Nilai lama masih terpasang di terminal pengguna | Tidak ada pemeriksaan | Jaring pengaman: bila `HEAD` tertinggal dari `arena/main`, `main` ikut digabung |
+| Pengguna tidak tahu versi yang dipakai | Skrip tidak mencetak commit | `tarik.bat` mencetak `Versi sekarang: <commit> - <judul>`; `perbarui_kode()` mengembalikan commit yang sama |
+
+Selain itu, log menunjukkan pengguna menekan Ctrl+C saat
+`[2/3] Memasang dependensi (sekali saja, mohon tunggu)...` karena layar diam
+(pip dijalankan dengan `--quiet`). Sekarang pip menampilkan progres, ditambah
+peringatan "2-5 menit, JANGAN tekan Ctrl+C".
+
+Batas jujur: venv di PC pengguna memakai **Python 3.15**, di luar dukungan
+resmi skrip (3.10-3.13). Instalasi berhasil atau tidak pada 3.15 belum
+terverifikasi; disarankan memasang Python 3.12.
+
+Tes: 777 → **784 passed, 1 skipped**, gate ruff bersih.

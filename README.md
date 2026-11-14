@@ -288,9 +288,13 @@ cukup:
 .\tarik.bat
 ```
 
-`tarik.bat` kini selalu menggabungkan `arena/main` (bukan cabang pengembangan
-tertentu), jadi tetap bekerja meskipun nama cabang pengembangan berganti.
-Setara dengan perintah manual:
+`tarik.bat` menggabungkan `arena/main` (bukan cabang pengembangan tertentu).
+Sejak 2026-11-14 ada **jaring pengaman**: bila variabel `ARENA_CABANG` di
+terminal Anda masih menunjuk cabang sesi lama yang sudah dihapus di GitHub
+(gejalanya: `tarik.bat` menjawab “Already up to date” padahal ada perbaikan
+baru), skrip membandingkan dengan `arena/main` dan **ikut menarik `main`**.
+Skrip lalu mencetak `Versi sekarang: <commit> - <judul>` supaya Anda bisa
+memastikan kodenya benar-benar baru. Setara dengan perintah manual:
 
 ```bash
 git pull origin main
