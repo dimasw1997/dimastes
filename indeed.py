@@ -83,18 +83,11 @@ SORT_PARAM = "&sort=date"
 # (log 2026-11-14: "1/180 kombinasi, 0 lowongan, 2 detik berlalu" dua kali).
 BATAS_TUNGGU_HALAMAN = 15  # detik
 
-# Jeda TANPA satu pun perintah ke Chrome (CDP) saat halaman tantangan
-# Cloudflare tampil. Setiap perintah ke tab — `driver.title`, `find_elements`,
-# `execute_script` — membatalkan pemeriksaan JavaScript Cloudflare yang sedang
-# berjalan, sehingga tantangan tidak pernah selesai.
-# Bukti live 18 Nov 2026: verifikasi hanya berhasil setelah proses dihentikan
-# (Ctrl+C); selama bot memeriksa tiap 1-2 detik, halaman kembali ke
-# "Tunggu sebentar...".
+# Beri waktu tanpa mengirim perintah ke Chrome; penyebab challenge yang
+# berulang belum terbukti. Jangan mengklaim bahwa ini melewati Cloudflare.
 SENYAP_JEDA = 10  # detik
 
-# Pemanasan sesi: buka satu halaman pencarian lebih dulu dan beri kesempatan
-# verifikasi Cloudflare diselesaikan di jendela Chrome. Setelah lolos sekali,
-# cookie `cf_clearance` ikut pada navigasi berikutnya.
+# Batas pemeriksaan halaman awal; tidak meminta tindakan manusia saat batch.
 PANAS_MAKS_DETIK = 180     # bila jendela Chrome terlihat pengguna
 # Bisa diatur lewat INDEED_TUNGGU_DETIK; halaman perantara Indeed kadang butuh
 # 30-60 detik untuk lolos sendiri bila tidak disentuh.
@@ -132,9 +125,8 @@ TEKS_SITUS_LAIN = (
 )
 
 # Halaman tantangan Cloudflare ("Diperlukan Verifikasi Tambahan" dengan ID Ray).
-# Ini BUKAN captcha biasa: tidak ada centang yang bisa diklik program dan
-# halaman akan muncul lagi selama reputasi IP/profil dianggap bot. Dikenali
-# dari badan halaman maupun judul tab, karena halaman ini memakai judul
+# Dikenali dari badan halaman maupun judul tab; penyebab blokir tidak diketahui.
+# Halaman ini dapat memakai judul
 # jenisnya sendiri ("Tunggu sebentar...", "Just a moment...").
 PENANDA_BLOKIR_CLOUDFLARE = (
     "security check",      # judul halaman Cloudflare Indeed
@@ -480,15 +472,14 @@ class IndeedApplier(AutoApplier):
 
         if any(pola in teks for pola in PENANDA_BLOKIR_CLOUDFLARE):
             return (
-                "Indeed diblokir Cloudflare (halaman \"Diperlukan Verifikasi "
-                "Tambahan\") — selesaikan verifikasi di jendela Chrome; bila "
-                "berulang, ganti jaringan atau tunggu 30-60 menit"
+                "Indeed mendeteksi halaman verifikasi Cloudflare — sesi "
+                "dihentikan; perlu manusia saat batch berhenti"
             )
 
         if any(pola in teks for pola in self.petunjuk_verifikasi):
             return (
-                "Indeed menampilkan verifikasi/captcha saat membuka lowongan — "
-                "selesaikan di jendela Chrome lalu jalankan ulang"
+                "Indeed meminta verifikasi/captcha — sesi dihentikan, "
+                "perlu tindakan manusia saat batch berhenti"
             )
 
         if any(pola in teks for pola in self.petunjuk_login):
@@ -640,6 +631,8 @@ class IndeedBot:
             return "kosong"
         if any(tanda in teks for tanda in PENANDA_BLOKIR_CLOUDFLARE):
             return "blokir"
+        if any(tanda in teks for tanda in ("unusual traffic", "captcha", "verifikasi")):
+            return "blokir"
         return "kosong"
 
     def _tunggu_halaman_siap(self, detik: int | None = None) -> str:
@@ -654,8 +647,7 @@ class IndeedBot:
         blokir (riset cukup lanjut ke kombinasi berikutnya).
 
         Saat tantangan tampil, tunggu **tanpa perintah CDP** selama
-        `SENYAP_JEDA` detik, baru periksa sekali. Memeriksa tiap detik justru
-        membatalkan pemeriksaan Cloudflare (bukti live 18 Nov 2026).
+        `SENYAP_JEDA` detik, baru periksa sekali; ini tidak menjamin lolos.
         """
         batas = time.time() + max(1, int(
             detik if detik is not None else BATAS_TUNGGU_HALAMAN
@@ -691,20 +683,6 @@ class IndeedBot:
         # JavaScript-nya sebelum menyimpulkan apa pun.
         keadaan = self._tunggu_halaman_siap()
 
-        if keadaan == "blokir" and SORT_PARAM not in url:
-            # Bentuk polos diblokir; coba dengan urutan tanggal. (Sebelumnya
-            # terbalik: `sort=date` lebih dulu, padahal parameter itu tidak
-            # pernah dipakai manusia dan justru memicu verifikasi.)
-            cadangan = url + SORT_PARAM
-            console.print(
-                "[dim]Bentuk URL polos diblokir; mencoba dengan "
-                f"sort=date: {cadangan}[/]"
-            )
-            self.driver.get(cadangan)
-            keadaan = self._tunggu_halaman_siap()
-            if keadaan != "blokir":
-                url = cadangan
-
         self.keadaan_terakhir = keadaan
 
         if keadaan == "blokir":
@@ -720,21 +698,11 @@ class IndeedBot:
             return False
 
         if self.kena_captcha():
-            console.print(
-                "[bold yellow]Indeed menampilkan verifikasi/captcha. "
-                "Selesaikan di jendela Chrome, lalu jalankan lagi.[/]"
-            )
-            batas = time.time() + 60
-            while time.time() < batas and self.kena_captcha():
-                time.sleep(2)
+            self.keadaan_terakhir = "blokir"
+            self._laporkan_blokir(url)
+            return False
 
-            if self.kena_captcha():
-                self.captcha_berturut += 1
-            else:
-                self.captcha_berturut = 0
-        else:
-            self.captcha_berturut = 0
-
+        self.captcha_berturut = 0
         jumlah = self._tunggu_kartu()
         if jumlah:
             console.print(f"[dim]Halaman pencarian Indeed: {url}[/]")
@@ -772,89 +740,40 @@ class IndeedBot:
 
         self.blokir_dilaporkan = True
         console.print(
-            "[bold red]Indeed diblokir Cloudflare[/] — halaman "
-            '"Diperlukan Verifikasi Tambahan" (bukan captcha biasa).'
-        )
-        console.print(
-            "[yellow]Halaman ini tidak bisa diselesaikan otomatis dan "
-            "muncul lagi selama reputasi IP/profil dianggap bot.[/]"
+            "[bold red]Indeed meminta verifikasi — pencarian dihentikan. [/]"
+            "Perlu tindakan manusia saat batch berhenti; hasil belum terverifikasi."
         )
         if url:
             console.print(f"[dim]Halaman: {url}[/]")
         console.print(
-            "[dim]Langkah: 1) selesaikan verifikasi di jendela Chrome; "
-            "2) bila berulang, ganti jaringan (hotspot HP) atau tunggu "
-            "30-60 menit; 3) uji satu halaman dulu dengan "
-            'jalankan.bat indeed diagnosa[/]'
+            "[yellow]Jangan mengulang challenge yang terus berputar. "
+            "Bila tetap terblokir, nonaktifkan Indeed dengan "
+            "SITES=jobstreet,glints.[/]"
         )
         with contextlib.suppress(Exception):
             self.simpan_diagnosa("blokir-cloudflare", "")
 
     def panaskan(self, keyword: str = "", location: str = "",
                  detik: int | None = None) -> str:
-        """Buka satu halaman pencarian untuk "memanaskan" sesi Cloudflare.
-
-        Halaman pertama dibuka lebih dulu; bila muncul halaman verifikasi,
-        pengguna diberi kesempatan menyelesaikannya di jendela Chrome. Setelah
-        satu kali lolos, cookie `cf_clearance` berlaku untuk navigasi berikutnya
-        sehingga riset tidak berhenti di kombinasi pertama.
-
-        Hasil sama dengan `_tunggu_halaman_siap`: siap / kosong / blokir.
-        """
+        """Periksa satu halaman awal; berhenti jika verifikasi masih ada."""
         if not keyword:
             return ""
 
         if detik is None:
-            terlihat = not getattr(config, "headless", False) or bool(
-                int(getattr(config, "chrome_debug_port", 0) or 0)
+            headless = getattr(config, "headless", False) and not int(
+                getattr(config, "chrome_debug_port", 0) or 0
             )
-            if terlihat:
-                detik = int(
-                    getattr(config, "indeed_tunggu_detik", 0)
-                    or PANAS_MAKS_DETIK
-                )
-            else:
-                detik = PANAS_MAKS_DETIK_HEADLESS
-
+            detik = (PANAS_MAKS_DETIK_HEADLESS if headless else int(
+                getattr(config, "indeed_tunggu_detik", 0) or PANAS_MAKS_DETIK
+            ))
         self.driver.get(url_pencarian(keyword, location))
-        keadaan = self._tunggu_halaman_siap()
-
-        if keadaan != "blokir":
-            console.print(
-                "[green]Pemanasan Indeed: halaman pencarian langsung "
-                "terbaca — riset dimulai.[/]"
-            )
-            self.keadaan_terakhir = keadaan
-            return keadaan
-
-        console.print(
-            "[yellow]Indeed menampilkan halaman verifikasi. Bila jendela "
-            "Chrome terlihat, selesaikan verifikasinya SEKARANG — bot "
-            f"menunggu maksimal {detik} detik.[/]"
-        )
-
-        batas = time.time() + max(1, int(detik))
-        while time.time() < batas:
-            # Diam dulu: satu-satunya jalan agar Cloudflare menyelesaikan
-            # pemeriksaannya sendiri (pemeriksaan tiap 2 detik membuat
-            # tantangan berulang selamanya).
-            time.sleep(min(float(SENYAP_JEDA), max(1.0, batas - time.time())))
-            keadaan = self._keadaan_sekarang()
-            if keadaan != "blokir":
-                console.print(
-                    "[bold green]Verifikasi Indeed selesai — riset "
-                    "dilanjutkan dengan sesi yang sama.[/]"
-                )
-                self.keadaan_terakhir = keadaan
-                return keadaan
-
-        console.print(
-            "[yellow]Verifikasi belum selesai dalam batas waktu. Riset tetap "
-            "dicoba; bila tetap diblokir, jalankan lagi setelah verifikasi "
-            "diselesaikan di jendela Chrome.[/]"
-        )
-        self.keadaan_terakhir = "blokir"
-        return "blokir"
+        keadaan = self._tunggu_halaman_siap(detik=detik)
+        self.keadaan_terakhir = keadaan
+        if keadaan == "blokir":
+            self._laporkan_blokir(url_pencarian(keyword, location))
+        else:
+            console.print("[dim]Pemeriksaan halaman awal Indeed selesai.[/]")
+        return keadaan
 
     def _halaman_berikutnya(self) -> bool:
         """Klik tombol halaman berikutnya; False bila tidak ada."""
@@ -1280,21 +1199,12 @@ def kumpulkan_lowongan(bot: IndeedBot, kata_kunci: list[str],
                 f"perkiraan sisa {sisa:.0f} detik.[/]"
             )
 
-    if getattr(bot, "blokir_dilaporkan", False):
+    if getattr(bot, "blokir_dilaporkan", False) or (
+        getattr(bot, "captcha_berturut", 0) >= batas_captcha
+    ):
         console.print(
-            "[bold red]Riset Indeed dihentikan:[/] Cloudflare memblokir "
-            "pencarian, jadi kombinasi berikutnya tidak dijalankan. Selesaikan "
-            "verifikasi di jendela Chrome (atau ganti jaringan/tunggu "
-            "30-60 menit), lalu jalankan Indeed lagi — sisa kuota tidak "
-            "terpengaruh dan riset akan mengulang dari kombinasi yang belum "
-            "tercakup."
-        )
-    elif getattr(bot, "captcha_berturut", 0) >= batas_captcha:
-        console.print(
-            "[bold yellow]Riset Indeed dihentikan:[/] captcha/verifikasi muncul "
-            f"{batas_captcha} kali berturut-turut. Selesaikan verifikasi di "
-            "jendela Chrome (atau tunggu beberapa saat), lalu jalankan "
-            "Indeed lagi — sisa kuota tidak terpengaruh."
+            "[bold yellow]Riset Indeed dihentikan:[/] verifikasi memerlukan "
+            "manusia saat batch berhenti; lowongan belum terverifikasi."
         )
 
     sebelum = len(lowongan)
@@ -1383,17 +1293,15 @@ def jalankan_indeed(max_pages: int = 0, keywords: list[str] | None = None,
             console.print("[red]Login Indeed belum selesai — dihentikan.[/]")
             return laporan
 
-        # Pemanasan: satu halaman lebih dulu, supaya verifikasi Cloudflare
-        # (bila ada) bisa diselesaikan sekali di jendela Chrome dan cookie
-        # cf_clearance dipakai seluruh riset.
+        # Jika halaman awal meminta verifikasi, hentikan batch sebelum riset.
         if kata_kunci:
-            # Pemanasan tidak boleh menggagalkan sesi: bila jendela Chrome
-            # sudah tertutup, riset tetap dicoba dan dilaporkan apa adanya.
-            with contextlib.suppress(Exception):
-                bot.panaskan(
-                    str(kata_kunci[0]),
-                    config.locations[0] if config.locations else "",
-                )
+            keadaan_awal = bot.panaskan(
+                str(kata_kunci[0]),
+                config.locations[0] if config.locations else "",
+            )
+            if keadaan_awal == "blokir":
+                laporan["perlu_manusia"] += 1
+                return laporan
 
         lowongan = kumpulkan_lowongan(bot, kata_kunci, halaman)
         laporan["dibaca"] = len(lowongan)
@@ -1535,8 +1443,8 @@ def jalankan_indeed(max_pages: int = 0, keywords: list[str] | None = None,
                 laporan["perlu_manusia"] += 1
                 pesan = (
                     f"Indeed meminta verifikasi {penghitung_blokir.jumlah} kali "
-                    "berturut-turut — sisa lowongan dilewati. Selesaikan "
-                    "verifikasi di jendela Chrome, lalu jalankan lagi."
+                    "berturut-turut — batch dihentikan. Verifikasi hanya "
+                    "oleh manusia saat batch berhenti."
                 )
                 console.print(f"[bold red]{pesan}[/]")
                 log_aktivitas.catat(pesan, "warning")

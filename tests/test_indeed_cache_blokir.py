@@ -204,9 +204,10 @@ def test_headless_menunggu_lebih_singkat(monkeypatch, capsys):
     bot.driver = DriverPalsu()
     monkeypatch.setattr(config, "headless", True)
     monkeypatch.setattr(config, "chrome_debug_port", 0)
-    monkeypatch.setattr(indeed, "time", JamPalsu())
+    jam = JamPalsu()
+    monkeypatch.setattr(indeed, "time", jam)
     monkeypatch.setattr(bot, "_keadaan_sekarang", lambda: "blokir")
 
-    bot.panaskan("inventory", "Bandung")
-
-    assert "maksimal 20 detik" in capsys.readouterr().out
+    assert bot.panaskan("inventory", "Bandung") == "blokir"
+    assert jam.sekarang == 20
+    assert "pencarian dihentikan" in " ".join(capsys.readouterr().out.split())

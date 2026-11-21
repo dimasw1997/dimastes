@@ -828,7 +828,11 @@ def test_jendela_verifikasi_indeed_bisa_diatur(monkeypatch, capsys):
     monkeypatch.setattr(config, "indeed_tunggu_detik", 45)
     monkeypatch.setattr(config, "headless", False)
     monkeypatch.setattr(config, "chrome_debug_port", 0)
-    monkeypatch.setattr(bot, "_tunggu_halaman_siap", lambda detik=None: "blokir")
+    diterima = []
+    monkeypatch.setattr(
+        bot, "_tunggu_halaman_siap",
+        lambda detik=None: diterima.append(detik) or "blokir",
+    )
     monkeypatch.setattr(bot, "_keadaan_sekarang", lambda: "blokir")
 
     class Jam:
@@ -844,7 +848,8 @@ def test_jendela_verifikasi_indeed_bisa_diatur(monkeypatch, capsys):
 
     bot.panaskan("inventory", "Bandung")
 
-    assert "maksimal 45 detik" in capsys.readouterr().out
+    assert diterima == [45]
+    assert "pencarian dihentikan" in " ".join(capsys.readouterr().out.split())
 
 
 def test_banner_indeed_menampilkan_lama_tunggu(capsys):

@@ -124,10 +124,9 @@ def test_tantangan_yang_bertahan_tetap_menghentikan_riset(monkeypatch):
 
     assert bot.buka_pencarian("inventory control", "Bandung") is False
     assert bot.blokir_dilaporkan, "blokir sungguhan harus dilaporkan"
-    # Bentuk cadangan: URL polos dulu, lalu yang ber-`sort=date`.
-    assert len(bot.driver.dibuka) == 2
+    # Tidak mencoba ulang dengan URL lain setelah diblokir.
+    assert len(bot.driver.dibuka) == 1
     assert "sort=date" not in bot.driver.dibuka[0]
-    assert "sort=date" in bot.driver.dibuka[1]
 
 
 def test_hasil_kosong_bukan_blokir(monkeypatch, capsys):
@@ -147,24 +146,14 @@ def test_hasil_kosong_bukan_blokir(monkeypatch, capsys):
     assert "Tidak ada lowongan untuk kombinasi ini" in capsys.readouterr().out
 
 
-def test_url_cadangan_sort_date_dipakai_bila_perlu(monkeypatch):
-    """Bentuk polos diblokir, bentuk ber-`sort=date` berhasil."""
-
+def test_tidak_mencoba_url_cadangan_saat_terblokir(monkeypatch):
     bot = _siapkan(
         monkeypatch,
-        BotUji(
-            kartu_urut=[0] * 16 + [3],
-            judul="Tunggu sebentar...",
-        ),
+        BotUji(kartu_urut=[0] * 16 + [3], judul="Tunggu sebentar..."),
     )
-
-    # 16 putaran pertama (batas waktu 15 detik) diblokir, lalu bentuk cadangan
-    # dengan `sort=date` berhasil.
-    assert bot.buka_pencarian("staf gudang", "Cimahi") is True
-    assert len(bot.driver.dibuka) == 2
-    assert "sort=date" not in bot.driver.dibuka[0]
-    assert "sort=date" in bot.driver.dibuka[1]
-    assert bot.blokir_dilaporkan == []
+    assert bot.buka_pencarian("staf gudang", "Cimahi") is False
+    assert len(bot.driver.dibuka) == 1
+    assert bot.blokir_dilaporkan
 
 
 def test_batas_tunggu_memakai_konstanta_modul(monkeypatch):
@@ -178,8 +167,8 @@ def test_batas_tunggu_memakai_konstanta_modul(monkeypatch):
     bot = BotUji(kartu_urut=[0] * 60, judul="Tunggu sebentar...")
     bot.buka_pencarian("inventory", "Bandung")
 
-    # Dua percobaan × 4 detik tunggu (bentuk utama lalu cadangan).
-    assert jam.sekarang == 8.0
+    # Satu percobaan, lalu berhenti saat verifikasi tetap muncul.
+    assert jam.sekarang == 4.0
 
 
 def test_jeda_senyap_tidak_mengirim_perintah_ke_chrome(monkeypatch):

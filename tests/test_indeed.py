@@ -5,6 +5,8 @@ aturan penyaringan (sudah dilamar/lokasi/logo/judul), kuota bersama, batas per
 sesi, serta peta tombol Indeed pada mesin lamaran.
 """
 
+import pytest
+
 import indeed as indeed_module
 import job_filter as aturan_module
 from config import config
@@ -273,6 +275,23 @@ def _siapkan_sesi(monkeypatch, hari_ini=0, batas_harian=50):
     monkeypatch.setattr(config, "require_company_logo", True, raising=False)
     monkeypatch.setattr(indeed_module.time, "sleep", lambda *_: None, raising=False)
     return db, notifier, bot
+
+
+def test_verifikasi_awal_menghentikan_batch_tanpa_mencoba_riset(monkeypatch):
+    _, _, bot = _siapkan_sesi(monkeypatch)
+    monkeypatch.setattr(bot, "panaskan", lambda *_: "blokir")
+    monkeypatch.setattr(
+        indeed_module, "kumpulkan_lowongan",
+        lambda *_args, **_kwargs: pytest.fail("riset tidak boleh dimulai"),
+    )
+
+    laporan = indeed_module.jalankan_indeed(
+        max_pages=1, keywords=["inventory"], batas=10
+    )
+
+    assert laporan["perlu_manusia"] == 1
+    assert laporan["dilamar"] == 0
+    assert not bot.dilamar
 
 
 def test_sesi_berhenti_bila_kuota_habis(monkeypatch):
