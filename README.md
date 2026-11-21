@@ -842,6 +842,28 @@ yang **KOSONG** beserta opsinya. Untuk berkas tertentu:
 
 Tambahkan `--semua` bila ingin melihat pertanyaan yang sudah terisi juga.
 
+### Audit live baca-saja (tanpa kirim)
+
+`audit-form-live` hanya menempel ke Chrome dengan port debug yang **sudah
+berjalan**, lalu menghitung kontrol yang terlihat pada tab pilihan ChromeDriver.
+Perintah ini tidak membuka halaman, mengklik tombol, mengisi atau mengirim.
+Jika belum ada formulir yang terbuka, jangan menekan tombol Lamar hanya untuk
+pengujian: tombol tersebut mungkin langsung mengirim. Jalankan hanya saat bot
+berhenti dan tab yang ingin diperiksa sudah aman terbuka.
+
+```powershell
+.\jalankan.bat audit-form-live --port 9222
+```
+
+ChromeDriver bisa memilih tab yang bukan tab aktif; kategori situs dicetak
+untuk membantu pemeriksaan, tetapi tidak menjamin halaman yang dipilih benar.
+Output hanya statistik, tanpa nilai isian atau teks pertanyaan; iframe dan
+shadow DOM tidak dibaca. Satu pertanyaan radio dapat memiliki beberapa kontrol.
+Hasil bukan validasi kelengkapan, kebenaran jawaban, penahanan submit atau
+keberhasilan lamaran. Formulir yang tidak terlihat tidak boleh dianggap aman.
+Chrome yang ditempeli dibiarkan terbuka. Gunakan port debug hanya di komputer
+sendiri karena port tersebut memberi akses ke sesi browser.
+
 ### Formulir modern: `div role="radio"`, `role="checkbox"`, combobox
 
 Tidak semua formulir memakai `<input>`. Sejak audit #26 mesin isian mengenali

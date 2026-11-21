@@ -240,6 +240,31 @@ def diagnosa_form(berkas: str = "", semua: bool = False):
     console.print(df.teks_laporan(hasil, semua=semua), markup=False)
 
 
+def audit_form_live(port: int):
+    """Tampilkan statistik baca-saja tab yang sudah terbuka."""
+    from audit_form_live import audit
+
+    console.print(
+        "Audit baca-saja: tidak navigasi, klik, isi, atau kirim lamaran."
+    )
+    try:
+        hasil = audit(port)
+    except Exception as exc:
+        console.print(f"[red]Audit gagal:[/] {escape(str(exc))}")
+        raise SystemExit(1) from exc
+    for kunci in (
+        "situs", "kontrol", "wajib", "radio", "checkbox", "select", "combobox",
+        "teks", "pilihan_terpilih", "pilihan_tidak_terpilih",
+        "pilihan_tidak_diketahui", "iframe",
+    ):
+        console.print(f"{kunci}: {hasil[kunci]}", markup=False)
+    console.print(
+        "Hanya tab yang dipilih ChromeDriver (belum tentu tab aktif); "
+        "iframe dan shadow DOM tidak diperiksa. "
+        "Tidak membuktikan isi, kebenaran jawaban, penahanan atau submit."
+    )
+
+
 def tampilkan_antrean(batas: int = 20, situs: str = ""):
     """Lihat isi antrean: sebaran status + lowongan yang perlu ditinjau."""
     from database import _situs_sql
@@ -2359,6 +2384,13 @@ if __name__ == "__main__":
         help="Tampilkan juga pertanyaan yang sudah terisi",
     )
 
+    audit_parser = subparsers.add_parser(
+        "audit-form-live", help="Baca statistik kontrol tab Chrome tanpa klik/isi"
+    )
+    audit_parser.add_argument(
+        "--port", type=int, default=9222, help="Port debug Chrome (bawaan 9222)"
+    )
+
     antre_parser = subparsers.add_parser(
         "antrean", help="Lihat antrean: status dan lowongan yang perlu ditinjau"
     )
@@ -2624,6 +2656,8 @@ if __name__ == "__main__":
         tampilkan_backup(args.daftar, args.pulihkan)
     elif args.command == "diagnosa-form":
         diagnosa_form(args.berkas, args.semua)
+    elif args.command == "audit-form-live":
+        audit_form_live(args.port)
     elif args.command == "antrean":
         tampilkan_antrean(args.limit, getattr(args, "situs", ""))
     elif args.command == "lamar":
