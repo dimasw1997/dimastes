@@ -23,6 +23,9 @@ def test_skenario_glints(fungsi, monkeypatch):
     assert _cocok(hasil, harapan), f"{hasil.status}: {hasil.reason}"
 
 
-def test_semua_skenario_lulus(monkeypatch):
+def test_semua_skenario_lulus(monkeypatch, capsys):
     monkeypatch.setattr(config, "auto_apply_debug", False)
+    monkeypatch.setattr(config, "auto_answer_wait", 60)
     assert simulasi_glints.jalankan() is True
+    assert config.auto_answer_wait == 60
+    assert "tidak membuka Chrome" in capsys.readouterr().out

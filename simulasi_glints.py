@@ -211,9 +211,14 @@ def jalankan() -> bool:
     lama = (
         config.cover_letter,
         config.auto_apply_debug,
+        config.auto_answer_wait,
     )
     config.cover_letter = "Saya tertarik dengan posisi ini."
     config.auto_apply_debug = False
+    config.auto_answer_wait = 1
+    console.print(
+        "[bold]Simulasi offline: tidak membuka Chrome atau mengirim lamaran.[/]"
+    )
 
     table = Table(title="Simulasi alur lamaran Glints")
     table.add_column("Skenario", style="cyan")
@@ -237,7 +242,7 @@ def jalankan() -> bool:
             )
     finally:
         pulihkan()
-        config.cover_letter, config.auto_apply_debug = lama
+        config.cover_letter, config.auto_apply_debug, config.auto_answer_wait = lama
 
     console.print(table)
 
