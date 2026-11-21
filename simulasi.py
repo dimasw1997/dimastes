@@ -301,12 +301,19 @@ def jalankan() -> bool:
         config.years_experience,
         config.education_level,
         config.auto_apply_debug,
+        config.auto_answer_wait,
     )
     config.auto_answer_questions = True
     config.expected_salary = "5000000"
     config.years_experience = 3.0
     config.education_level = "S1"
     config.auto_apply_debug = False
+    # Jam simulasi memang tiruan, tetapi putaran 60 detik tetap mencetak
+    # banyak diagnosa berulang. Jangan mengubah waktu tunggu sesi nyata.
+    config.auto_answer_wait = 1
+    console.print(
+        "[bold]Simulasi offline: tidak membuka Chrome atau mengirim lamaran.[/]"
+    )
 
     table = Table(title="Simulasi alur lamaran")
     table.add_column("Skenario", style="cyan")
@@ -348,6 +355,7 @@ def jalankan() -> bool:
             config.years_experience,
             config.education_level,
             config.auto_apply_debug,
+            config.auto_answer_wait,
         ) = hasil_lama
 
     console.print(table)
