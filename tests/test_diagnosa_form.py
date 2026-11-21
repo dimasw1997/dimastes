@@ -106,6 +106,29 @@ def test_html_tanpa_fieldset_tetap_terbaca(tmp_path):
     assert hasil["kosong"] == 0
 
 
+def test_tidak_menebak_checked_dari_aria_atau_isi_atribut(tmp_path):
+    html = '''<fieldset><legend>Pertanyaan</legend>
+    <input type="radio" aria-checked="false" value="unchecked">
+    <input type="radio" title="checked" value="no">
+    </fieldset>'''
+    hasil = diagnosa_form.baca(tulis(tmp_path, html))
+    assert hasil["kosong"] == 1
+
+
+def test_laporan_cli_mempertahankan_penanda_pilihan(tmp_path, monkeypatch):
+    from io import StringIO
+
+    from rich.console import Console
+
+    import cli
+
+    output = StringIO()
+    monkeypatch.setattr(cli, "console", Console(file=output, width=120))
+    cli.diagnosa_form(str(tulis(tmp_path)), semua=True)
+    assert "[x] I'm an Indonesian citizen" in output.getvalue()
+    assert "[ ] Yes" in output.getvalue()
+
+
 def test_berkas_tidak_ada(tmp_path):
     import pytest
 

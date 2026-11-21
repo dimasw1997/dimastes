@@ -237,7 +237,7 @@ def diagnosa_form(berkas: str = "", semua: bool = False):
         console.print(f"[yellow]{exc}[/]")
         return
 
-    console.print(df.teks_laporan(hasil, semua=semua))
+    console.print(df.teks_laporan(hasil, semua=semua), markup=False)
 
 
 def tampilkan_antrean(batas: int = 20, situs: str = ""):

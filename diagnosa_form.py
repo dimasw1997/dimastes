@@ -11,6 +11,7 @@ tanpa perlu membuka Chrome.
 """
 
 import re
+from html.parser import HTMLParser
 from pathlib import Path
 
 _LABEL_FOR = re.compile(
@@ -43,6 +44,21 @@ def _atribut(tag: str) -> dict[str, str]:
     return {kunci.lower(): nilai for kunci, nilai in _ATTR.findall(tag)}
 
 
+def _punya_atribut(tag: str, nama: str) -> bool:
+    """Periksa atribut HTML sebenarnya, bukan teks di nilai atau aria-* lain."""
+    class Pembaca(HTMLParser):
+        ditemukan = False
+
+        def handle_starttag(self, _tag, attrs):
+            self.ditemukan = any(kunci == nama for kunci, _ in attrs)
+
+        handle_startendtag = handle_starttag
+
+    pembaca = Pembaca()
+    pembaca.feed(tag)
+    return pembaca.ditemukan
+
+
 def _label_untuk(html: str) -> dict[str, str]:
     """Peta id -> teks label (`<label for="id">teks</label>`)."""
     hasil = {}
@@ -66,7 +82,7 @@ def _opsi_dari(html: str) -> list[dict]:
         opsi.append(
             {
                 "teks": teks or atribut.get("value", ""),
-                "dipilih": "checked" in tag.lower(),
+                "dipilih": _punya_atribut(tag, "checked"),
                 "id": id_el,
             }
         )
@@ -80,7 +96,7 @@ def _opsi_dari(html: str) -> list[dict]:
             opsi.append(
                 {
                     "teks": teks,
-                    "dipilih": "selected" in tag_opsi.lower(),
+                    "dipilih": _punya_atribut(f"<option{tag_opsi}>", "selected"),
                     "id": atribut.get("value", ""),
                 }
             )
@@ -135,7 +151,7 @@ def baca(berkas: str | Path) -> dict:
             nama_grup.setdefault(nama, []).append(
                 {
                     "teks": peta.get(id_el, atribut.get("value", "")),
-                    "dipilih": "checked" in tag.lower(),
+                    "dipilih": _punya_atribut(tag, "checked"),
                     "id": id_el,
                 }
             )
