@@ -466,6 +466,18 @@ def test_isian_wajib_gagal_menahan_pengiriman():
     assert klik == ["klik"]
 
 
+def test_isian_wajib_review_menahan_pengiriman(monkeypatch):
+    klik = []
+    applier = ApplierUji(klik, diagnosa=[_diagnosa_wajib()])
+    monkeypatch.setattr(applier, "_is_review_page", lambda: True)
+
+    hasil = applier._apply_alur(lowongan())
+
+    assert hasil.status == "manual_required"
+    assert "TIDAK dikirim" in hasil.reason
+    assert klik == ["klik"]  # Hanya tombol Lamar, bukan tombol kirim.
+
+
 def test_diagnosa_opsional_tidak_menahan_pengiriman():
     klik = []
     opsional = dict(_diagnosa_wajib())

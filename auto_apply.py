@@ -2750,63 +2750,65 @@ class AutoApplier:
                 # Isi otomatis cover letter / unggah CV bila dikonfigurasi.
                 self._autofill()
 
-                if not review_page:
-                    belum_terjawab = self.jawab_pertanyaan()
+                # Periksa juga halaman review: beberapa situs masih
+                # menampilkan kontrol wajib pada tahap terakhir.
+                belum_terjawab = self.jawab_pertanyaan()
 
-                    galat = self._validation_error()
-                    if belum_terjawab:
-                        rinci = (
-                            pertanyaan_dari_galat(galat)
-                            or belum_terjawab[0][:80]
-                        )
-                        console.print(
-                            f"[dim]   belum bisa dijawab otomatis: {rinci}[/]"
-                        )
+                galat = self._validation_error()
+                if belum_terjawab:
+                    rinci = (
+                        pertanyaan_dari_galat(galat)
+                        or belum_terjawab[0][:80]
+                    )
+                    console.print(
+                        f"[dim]   belum bisa dijawab otomatis: {rinci}[/]"
+                    )
 
-                        # Beri waktu pengguna mengisi kuesioner di Chrome.
-                        hasil_tunggu = self._tunggu_jawaban(rinci)
-                        if hasil_tunggu == "applied":
-                            return ApplyResult(
-                                True, "applied", "Terkirim otomatis"
-                            )
-                        if hasil_tunggu == "lanjut":
-                            deadline = max(
-                                deadline, time.time() + self.step_timeout
-                            )
-                            continue
-
-                        self._dump_debug(job)
-                        wajib_gagal = self._diagnosa_wajib_gagal()
-                        detail = (
-                            f" ({format_diagnosa(wajib_gagal[0])})"
-                            if wajib_gagal else ""
-                        )
+                    # Beri waktu pengguna mengisi kuesioner di Chrome.
+                    hasil_tunggu = self._tunggu_jawaban(rinci)
+                    if hasil_tunggu == "applied":
                         return ApplyResult(
-                            False,
-                            "manual_required",
-                            "Formulir meminta isian yang belum bisa dijawab "
-                            f"otomatis: {rinci} — dilewati, TIDAK dikirim{detail}",
+                            True, "applied", "Terkirim otomatis"
                         )
+                    if hasil_tunggu == "lanjut":
+                        deadline = max(
+                            deadline, time.time() + self.step_timeout
+                        )
+                        continue
 
-                    # Penahan kirim: isian WAJIB yang gagal diisi atau
-                    # gagal diverifikasi tidak boleh dikirim. Tanpa ini
-                    # lamaran bisa terkirim dengan jawaban kosong lalu
-                    # tercatat "applied" padahal isinya tidak benar.
+                    self._dump_debug(job)
                     wajib_gagal = self._diagnosa_wajib_gagal()
-                    if wajib_gagal:
-                        rinci = format_diagnosa(wajib_gagal[0])
-                        console.print(
-                            "[yellow]   isian wajib belum terverifikasi — "
-                            "lamaran tidak dikirim[/]"
-                        )
-                        self._dump_debug(job)
-                        return ApplyResult(
-                            False,
-                            "manual_required",
-                            "Isian wajib tidak terverifikasi "
-                            f"({rinci}) — lamaran TIDAK dikirim",
-                        )
+                    detail = (
+                        f" ({format_diagnosa(wajib_gagal[0])})"
+                        if wajib_gagal else ""
+                    )
+                    return ApplyResult(
+                        False,
+                        "manual_required",
+                        "Formulir meminta isian yang belum bisa dijawab "
+                        f"otomatis: {rinci} — dilewati, TIDAK dikirim{detail}",
+                    )
 
+                # Penahan kirim: isian WAJIB yang gagal diisi atau
+                # gagal diverifikasi tidak boleh dikirim. Tanpa ini
+                # lamaran bisa terkirim dengan jawaban kosong lalu
+                # tercatat "applied" padahal isinya tidak benar.
+                wajib_gagal = self._diagnosa_wajib_gagal()
+                if wajib_gagal:
+                    rinci = format_diagnosa(wajib_gagal[0])
+                    console.print(
+                        "[yellow]   isian wajib belum terverifikasi — "
+                        "lamaran tidak dikirim[/]"
+                    )
+                    self._dump_debug(job)
+                    return ApplyResult(
+                        False,
+                        "manual_required",
+                        "Isian wajib tidak terverifikasi "
+                        f"({rinci}) — lamaran TIDAK dikirim",
+                    )
+
+                if not review_page:
                     blocker = self._blocker()
                     if blocker:
                         # Pastikan bukan halaman yang masih memuat.
