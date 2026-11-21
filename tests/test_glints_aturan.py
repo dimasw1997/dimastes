@@ -99,6 +99,7 @@ def test_filter_logo_berlaku_di_glints(monkeypatch):
     monkeypatch.setattr(config, "require_company_logo", True)
     monkeypatch.setattr(config, "locations", ["Bekasi"])
     monkeypatch.setattr(config, "glints_min_salary", 4_500_000)
+    monkeypatch.setattr(config, "title_keywords", ["gudang"])
 
     dasar = {
         "job_id": "glints:aaaaaaaa-1111-2222-3333-444444444444",
@@ -208,6 +209,7 @@ class BotPalsu:
         from auto_apply import ApplyResult
 
         self.dilamar.append(job["job_id"])
+        glints_module.db.record_application(job["job_id"], "applied")
         return ApplyResult(True, "applied", "Terkirim otomatis")
 
     def tutup(self):
@@ -223,6 +225,7 @@ def _siapkan_sesi(monkeypatch, kartu, kuota=0, logo=False):
         glints_module.notifier, "send_apply_success", lambda *_: None
     )
     monkeypatch.setattr(config, "keywords", ["inventory"])
+    monkeypatch.setattr(config, "research_keywords", [])
     monkeypatch.setattr(config, "max_pages", 1)
     # Satu muat per kata kunci; riset tanpa batas diuji di test_riset.py.
     monkeypatch.setattr(config, "research_max_pages", 1)

@@ -1365,10 +1365,13 @@ def tampilkan_konfigurasi_glints(batas: int = 0) -> None:
         + (" ..." if len(kata_kunci) > 3 else ""),
     )
     tabel.add_row(
-        "Lokasi disaring",
+        "Lokasi pencarian",
         f"{len(config.locations)} — {', '.join(config.locations[:3])}"
         if config.locations
         else "semua lokasi",
+    )
+    tabel.add_row(
+        "Filter lokasi ketat", "aktif" if config.strict_location else "tidak aktif"
     )
     jumlah_lokasi = len(config.locations) or 1
     tabel.add_row(
@@ -1376,7 +1379,9 @@ def tampilkan_konfigurasi_glints(batas: int = 0) -> None:
         f"{len(kata_kunci)} kata kunci x {jumlah_lokasi} lokasi = "
         f"{len(kata_kunci) * jumlah_lokasi} (sama seperti JobStreet)",
     )
-    tabel.add_row("Wajib logo perusahaan", "ya (seperti JobStreet)")
+    tabel.add_row(
+        "Wajib logo perusahaan", "ya" if config.require_company_logo else "tidak"
+    )
     tabel.add_row("Urutan kandidat", getattr(config, "rank_by", "relevance"))
     tabel.add_row("Jeda antar lamaran", f"{config.delay_between_apply} detik")
     tabel.add_row(
@@ -1470,6 +1475,8 @@ def jalankan_glints(max_pages: int = 0, keywords: list[str] | None = None,
                     terlihat.add(job["job_id"])
                     lowongan.append(job)
                     baru += 1
+                    if batas_riset and len(lowongan) >= batas_riset:
+                        break
 
                 if baru == 0:
                     console.print(
@@ -1488,6 +1495,9 @@ def jalankan_glints(max_pages: int = 0, keywords: list[str] | None = None,
                     f"{lama_riset:.0f} detik berlalu — perkiraan sisa "
                     f"{sisa:.0f} detik.[/]"
                 )
+
+                if batas_riset and len(lowongan) >= batas_riset:
+                    break
 
             if batas_riset and len(lowongan) >= batas_riset:
                 console.print(
@@ -1575,15 +1585,18 @@ def jalankan_glints(max_pages: int = 0, keywords: list[str] | None = None,
             )
             return laporan
 
-        dipilih = pilih_teratas(
-            layak, kuota.sisa(db, situs="glints") or 0
-        )
+        # Jangan memotong antrean berdasarkan jumlah slot: kandidat yang
+        # dilewati atau gagal tidak mengisi kuota, sehingga kandidat berikutnya
+        # diperlukan sebagai cadangan. Pemeriksaan kuota tetap dilakukan
+        # sebelum setiap percobaan.
+        dipilih = pilih_teratas(layak)
 
         sisa = kuota.sisa(db, situs="glints")
-        if sisa is not None and len(layak) > sisa:
+        if sisa is not None and len(dipilih) > sisa:
             console.print(
-                f"[bold]{len(layak)} kandidat[/] bersaing untuk "
-                f"[bold]{sisa} slot[/] — diambil {sisa} yang paling cocok."
+                f"[bold]{len(dipilih)} kandidat[/] untuk "
+                f"[bold]{sisa} slot[/] — sisanya menjadi cadangan "
+                "jika kandidat sebelumnya tidak terkirim."
             )
 
         tampilkan_perbandingan(dipilih)
@@ -1622,6 +1635,10 @@ def jalankan_glints(max_pages: int = 0, keywords: list[str] | None = None,
 
             if hasil.status == "login_required":
                 laporan["gagal"] += 1
+                antrean.selesai(
+                    job.get("job_id", ""), "review_required",
+                    hasil.reason or "Sesi login Glints habis",
+                )
                 console.print(
                     "[bold red]Sesi login Glints sudah habis. Sesi dihentikan "
                     "agar tidak menumpuk galat.[/]"

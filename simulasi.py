@@ -212,7 +212,7 @@ def skenario_pertanyaan_pilihan():
     }
     hasil = _hasil(driver)
     jawaban = [p.get_attribute("value") for p in pilihan]
-    return hasil, ("applied", True, jawaban), driver
+    return hasil, ("manual_required", False, jawaban), driver
 
 
 def skenario_halaman_review():
@@ -274,7 +274,7 @@ def skenario_tak_dikenali():
 
 SKENARIO = (
     ("Lamaran sederhana", skenario_lamaran_sederhana),
-    ("Pertanyaan pilihan dijawab", skenario_pertanyaan_pilihan),
+    ("Pengalaman menunggu jawaban", skenario_pertanyaan_pilihan),
     ("Review and submit dikirim", skenario_halaman_review),
     ("Dialihkan ke situs lain", skenario_situs_lain),
     ("Pertanyaan asing dilewati", skenario_pertanyaan_asing),
@@ -322,9 +322,11 @@ def jalankan() -> bool:
             ok = _cocok(hasil, harapan)
             semua_ok = semua_ok and ok
 
-            if nama == "Pertanyaan pilihan dijawab":
+            if nama == "Pengalaman menunggu jawaban":
                 jawaban = harapan[2] if len(harapan) > 2 else []
-                if jawaban != ["Rp 5 Jt", "3 years", "0 years", "Sarjana (S1)"]:
+                if (len(jawaban) != 4 or jawaban[0] != "Rp 5 Jt"
+                        or jawaban[1] or jawaban[2]
+                        or jawaban[3] != "Sarjana (S1)"):
                     ok = False
                     semua_ok = False
 

@@ -285,13 +285,14 @@ label{font-size:12px;color:#94a3b8;display:block;margin-bottom:2px}
 <header>
   <h1>Lamar Otomatis — Dashboard</h1>
   <button class="p" onclick="aksi('start')">Start</button>
-  <button class="w" onclick="aksi('pause')">Pause</button>
-  <button onclick="aksi('lanjut')">Resume</button>
+  <button class="w" onclick="aksi('pause')">⏸ Jeda</button>
+  <button onclick="aksi('lanjut')">▶ Lanjut</button>
   <button class="d" onclick="aksi('stop')">Stop</button>
   <button onclick="aksi('retry')">Retry failed</button>
   <button class="d" onclick="if(confirm('Hapus antrean yang belum pernah dilamar?'))aksi('clear',1)">Clear queue</button>
   <span id="pesan"></span>
 </header>
+<p style="padding:0 20px;color:#cbd5e1">Jeda berlaku di titik aman: setelah pencarian atau lowongan yang sedang diproses selesai. Perintah di bawah bukan konfirmasi bahwa sesi sudah berhenti.</p>
 <main>
   <section><h2>Kuota harian</h2><div id="kuota"></div></section>
   <section><h2>Ringkasan</h2><div id="angka"></div></section>
@@ -329,7 +330,8 @@ async function segarkan(){
  try{const r=await fetch('api/status');const d=await r.json();
   const teks=JSON.stringify(d);if(teks===terakhir)return;terakhir=teks;
   baris('kuota',{Batas:d.kuota.batas,Terpakai:d.kuota.terpakai,
-   Sisa:d.kuota.sisa,Sesi:d.sesi.berjalan?'berjalan':d.sesi.kendali});
+   Sisa:d.kuota.sisa,'Perintah kendali':d.sesi.kendali,
+   'Sesi dimulai dashboard':d.sesi.berjalan?'berjalan':'tidak terdeteksi'});
   const g=d.ringkasan;
   baris('angka',{'Lowongan tersimpan':g.lowongan_tersimpan,
    'Lamaran terkirim':g.lamaran_terkirim,'Hari ini':g.lamaran_hari_ini,

@@ -211,12 +211,12 @@ cp .env.example .env
 | `RESUME_PATH` | kosong | Path berkas CV untuk unggah otomatis |
 | `AUTO_APPLY_MAX_PER_SESSION` | `0` | Batas lamaran per sesi; `0` = tanpa batas |
 | `AUTO_APPLY_STEP_TIMEOUT` | `3` | Batas detik mengenali tiap langkah; lewat itu lowongan dilewati |
-| `AUTO_ANSWER_QUESTIONS` | `true` | Jawab otomatis pertanyaan dropdown (pengalaman, gaji, pendidikan) |
+| `AUTO_ANSWER_QUESTIONS` | `true` | Periksa dan isi pertanyaan yang didukung; lainnya meminta jawaban manual |
 | `AUTO_ANSWER_WAIT` | `20` | Bila ada kuesioner yang tak bisa dijawab otomatis: beri waktu sekian detik agar Anda mengisi di Chrome, lalu bot melanjutkan sendiri. `0` = langsung dilewati |
 | `EXPECTED_SALARY` | `5000000` | Gaji yang diharapkan (kosong = pertanyaan gaji dilewati) |
-| `YEARS_EXPERIENCE` | `3` | Total pengalaman kerja (tahun) untuk pertanyaan pengalaman |
-| `EXPERIENCE_ROLES` | inventory, ppic, gudang, purchasing, ... | Bidang pengalaman Anda; di luar daftar ini dijawab 0 tahun |
-| `AUTO_ANSWER_YES` | `true` | Jawab **Ya** untuk pertanyaan ya/tidak seputar kesediaan/pengalaman |
+| `YEARS_EXPERIENCE` | `3` | Total pengalaman kerja untuk profil, bukan jawaban otomatis per jabatan |
+| `EXPERIENCE_ROLES` | inventory, ppic, gudang, purchasing, ... | Bidang pengalaman untuk profil; tidak digunakan menebak tahun per jabatan |
+| `AUTO_ANSWER_YES` | `true` | Pengaturan lama; tidak lagi menebak jawaban Ya otomatis |
 | `INGAT_JAWABAN` | `true` | Ingat isian yang Anda lakukan sendiri dan pakai lagi otomatis di lamaran berikutnya |
 | `EDUCATION_LEVEL` | `S1` | Jenjang pendidikan untuk pertanyaan kualifikasi |
 | `AUTO_APPLY_SUBMIT_TIMEOUT` | `20` | Batas detik khusus halaman **Review and submit** (mengirim lamaran) |
@@ -563,37 +563,31 @@ Secara default program **hanya melamar lowongan yang judulnya memuat salah
 satu `TITLE_KEYWORDS`**. Judul yang nyasar di hasil pencarian — misalnya
 "Sales Executive" atau "Staff Accounting" — otomatis dilewati, tidak dilamar.
 
-Ada dua daftar yang dipakai:
+Pengaturan daftar pencarian dan judul:
 
-| Pengaturan | Fungsi | Pengaruh ke waktu |
-| --- | --- | --- |
-| `KEYWORDS` | query yang diketik ke pencarian JobStreet | **menambah** waktu (dijalankan per lokasi, per halaman) |
-| `TITLE_KEYWORDS` | hanya mencocokkan judul hasil pencarian | tidak menambah waktu sama sekali |
+| Pengaturan | Fungsi |
+| --- | --- |
+| `RESEARCH_KEYWORDS` | 50 kategori pilihan pengguna sebagai **teks kueri** riset JobStreet, Glints, dan Indeed; ini bukan kategori resmi platform. |
+| `KEYWORDS` | 50 kata kunci pilihan pengguna; dipakai sebagai cadangan bila `RESEARCH_KEYWORDS` kosong. |
+| `TITLE_KEYWORDS` | 50 kata kunci yang sama untuk mencocokkan judul hasil pencarian. |
 
-Karena itu daftar bawaan dibuat dua lapis: `KEYWORDS` 14 istilah pencarian,
-`TITLE_KEYWORDS` 43 istilah pencocok judul yang disusun dari pengalaman
-PPIC/inventory, gudang, material/pengadaan, dan supply chain — termasuk versi
-bahasa Indonesia (`staf gudang`, `admin inventory`, `persediaan`,
-`perencanaan produksi`, `pengadaan`, `logistik`, ...). Contoh judul yang lolos:
-*Staff PPIC*, *Staf Gudang*, *Warehouse Supervisor*, *Production Planner*,
-*Material Control Staff*, *Purchasing Staff*, *Demand Planner*,
-*Project Control*. Yang tetap ditolak: *Operator Produksi*,
-*Financial Planner*, *Media Buyer*, *Quantity Surveyor*.
+Istilah yang luas seperti `Control`, `Management`, dan `Quality` bisa
+meloloskan judul yang tidak sesuai pengalaman. Filter lokasi, gaji, jabatan,
+usia, dan pengaturan lainnya tetap berlaku; daftar ini tidak membuktikan
+kualifikasi atau pengalaman pengguna.
 
-Setelah `git pull`, samakan kata kunci di `.env` Anda dengan daftar terbaru:
+Setelah memasang versi kode yang memuat daftar baru, dan saat bot berhenti,
+perbarui `.env` dengan `python cli.py perbarui-env`. Perintah ini mengganti
+`KEYWORDS`, `TITLE_KEYWORDS`, dan `RESEARCH_KEYWORDS` dengan daftar di
+`.env.example`, serta menambahkan sejumlah pengaturan pelengkap hanya jika
+belum ada. Pengaturan lain yang sudah ada tidak ditimpa. Cadangan `.env.bak`
+dibuat/ditimpa, jadi simpan cadangan lama terlebih dahulu jika diperlukan.
+Perintah ini sendiri tidak memulai pelamaran.
 
-```bash
-python cli.py perbarui-env
-```
-
-Perintah itu hanya mengganti baris `KEYWORDS` dan `TITLE_KEYWORDS` di `.env`
-(cadangan otomatis di `.env.bak`); cover letter, path CV, token Telegram, dan
-isian lain tidak disentuh. Setelah itu jalankan ulang program.
-
-Ingin menambah sendiri? Tambahkan istilah dipisah koma, mis.
-`TITLE_KEYWORDS=...,staf gudang,admin produksi,persediaan`.
-Ingin mematikan filter ini (lamar semua yang muncul)?
-`REQUIRE_KEYWORD_MATCH=false`.
+Riset dapat memakan waktu: setiap kategori dikombinasikan dengan lokasi dan
+halaman, dan `RESEARCH_MAX_JOBS` atau batas lain dapat menghentikan riset
+sebelum semua kategori selesai. `KEYWORDS`/`RESEARCH_KEYWORDS` eksplisit dalam
+perintah atau environment tetap dapat menimpa nilai `.env`.
 
 ### Hanya perusahaan yang menampilkan logo (JobStreet)
 
@@ -654,21 +648,18 @@ dari atribut `name` yang hanya berisi ID internal seperti
 | Pertanyaan | Jawaban bot |
 | --- | --- |
 | Gaji ("berapa gaji yang diharapkan?") | opsi/kolom terdekat dengan `EXPECTED_SALARY` |
-| Pengalaman pada jabatan yang pernah dipegang (staff, inventory controller, PPIC, planner) | opsi berisi `YEARS_EXPERIENCE`, atau angka itu pada kolom isian |
-| Pengalaman jabatan lebih tinggi (Kepala/Head/Manager/Supervisor) | 0 tahun / belum ada pengalaman |
-| Pengalaman di bidang di luar `EXPERIENCE_ROLES` (mis. *Pharmacist in Charge*, *Recruitment*) | 0 tahun / *No experience* — tidak diklaim 3 tahun |
+| Pengalaman jabatan atau bidang | Tidak ditebak dari total pengalaman; gunakan jawaban tersimpan yang tepat atau isi manual |
 | Pendidikan/kualifikasi | opsi sesuai `EDUCATION_LEVEL` (mis. *Sarjana (S1)*) |
-| Ya/tidak seputar kesediaan atau pengalaman ("apakah kamu bersedia…", "have you…") | **Ya** (matikan dengan `AUTO_ANSWER_YES=false`) |
+| Ya/tidak, skala keahlian, dan pilihan centang | Tidak ditebak; gunakan jawaban tersimpan atau isi manual |
 | Pola lain | tidak ditebak — lowongan dilewati, alasannya ditulis apa adanya |
 
-Setiap jawaban tercetak di terminal, misalnya
-`jawab "3 years" untuk: Berapa tahun pengalaman kerjamu sebagai Inventory Controller?`.
+Setiap jawaban otomatis yang berhasil terpasang dicatat di terminal.
 Bila formulir tetap ditolak, bot berhenti setelah 2 kali klik **Lanjutkan** pada
 halaman yang sama dan menampilkan pesan validasi dari JobStreet (tanpa ID
 internal).
 
-Matikan semuanya dengan `AUTO_ANSWER_QUESTIONS=false` bila ingin semua
-pertanyaan dilewati.
+Dengan `AUTO_ANSWER_QUESTIONS=false`, pengisian dan pemeriksaan otomatis
+pertanyaan tidak berjalan; jangan menganggap formulir telah diverifikasi.
 
 ### Umur lowongan: `MAX_AGE_DAYS` dihitung sampai ke kartu
 
@@ -905,17 +896,18 @@ Alasannya: lamaran terkirim dengan jawaban kosong tetap tercatat "berhasil"
 padahal isinya tidak benar. Lebih baik satu lowongan masuk daftar manual
 daripada satu lamaran salah terkirim.
 
-### Ingatan jawaban: sekali diisi, selamanya otomatis
+### Ingatan jawaban: simpan dan tinjau sebelum dipakai
 
-Setiap isian yang **Anda** lakukan sendiri di formulir dicatat, lalu dipakai
-otomatis pada lamaran berikutnya. Jadi kuesioner berulang seperti ini:
+Bila ingatan diaktifkan, isian manual yang terdeteksi dapat dicatat dan
+dipakai pada pertanyaan yang sama. Periksa entri lama sebelum mengaktifkannya.
+Contoh kuesioner:
 
 > *Seberapa mahir kamu dengan keahlian berikut ini?* — Manajemen Rantai
 > Pasokan, Microsoft Excel, Manajemen Persediaan
 > (Tidak Berpengalaman / Dasar / Menengah / Ahli)
 
-cukup Anda jawab **sekali**. Lamaran Glints/JobStreet berikutnya terisi sendiri,
-dan bot hanya berhenti bertanya untuk pertanyaan yang benar-benar baru.
+dapat menyimpan jawaban per keahlian. Pengisian ulang tidak dijamin: pertanyaan
+atau opsi yang berbeda memerlukan pemeriksaan manual.
 
 Yang dicatat: pilihan ganda (radio), kotak centang (checkbox), dropdown, dan
 kolom teks — termasuk kolom gaji, tahun pengalaman, dan pendidikan bila Anda
@@ -956,12 +948,9 @@ seperti itu membakar waktu tunggu penuh) sudah diperbaiki:
    terpilih beberapa ratus milidetik setelah diklik. Dulu hasilnya dibaca
    seketika, sehingga klik yang berhasil dianggap gagal; sekarang statusnya
    ditunggu (≤0,8 detik) sebelum dinyatakan gagal.
-3. **Kalimat pertanyaan disusun ulang.** "Do you have sales negotiation
-   experience?" vs "Do you have experience in sales negotiation?" hanya mirip
-   0,70 — di bawah ambang 0,86. Pencocokan kini menyamakan sisi **ya/tidak**
-   ("No" ↔ "Tidak" ↔ "No, I don't have any") dan memakai kemiripan 0,72
-   khusus untuk pertanyaan ya/tidak, dengan syarat kata pembedanya sama
-   (pertanyaan berbeda tetap ditanya, mis. ERP vs negosiasi penjualan).
+3. **Kalimat berbeda.** Untuk mencegah jawaban bidang yang salah, hanya
+   pertanyaan yang sama setelah normalisasi huruf, spasi dan tanda baca
+   yang memakai ingatan. Pertanyaan tersusun ulang diminta secara manual.
 
 Kalau satu pertanyaan tetap tidak terjawab, alasannya kini tertulis di
 `logs/aktivitas.log` **dan** di layar:
@@ -971,9 +960,9 @@ Radio tidak terjawab: do you have sales negotiation experience? ·
 opsi=['Yes', 'No'] · jawaban tersimpan='No'
 ```
 
-Bila jawabannya sudah tersimpan tetapi opsinya tidak cocok, waktu tunggu
-`AUTO_ANSWER_WAIT` dipersingkat (maksimal 20 detik), sebab Anda tidak perlu
-mengisi apa pun — masalahnya ada di pencocokan opsi.
+Bila jawaban tersimpan tetapi opsi tidak cocok, JobStreet dan Indeed
+membatasi waktu tunggu hingga 20 detik; Glints tetap memakai waktu penuh.
+Pengguna mungkin perlu mengisi secara manual.
 
 Kelola ingatannya:
 
@@ -991,13 +980,14 @@ python cli.py jawaban --tetapkan "purchasing=3 years"  # samakan satu kelompok
 Karena pertanyaan yang maksudnya sama bisa dijawab berbeda di lowongan
 berbeda, ingatan bisa berisi beberapa nilai untuk satu hal — misalnya
 pengalaman purchasing tercatat "Less than 1 year", "1 year", "2 tahun", dan
-"3 years". Dengan pencocokan berdasarkan maksud, nilai yang terpilih bisa
-berubah-ubah antar-lowongan.
+"3 years". Periksa setiap entri: nama bidang yang sama tidak membuktikan
+lama pengalaman yang sama untuk tiap jabatan.
 
 `--rapikan` menampilkan tabel kelompok yang bertentangan beserta berapa kali
 tiap nilai dipakai, dan kolom **Disarankan** berisi nilai yang paling sering
 dipakai. Itu hanya usulan — **nilai resminya Anda yang menentukan**. Setelah
-memilih, samakan semuanya dengan `--tetapkan`:
+memilih, gunakan `--tetapkan` hanya bila Anda yakin semua jabatan dalam
+kelompok itu memang memiliki jawaban yang sama:
 
 ```bash
 python cli.py jawaban --rapikan
@@ -1012,28 +1002,14 @@ setara angkanya ("Rp 5 Jt" dengan "Rp 5 million") tidak dianggap bertentangan.
 Perintah `python cli.py status` menampilkan berapa jawaban yang sudah
 tersimpan, jadi Anda bisa memastikan ingatannya aktif sebelum menjalankan sesi.
 
-Matikan fitur ini dengan `python cli.py set-env INGAT_JAWABAN=false` bila ingin
-bot kembali menebak dari aturan bawaan setiap kali.
+Matikan fitur ini dengan `python cli.py set-env INGAT_JAWABAN=false`. Jawaban
+lama tetap tersimpan, tetapi tidak dipakai atau diperbarui saat fitur mati.
 
-Pencocokan pertanyaan tidak peka huruf besar/kecil, spasi ganda, atau tanda
-baca, dan masih mengenali pertanyaan yang berubah sedikit (kemiripan teks
-≥ 86%). Pertanyaan berbeda tetap dianggap berbeda — "Manajemen Rantai Pasokan"
-tidak akan memakai jawaban "Manajemen Persediaan".
-
-Sejak pembaruan 2026-11-12 ada pencocokan **berdasarkan maksud** untuk jenis
-pertanyaan terstruktur (pengalaman, gaji, pendidikan, bahasa, hak kerja,
-industri, ketersediaan, SIM). JobStreet sering menanyakan hal yang sama dengan
-kalimat berbeda:
-
-| Pertanyaan di lowongan | Jawaban yang dipakai |
-|---|---|
-| "How many years' experience do you have as a Purchasing Specialist?" | 1 year |
-| "How many years of experience do you have in a Purchasing role?" | 1 year (dipakai ulang) |
-| "Berapa tahun pengalaman kerjamu di bidang pengadaan?" | 1 year (dipakai ulang) |
-
-Untuk pilihan ganda bernilai angka, jawaban lama dicocokkan lewat nilainya —
-"Rp 5 Jt" = "Rp 5 million" = "Rp 5.000.000" — sehingga pertanyaan gaji tidak
-lagi dilewati hanya karena format angkanya berbeda.
+Ingatan hanya dipakai untuk teks pertanyaan yang sama setelah normalisasi
+huruf, spasi, dan tanda baca. Opsi harus sama setelah normalisasi, kecuali
+pasangan ya/tidak yang tidak ambigu. Ungkapan yang berbeda, termasuk
+perbedaan bahasa, diminta secara manual; periksa juga jawaban tersimpan
+karena teks yang sama tidak menjamin bahwa jawabannya benar.
 
 Aturan penting: bot **tidak mengarang jawaban baru**. Kalau jenis pertanyaannya
 belum pernah dijawab, lowongan tetap dilewati seperti sebelumnya. Pertanyaan
@@ -1578,11 +1554,18 @@ benar-benar bekerja:
 | Tombol | Yang terjadi |
 |---|---|
 | **Start** | menjalankan `cli.py lamar` di proses terpisah |
-| **Pause** | sesi menunggu di antara lowongan (`kendali.py`) |
-| **Resume** | sesi lanjut |
+| **Jeda** | meminta sesi menunggu di titik aman, misalnya sebelum kombinasi riset atau lowongan berikutnya |
+| **Lanjut** | melanjutkan sesi yang sedang dijeda |
 | **Stop** | sesi berhenti dengan rapi (browser ditutup) |
 | **Retry failed** | lowongan berstatus `failed` kembali ke antrean |
 | **Clear queue** | menghapus lowongan yang **belum pernah** dilamar (pakai konfirmasi) |
+
+Jeda tidak menghentikan pencarian atau pengisian yang sedang berlangsung secara
+mendadak. Tunggu pesan `Sesi dijeda` di terminal; tombol Lanjut meneruskan dari
+titik tersebut. Jeda tetap berlaku sampai dilanjutkan atau dihentikan. Perintah
+kendali berlaku bersama untuk sesi yang memakai folder proyek yang sama;
+hindari menjalankan beberapa sesi bersamaan. Dashboard hanya mendeteksi status
+proses yang dimulai dari dashboard, bukan sesi yang diluncurkan di terminal.
 
 Selain itu dashboard menampilkan **riwayat lamaran terakhir**, bisa membuka
 **detail satu lowongan** (masukkan `job_id` — status antrean, alasan ditolak,

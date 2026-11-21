@@ -243,20 +243,15 @@ def _kata_kunci_judul() -> list:
         "Inventory Control Staff",
         "Staf Inventory",
         "Stock Controller",
-        "Staf Gudang",
-        "Admin Gudang",
         "Warehouse Supervisor",
         "Staff PPIC",
         "Production Planning & Inventory Control",
         "Production Planner",
-        "Staf Produksi",
         "Material Control Staff",
         "Material Planner",
         "Purchasing Staff",
         "Procurement Officer",
         "Supply Chain Staff",
-        "Logistik Staff",
-        "Demand Planner",
         "Inventory Analyst",
         "Project Control",
     ],
@@ -276,13 +271,23 @@ def test_judul_sesuai_pengalaman_cv_lolos(monkeypatch, judul):
         "Financial Planner",
         "Media Buyer",
         "Quantity Surveyor",
-        "Income Auditor",
-        "IT Support & Asset Management",
     ],
 )
 def test_judul_di_luar_pengalaman_cv_tetap_ditolak(monkeypatch, judul):
     monkeypatch.setattr(config, "title_keywords", _kata_kunci_judul())
 
+    assert JobFilter._matches_interest(judul.lower()) is False
+
+
+@pytest.mark.parametrize("judul", ["Income Auditor", "IT Support & Asset Management"])
+def test_kata_umum_bisa_cocok_pada_bidang_lain(monkeypatch, judul):
+    monkeypatch.setattr(config, "title_keywords", _kata_kunci_judul())
+    assert JobFilter._matches_interest(judul.lower()) is True
+
+
+@pytest.mark.parametrize("judul", ["Staf Gudang", "Staf Produksi", "Logistik Staff"])
+def test_judul_indonesia_tidak_otomatis_menjadi_padanan(monkeypatch, judul):
+    monkeypatch.setattr(config, "title_keywords", _kata_kunci_judul())
     assert JobFilter._matches_interest(judul.lower()) is False
 
 

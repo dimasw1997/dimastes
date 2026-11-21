@@ -264,6 +264,7 @@ def _siapkan_sesi(monkeypatch, hari_ini=0, batas_harian=50):
     )
 
     monkeypatch.setattr(config, "locations", ["Bandung"], raising=False)
+    monkeypatch.setattr(config, "title_keywords", ["gudang"], raising=False)
     monkeypatch.setattr(config, "max_apply_per_day", batas_harian, raising=False)
     monkeypatch.setattr(config, "auto_apply", True, raising=False)
     monkeypatch.setattr(config, "auto_apply_max_per_session", 0, raising=False)

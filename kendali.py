@@ -11,10 +11,6 @@ from pathlib import Path
 NAMA_BERKAS = ".dimastes-kendali"
 PERINTAH_SAH = ("lanjut", "jeda", "stop")
 
-# Jeda maksimum agar proses tidak menggantung selamanya bila dashboard ditutup.
-BATAS_JEDA_DETIK = 3600
-
-
 class Berhenti(Exception):
     """Sesi dihentikan dari dashboard."""
 
@@ -52,12 +48,13 @@ def bersihkan(folder: str | Path = ".") -> None:
 
 
 def periksa(folder: str | Path = ".", tidur=time.sleep,
-            batas_detik: int = BATAS_JEDA_DETIK) -> None:
+            batas_detik: int | None = None) -> None:
     """Berhenti bila diminta; tunggu selama dijeda.
 
     Melempar `Berhenti` sehingga pemanggil bisa menutup browser dengan rapi.
     """
     mulai = time.monotonic()
+    sedang_jeda = False
 
     while True:
         arahan = baca(folder)
@@ -66,9 +63,18 @@ def periksa(folder: str | Path = ".", tidur=time.sleep,
             raise Berhenti("Dihentikan dari dashboard")
 
         if arahan != "jeda":
+            if sedang_jeda:
+                print("Sesi dilanjutkan dari dashboard.", flush=True)
             return
 
-        if time.monotonic() - mulai > batas_detik:
+        if not sedang_jeda:
+            print(
+                "Sesi dijeda. Tekan Lanjut di dashboard untuk meneruskan.",
+                flush=True,
+            )
+            sedang_jeda = True
+
+        if batas_detik is not None and time.monotonic() - mulai > batas_detik:
             return
 
         tidur(1)

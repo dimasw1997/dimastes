@@ -228,20 +228,20 @@ def test_tetapkan_tidak_menulis_ulang_nilai_yang_sama(basis):
 
 
 # --------------------------------------------------- pencocokan jadi ajek ---
-def test_pencocokan_maksud_ajek_saat_nilai_seri(basis):
-    """Dua nilai dengan skor sama tidak boleh berganti-ganti antar-panggilan."""
+def test_pengalaman_tidak_ditebak_saat_nilai_seri(basis):
+    """Pertanyaan pengalaman berbeda tidak menggunakan nilai mirip."""
     _isi(basis, [(Q_STAFF, "Less than 1 year", 0), (Q_SPEC, "1 year", 0)])
 
     hasil = {jawaban.cari(Q_TANYA) for _ in range(8)}
 
     assert len(hasil) == 1
-    assert None not in hasil
+    assert hasil == {None}
 
 
-def test_pencocokan_memakai_nilai_yang_sering_dipakai(basis):
+def test_pengalaman_tidak_memakai_nilai_mirip_yang_sering_dipakai(basis):
     _isi(basis, [(Q_STAFF, "Refuse to answer", 0), (Q_SPEC, "3 years", 5)])
 
-    assert jawaban.cari(Q_TANYA) == "3 years"
+    assert jawaban.cari(Q_TANYA) is None
 
 
 def test_sama_nilai_tidak_menyamakan_angka_berbeda():

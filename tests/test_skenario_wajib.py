@@ -276,16 +276,17 @@ def test_skenario_12_pertanyaan_berulang_diingat(lingkungan):
 
 
 # 13 -----------------------------------------------------------------------
-def test_skenario_13_bahasa_berbeda_tetap_dikenali(lingkungan):
+def test_skenario_13_bahasa_berbeda_tidak_ditebak(lingkungan):
     jawaban.ingat("Nama Lengkap", "Dimas Wibowo")
     jawaban.ingat("Ekspektasi Gaji", "Rp 8.000.000")
 
-    assert jawaban.cari("Full Name") == "Dimas Wibowo"
-    assert jawaban.cari("Expected Salary") == "Rp 8.000.000"
+    assert jawaban.cari("Full Name") is None
+    assert jawaban.cari("Expected Salary") is None
 
     # Berlaku dua arah: pertanyaan Inggris yang dijawab, ditanya versi Indonesia.
     jawaban.ingat("Phone Number", "08123456789")
-    assert jawaban.cari("Nomor Telepon") == "08123456789"
+    assert jawaban.cari("Nomor Telepon") is None
+    assert jawaban.cari("Phone Number") == "08123456789"
 
 
 # 14 -----------------------------------------------------------------------

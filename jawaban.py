@@ -1,14 +1,8 @@
 """Ingatan jawaban formulir lamaran.
 
-Aturan pemakai: **apa pun yang pernah diisi pengguna harus diingat** dan diisi
-otomatis pada lamaran berikutnya. Bot hanya perlu bertanya (atau berhenti)
-untuk pertanyaan yang benar-benar belum pernah dijawab.
-
-Kunci ingatan dibuat dari teks pertanyaan yang dinormalkan, sehingga
-"Manajemen Rantai Pasokan", "manajemen rantai pasokan" dan
-"Manajemen  Rantai Pasokan " dianggap sama. Bila teks berubah sedikit
-(tanda baca, spasi, salah ketik kecil), pencocokan mirip dipakai sebagai
-cadangan.
+Isian manual dapat disimpan bila fitur diaktifkan. Hanya pertanyaan dengan
+kunci yang sama setelah normalisasi digunakan kembali; pertanyaan berbeda
+memerlukan pemeriksaan manual. Jawaban lama tetap perlu ditinjau kebenarannya.
 """
 
 import re
@@ -601,9 +595,8 @@ def _memuat(teks: str, bagian: str) -> bool:
 def cocok_opsi(nilai, opsi) -> str:
     """Opsi yang mewakili jawaban tersimpan ("" bila tidak ada yang cocok).
 
-    Urutan: kunci persis → sisi ya/tidak → kata utuh → angka/satuan →
-    kemiripan teks. Semua jalur hanya MEMILIH di antara opsi yang benar-benar
-    ada di formulir; tidak ada nilai baru yang dibuat.
+    Hanya opsi yang sama setelah normalisasi atau pasangan ya/tidak yang
+    tidak ambigu dipakai; opsi lain harus dipilih pengguna.
     """
     daftar = [str(item) for item in (opsi or []) if str(item or "").strip()]
     teks_nilai = " ".join(str(nilai or "").split())
@@ -627,29 +620,9 @@ def cocok_opsi(nilai, opsi) -> str:
     if sisi:
         return ""
 
-    for item in daftar:
-        kunci_opsi = kunci_pertanyaan(item)
-        if _memuat(kunci_opsi, kunci_nilai) or _memuat(kunci_nilai, kunci_opsi):
-            return item
-
-    for item in daftar:
-        if sama_nilai(teks_nilai, item):
-            return item
-
-    # Kemiripan teks hanya untuk opsi yang BUKAN angka: "Rp 5 jt" dan
-    # "Rp 1 jt" mirip 0.86 padahal nilainya berbeda, dan itu sudah diputuskan
-    # oleh `sama_nilai` di atas.
-    terbaik = ""
-    skor_terbaik = 0.0
-    for item in daftar:
-        if angka_dari_teks(item) and angka_dari_teks(teks_nilai):
-            continue
-
-        skor = SequenceMatcher(None, kunci_nilai, kunci_pertanyaan(item)).ratio()
-        if skor >= AMBANG_OPSI and skor > skor_terbaik:
-            terbaik, skor_terbaik = item, skor
-
-    return terbaik
+    # Substring, angka yang sama, dan kemiripan teks tidak cukup untuk
+    # membuktikan pilihan setara ("1 year" vs "less than 1 year").
+    return ""
 
 
 def _aktif() -> bool:
@@ -659,9 +632,8 @@ def _aktif() -> bool:
 def cari(pertanyaan: str) -> str | None:
     """Jawaban yang pernah diberikan untuk pertanyaan ini (None bila belum).
 
-    Pencocokan: kunci sama → kembalikan; bila tidak, cari pertanyaan tersimpan
-    yang paling mirip (>= AMBANG_MIRIP). Setiap pemakaian dihitung supaya
-    urutan prioritas bisa ditinjau lewat perintah `jawaban`.
+    Hanya kunci yang sama setelah normalisasi dipakai. Setiap pemakaian
+    dihitung agar dapat ditinjau lewat perintah `jawaban`.
     """
     if not _aktif():
         return None
@@ -680,36 +652,10 @@ def cari(pertanyaan: str) -> str | None:
         db.tandai_jawaban_dipakai(kunci)
         return str(tersimpan["jawaban"])
 
-    # Cadangan 1: pertanyaan sejenis dengan kalimat berbeda
-    # ("as a Purchasing Specialist" vs "in a Purchasing role"). Didahulukan
-    # sebelum pencocokan kemiripan teks karena cara ini membandingkan MAKSUD
-    # (jenis + subjek) sehingga tidak bergantung pada selisih kata "staff"
-    # atau "specialist" — sumber pilihan yang berubah-ubah.
-    hasil = _cari_berdasarkan_maksud(pertanyaan)
-    if hasil:
-        return hasil
-
-    # Cadangan 2: pertanyaan yang mirip (mis. salah ketik / tanda baca berubah).
-    terbaik = None
-    skor_terbaik = 0.0
-
-    for baris in db.daftar_jawaban():
-        skor = _mirip_kunci(pertanyaan, baris.get("kunci") or "")
-        # Imbuhan kecil dari jumlah pemakaian: kalau dua pertanyaan sama
-        # miripnya, jawaban yang paling sering dipakai yang menang (ajek).
-        skor += min(int(baris.get("dipakai") or 0), 20) / 1000
-        if skor > skor_terbaik:
-            terbaik, skor_terbaik = baris, skor
-
-    if terbaik and skor_terbaik >= AMBANG_MIRIP and terbaik.get("jawaban"):
-        db.tandai_jawaban_dipakai(terbaik["kunci"])
-        return str(terbaik["jawaban"])
-
-    # Cadangan 3: pertanyaan ya/tidak yang disusun ulang. Hanya jawaban
-    # ya/tidak yang boleh dipakai di sini (ruang kemungkinannya sempit) dan
-    # hanya bila kandidat terbaik jelas mengungguli kandidat berikutnya.
-    return _cadangan_ya_tidak(pertanyaan)
-
+    # Jawaban yang mirip belum tentu menjawab pertanyaan yang sama (misalnya
+    # dua keterampilan atau jabatan berbeda). Minta jawaban manual daripada
+    # mengisi dari perkiraan; normalisasi tanda baca/spasi tetap berlaku.
+    return None
 
 _SAPAAN_YA_TIDAK = re.compile(
     r"\b(do|does|did|have|has|are|is|can|could|will|would|pernahkah|apakah"

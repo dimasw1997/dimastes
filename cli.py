@@ -653,8 +653,8 @@ def dry_run(situs: str = "", batas: int = 5):
 
     if not dinilai:
         console.print(
-            "[yellow]Tidak ada lowongan tersimpan untuk diuji. Jalankan riset "
-            "dulu (run --auto), lalu dry-run lagi.[/]"
+            "[yellow]Tidak ada lowongan tersimpan untuk diuji. Dry-run ini "
+            "tidak melakukan pencarian live atau mengirim lamaran.[/]"
         )
         return {"total": 0, "apply": 0, "skip": 0, "lowongan": []}
 
@@ -1671,7 +1671,7 @@ def uji_glints(url: str):
 
 
 def perbarui_env():
-    """Samakan KEYWORDS/TITLE_KEYWORDS di .env dengan daftar terbaru."""
+    """Samakan KEYWORDS/TITLE_KEYWORDS/RESEARCH_KEYWORDS dengan daftar terbaru."""
     from pathlib import Path
 
     from env_tools import perbarui_env as jalan
@@ -2132,7 +2132,7 @@ if __name__ == "__main__":
     )
     subparsers.add_parser(
         "perbarui-env",
-        help="Perbarui KEYWORDS/TITLE_KEYWORDS di .env dari .env.example",
+        help="Perbarui kata kunci dan kategori riset di .env dari .env.example",
     )
 
     history_parser = subparsers.add_parser(

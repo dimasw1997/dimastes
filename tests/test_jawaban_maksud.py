@@ -46,7 +46,7 @@ def test_keluarga_pertanyaan_lain():
 
 
 # ------------------------------------------------------ pemakaian ulang ------
-def test_jawaban_lama_dipakai_untuk_kalimat_berbeda(basis):
+def test_pengalaman_tidak_dipakai_untuk_kalimat_berbeda(basis):
     jawaban.ingat(
         "How many years' experience do you have as a Purchasing Specialist?",
         "1 year",
@@ -56,7 +56,7 @@ def test_jawaban_lama_dipakai_untuk_kalimat_berbeda(basis):
         "How many years of experience do you have in a Purchasing role?"
     )
 
-    assert hasil == "1 year"
+    assert hasil is None
 
 
 def test_pertanyaan_beda_jenis_tidak_dipaksa_cocok(basis):
@@ -90,17 +90,14 @@ def test_sama_nilai():
     assert not jawaban.sama_nilai("1 year", "Rp 1 jt")
 
 
-def test_pilihan_gaji_dicocokkan_berdasarkan_angka():
+def test_pilihan_gaji_hanya_opsi_persis():
     asli = jawaban.cari
     jawaban.cari = lambda q: "Rp 5 Jt"
     try:
         pilih = auto_apply.AutoApplier._dari_ingatan
 
         assert pilih("Gaji?", ["Rp 1 jt", "Rp 3 jt", "Rp 5 jt"]) == ("Rp 5 jt", True)
-        assert pilih("Gaji?", ["Rp 1 million", "Rp 5 million"]) == (
-            "Rp 5 million",
-            True,
-        )
+        assert pilih("Gaji?", ["Rp 1 million", "Rp 5 million"]) == ("", False)
         assert pilih("Gaji?", ["Rp 1 jt", "Rp 2 jt"]) == ("", False)
     finally:
         jawaban.cari = asli

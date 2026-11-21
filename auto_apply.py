@@ -399,25 +399,7 @@ def pilih_jawaban_radio(pertanyaan: str, opsi, cfg=None) -> str:
     if pilihan:
         return pilihan
 
-    teks = _norm(pertanyaan)
-    ya = [
-        item for item in opsi
-        if re.match(r"^(ya|yes|iya|benar|true)\b", _norm(item))
-        and "belum" not in _norm(item)
-        and "not" not in _norm(item)
-    ]
-
-    if (
-        ya
-        and getattr(cfg, "auto_answer_yes", False)
-        and any(kata in teks for kata in KATA_SETUJU)
-    ):
-        return ya[0]
-
-    # Pertanyaan berskala: pilih tingkat terendah (jujur, tanpa melebihkan).
-    if any(kata in teks for kata in SKALA_KATA):
-        return _pilih_skala_terendah(opsi)
-
+    # Tidak menganggap kesediaan, keahlian, atau tingkat kemampuan tanpa bukti.
     return ""
 
 
@@ -598,16 +580,9 @@ def pilih_jawaban(pertanyaan: str, opsi, cfg=None) -> str:
         return _pilih_gaji(opsi, target)
 
     if jenis == "pengalaman":
-        teks = _norm(pertanyaan)
-        peran = getattr(cfg, "experience_roles", ()) or ()
-        cocok = any(_norm(kata) in teks for kata in peran if _norm(kata))
-
-        # Jabatan lebih tinggi (Kepala/Manager/Supervisor) atau bidang yang
-        # belum pernah dijalani tidak boleh diklaim "3 tahun".
-        nol = any(kata in teks for kata in LEVEL_ATAS_KATA) or not cocok
-
-        tahun = 0.0 if nol else float(getattr(cfg, "years_experience", 0) or 0)
-        return _pilih_tahun(opsi, tahun, wajib_nol=nol)
+        # Total pengalaman atau kemiripan nama bidang tidak membuktikan lama
+        # pengalaman untuk jabatan tertentu, termasuk jawaban nol.
+        return ""
 
     return ""
 
@@ -1444,7 +1419,7 @@ class AutoApplier:
         if not berhasil:
             return False
 
-        return _norm(self._teks_terpilih(element)) in ("", _norm(target))
+        return bool(target) and _norm(self._teks_terpilih(element)) == _norm(target)
 
 
     def _kunci_grup_tanpa_nama(self, element) -> str:
@@ -1551,8 +1526,7 @@ class AutoApplier:
         """Pilih opsi dari ingatan jawaban pengguna. (pilihan, dari_ingatan).
 
         Pencocokan jawaban↔opsi ada di `jawaban.cocok_opsi` supaya bisa diuji
-        tanpa browser: kunci persis, sisi ya/tidak ("No" ↔ "Tidak" ↔
-        "No, I don't have any"), kata utuh, angka/satuan, lalu kemiripan.
+        tanpa browser: kunci persis atau sisi ya/tidak yang tidak ambigu.
         """
         ingat = jawaban.cari(pertanyaan)
 
@@ -1655,7 +1629,7 @@ class AutoApplier:
             if kunci:
                 potret[kunci] = (pertanyaan, label)
 
-        for selector in ("input[type='text']", "input[type='number']"):
+        for selector in ("input[type='text']", "input[type='number']", "textarea"):
             for element in self._find_all(selector):
                 if not self._visible(element):
                     continue
@@ -1925,7 +1899,7 @@ class AutoApplier:
         """Isi kolom teks/nomor untuk pertanyaan gaji atau pengalaman."""
         gagal = []
 
-        for selector in ("input[type='text']", "input[type='number']"):
+        for selector in ("input[type='text']", "input[type='number']", "textarea"):
             for element in self._find_all(selector):
                 if not self._visible(element) or not self._enabled(element):
                     continue
@@ -1958,8 +1932,11 @@ class AutoApplier:
                 if not nilai and jenis == "gaji":
                     nilai = str(config.expected_salary or "").strip()
                 elif not nilai and jenis == "pengalaman":
-                    nilai = f"{float(config.years_experience or 0):g}"
+                    gagal.append(pertanyaan or "pengalaman kerja")
+                    continue
                 elif not nilai:
+                    if self._is_required(element):
+                        gagal.append(pertanyaan or "kolom wajib")
                     continue
 
                 if not nilai:
@@ -2113,30 +2090,10 @@ class AutoApplier:
         return hasil
 
     def _jawab_checkbox(self) -> list:
-        """Jawab pertanyaan centang (multi-pilih) yang aman dijawab.
-
-        Kebijakan (tidak mengklaim hal yang tidak benar):
-        0. pakai jawaban yang pernah diberikan (ingatan) lebih dulu;
-        1. centang opsi yang cocok dengan keterampilan pengguna
-           (SKILL_KEYWORDS / TITLE_KEYWORDS);
-        2. bila tidak ada yang cocok, centang opsi "tidak ada / none /
-           other" sebagai jawaban jujur;
-        3. selain itu biarkan untuk pengguna (masuk daftar manual).
-        """
+        """Gunakan jawaban tersimpan atau minta pengguna mengisi centang."""
         grup = self._kelompok_checkbox()
 
         gagal = []
-        kata_kunci = [
-            _norm(kata) for kata in (
-                list(getattr(config, "skill_keywords", ()) or ())
-                + list(getattr(config, "title_keywords", ()) or ())
-            )
-            if _norm(kata)
-        ]
-        kata_nol = (
-            "none", "no experience", "tidak ada", "tidak punya", "belum ada",
-            "other", "lainnya", "lain-lain", "tidak relevan", "not applicable",
-        )
 
         for element_grup in grup.values():
             if len(element_grup) < 2:
@@ -2192,63 +2149,17 @@ class AutoApplier:
                         )
                 continue
 
-            pilihan = [
-                label for label in opsi
-                if any(kata in _norm(label) for kata in kata_kunci)
-            ]
-
-            if not pilihan:
-                pilihan = [
-                    label for label in opsi
-                    if any(kata in _norm(label) for kata in kata_nol)
-                ]
-
-            if not pilihan:
-                gagal.append(pertanyaan or "pertanyaan centang")
-                self._catat_diagnosa(
-                    diagnosa_kontrol(
-                        element_grup[0],
-                        control_type="checkbox",
-                        text=pertanyaan,
-                        options=opsi,
-                        detected="not_selected",
-                        verification="failed",
-                        failure=(
-                            "no_safe_answer" if opsi else "no_option_label_read"
-                        ),
-                        wajib=any(
-                            self._is_required(anggota)
-                            for anggota in element_grup
-                        ),
-                    )
+            # Daftar kata kunci pencarian bukan bukti keterampilan, dan
+            # ketiadaan kecocokan tidak membuktikan jawaban "none".
+            gagal.append(pertanyaan or "pertanyaan centang")
+            self._catat_diagnosa(
+                diagnosa_kontrol(
+                    element_grup[0], control_type="checkbox", text=pertanyaan,
+                    options=opsi, detected="not_selected", verification="failed",
+                    failure="no_safe_answer" if opsi else "no_option_label_read",
+                    wajib=any(self._is_required(item) for item in element_grup),
                 )
-                continue
-
-            for item, label in pasangan:
-                if label not in pilihan:
-                    continue
-                if self._centang(item):
-                    console.print(
-                        f'[dim]   centang "{label}" untuk: {pertanyaan[:70]}[/]'
-                    )
-                else:
-                    gagal.append(pertanyaan or "pertanyaan centang")
-                    self._catat_diagnosa(
-                        diagnosa_kontrol(
-                            item,
-                            control_type="checkbox",
-                            text=pertanyaan,
-                            options=opsi,
-                            expected=label,
-                            detected="not_selected",
-                            verification="failed",
-                            failure="click_not_verified",
-                            wajib=any(
-                                self._is_required(anggota)
-                                for anggota in element_grup
-                            ),
-                        )
-                    )
+            )
 
         return gagal
 
@@ -2289,8 +2200,8 @@ class AutoApplier:
 
         Combobox tidak punya daftar opsi sebelum dibuka, jadi opsinya dibaca
         setelah diklik. Bila jawabannya tidak ada di ingatan, kontrol ini
-        DIBIARKAN (tidak menebak) dan tidak dihitung gagal — validasi
-        formulir tetap yang menentukan apakah pertanyaannya wajib.
+        DIBIARKAN (tidak menebak); kontrol yang ditandai wajib dilaporkan
+        agar pengiriman tertahan.
         """
         gagal = []
         terlihat = set()
@@ -2312,6 +2223,8 @@ class AutoApplier:
                 ingat = jawaban.cari(pertanyaan) if pertanyaan else None
 
                 if not ingat:
+                    if self._is_required(element):
+                        gagal.append(pertanyaan or "pertanyaan combobox wajib")
                     console.print(
                         "[dim]   combobox belum dijawab (menunggu pengguna): "
                         f"{pertanyaan[:70] or 'tanpa teks pertanyaan'}[/]"
@@ -2493,7 +2406,7 @@ class AutoApplier:
         # (audit #25: 13 pertanyaan × 60 detik = 13 menit per sesi). Beri
         # waktu singkat untuk tindakan manual, lalu lanjut ke lowongan lain.
         tersimpan = jawaban.cari(rinci) if rinci else None
-        if tersimpan:
+        if tersimpan and self.nama_situs != "Glints":
             batas = min(batas, BATAS_TUNGGU_TERSIMPAN)
             console.print(
                 "[dim]   jawaban sudah tersimpan "
@@ -2507,8 +2420,9 @@ class AutoApplier:
         )
         console.print(
             "   Silakan isi di jendela Chrome sekarang — menunggu sampai "
-            f"{batas} detik. Isian Anda akan diingat dan dipakai otomatis "
-            "di lamaran berikutnya."
+            f"{batas} detik. "
+            + ("Isian manual dapat disimpan untuk pertanyaan yang sama."
+               if config.ingat_jawaban else "Ingatan jawaban sedang dimatikan.")
         )
 
         sebelum = self._potret_jawaban()
@@ -2516,19 +2430,24 @@ class AutoApplier:
         for sisa in range(batas, 0, -1):
             time.sleep(1)
 
+            # Rekam sebelum bot kembali mengisi, termasuk isian parsial
+            # yang akan hilang bila formulir tertutup atau waktu habis.
+            self._rekam_jawaban_pengguna(sebelum)
             if self._is_success():
-                self._rekam_jawaban_pengguna(sebelum)
                 return "applied"
 
             # Lanjut hanya bila tidak ada pertanyaan tersisa DAN tidak ada
             # peringatan validasi — supaya tidak mengklik Kirim berulang kali.
             if not self.jawab_pertanyaan() and not self._validation_error():
-                self._rekam_jawaban_pengguna(sebelum)
                 console.print(
                     "[green]   isian sudah lengkap — melanjutkan pengiriman "
                     "lamaran.[/]"
                 )
                 return "lanjut"
+
+            # Abaikan perubahan yang baru saja dilakukan bot pada putaran
+            # ini; hanya perubahan berikutnya saat menunggu yang direkam.
+            sebelum = self._potret_jawaban()
 
             if sisa % 5 == 0:
                 console.print(f"[dim]   menunggu... sisa {sisa} detik[/]")
@@ -2691,23 +2610,12 @@ class AutoApplier:
     # Alur utama
     # ------------------------------------------------------------------
     def apply(self, job: dict) -> ApplyResult:
-        """Lamar satu lowongan; semua isian pengguna direkam di akhir.
+        """Lamar satu lowongan; jawaban manual direkam saat menunggu pengguna.
 
-        Pembungkus ini memastikan perubahan jawaban tetap diingat walau alur
-        berakhir dengan `manual_required`, galat, atau waktu tunggu habis —
-        bukan hanya saat lamaran berhasil.
+        Jangan membandingkan dengan halaman sebelum lowongan dibuka: potret
+        itu dapat mencatat isian otomatis bot sebagai jawaban pengguna.
         """
-        try:
-            potret_awal = self._potret_jawaban()
-        except Exception:
-            potret_awal = {}
-
-        try:
-            return self._apply_alur(job)
-        finally:
-            # Jangan pernah menggagalkan lamaran hanya karena pencatatan.
-            with contextlib.suppress(Exception):
-                self._rekam_jawaban_pengguna(potret_awal)
+        return self._apply_alur(job)
 
     def _apply_alur(self, job: dict) -> ApplyResult:
         url = (job.get("url") or "").strip()
@@ -2846,7 +2754,7 @@ class AutoApplier:
                     belum_terjawab = self.jawab_pertanyaan()
 
                     galat = self._validation_error()
-                    if galat and belum_terjawab:
+                    if belum_terjawab:
                         rinci = (
                             pertanyaan_dari_galat(galat)
                             or belum_terjawab[0][:80]
@@ -2868,11 +2776,16 @@ class AutoApplier:
                             continue
 
                         self._dump_debug(job)
+                        wajib_gagal = self._diagnosa_wajib_gagal()
+                        detail = (
+                            f" ({format_diagnosa(wajib_gagal[0])})"
+                            if wajib_gagal else ""
+                        )
                         return ApplyResult(
                             False,
                             "manual_required",
                             "Formulir meminta isian yang belum bisa dijawab "
-                            f"otomatis: {rinci} — dilewati",
+                            f"otomatis: {rinci} — dilewati, TIDAK dikirim{detail}",
                         )
 
                     # Penahan kirim: isian WAJIB yang gagal diisi atau

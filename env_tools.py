@@ -5,7 +5,7 @@ from pathlib import Path
 # Kunci yang isinya boleh diganti otomatis dari .env.example saat daftar
 # kata kunci diperbarui. Kunci lain (token, path CV, cover letter) tidak
 # pernah disentuh.
-KUNCI_KATA_KUNCI = ("KEYWORDS", "TITLE_KEYWORDS")
+KUNCI_KATA_KUNCI = ("KEYWORDS", "TITLE_KEYWORDS", "RESEARCH_KEYWORDS")
 
 # Kunci baru yang ditambahkan hanya bila belum ada di .env, sehingga isian
 # yang sudah Anda sesuaikan sendiri tidak pernah tertimpa.

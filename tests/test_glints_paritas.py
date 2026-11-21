@@ -167,6 +167,30 @@ def test_riset_tidak_melamar_dua_kali(monkeypatch):
     assert len(notifier.sukses) == len(KARTU)
 
 
+def test_kandidat_cadangan_dicoba_tanpa_melampaui_kuota(monkeypatch):
+    db = DbPalsu()
+
+    class BotCadangan(BotPalsu):
+        def lamar(self, job):
+            self.dilamar.append(job["job_id"])
+            if len(self.dilamar) == 1:
+                return ApplyResult(False, "skipped", "Tidak tersedia")
+            db.hari_ini += 1
+            return ApplyResult(True, "applied", "Terkirim")
+
+    bot = BotCadangan()
+    _siapkan(monkeypatch, db=db, bot=bot)
+    monkeypatch.setattr(config, "max_apply_per_day", 1, raising=False)
+
+    laporan = glints_module.jalankan_glints(
+        max_pages=1, keywords=["inventory"], batas=10
+    )
+
+    assert laporan["dilamar"] == 1
+    assert bot.dilamar == [KARTU[0]["job_id"], KARTU[1]["job_id"]]
+    assert db.hari_ini == 1
+
+
 def test_batas_otomatis_per_sesi_dihormati(monkeypatch):
     _siapkan(monkeypatch)
     monkeypatch.setattr(config, "auto_apply_max_per_session", 1, raising=False)
@@ -178,6 +202,10 @@ def test_batas_otomatis_per_sesi_dihormati(monkeypatch):
 
 
 def test_login_habis_menghentikan_sesi_dan_memberi_notifikasi(monkeypatch):
+    selesai = []
+    monkeypatch.setattr(
+        glints_module.antrean, "selesai", lambda *args: selesai.append(args)
+    )
     _siapkan(
         monkeypatch,
         bot=BotPalsu(ApplyResult(False, "login_required", "Login Glints habis")),
@@ -188,6 +216,7 @@ def test_login_habis_menghentikan_sesi_dan_memberi_notifikasi(monkeypatch):
 
     assert laporan["dilamar"] == 0
     assert laporan["gagal"] == 1
+    assert selesai == [(KARTU[0]["job_id"], "review_required", "Login Glints habis")]
 
 
 def test_laporan_harian_dikirim_di_akhir(monkeypatch):
@@ -280,3 +309,35 @@ def test_alasan_tidak_layak_memeriksa_database(monkeypatch):
     alasan = glints_module.alasan_tidak_layak(dict(KARTU[0]))
 
     assert alasan == "Sudah tercatat dilamar"
+
+
+def test_riset_berhenti_pada_batas_di_tengah_lokasi(monkeypatch):
+    class BotBanyak(BotPalsu):
+        def __init__(self):
+            super().__init__()
+            self.pencarian = []
+
+        def cari(self, keyword, halaman=0, location=""):
+            self.pencarian.append(keyword)
+            return [dict(job) for job in KARTU]
+
+    bot = BotBanyak()
+    _siapkan(monkeypatch, bot=bot)
+    monkeypatch.setattr(config, "research_max_jobs", 2)
+    hasil = glints_module.jalankan_glints(
+        max_pages=1, keywords=["inventory", "warehouse"], batas=10
+    )
+    assert bot.pencarian == ["inventory"]
+    assert hasil["dibaca"] == 2
+    assert len(bot.dilamar) == 2
+
+
+def test_banner_glints_menampilkan_pengaturan_lokasi_dan_logo(monkeypatch, capsys):
+    monkeypatch.setattr(config, "strict_location", False)
+    monkeypatch.setattr(config, "require_company_logo", False)
+    glints_module.tampilkan_konfigurasi_glints()
+    keluaran = capsys.readouterr().out
+    assert "Filter lokasi ketat" in keluaran
+    assert "tidak aktif" in keluaran
+    assert "Wajib logo perusahaan" in keluaran
+    assert "tidak" in keluaran

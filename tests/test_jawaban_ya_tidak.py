@@ -101,19 +101,20 @@ def test_pernyataan_panjang_dicocokkan_walau_tanda_baca_berbeda():
 
 
 # ------------------------------------- pertanyaan sama, kalimat berbeda ---
-def test_pertanyaan_ya_tidak_disusun_ulang_tetap_terpakai(basis):
+def test_pertanyaan_pengalaman_ya_tidak_disusun_ulang_tidak_ditebak(basis):
     jawaban.ingat("Do you have sales negotiation experience?", "No")
 
     assert jawaban.cari(
         "Do you have experience in sales negotiation?"
-    ) == "No"
+    ) is None
 
 
 def test_pertanyaan_ya_tidak_tanpa_keluarga_khusus(basis):
     """Tanpa kata "pengalaman/gaji/…", kemiripan 0.80 tetap dipakai."""
     jawaban.ingat("Can you work under pressure?", "Yes")
 
-    assert jawaban.cari("Are you able to work under pressure?") == "Yes"
+    assert jawaban.cari("Are you able to work under pressure?") is None
+    assert jawaban.cari("Can you work under pressure?") == "Yes"
 
 
 def test_pertanyaan_berbeda_tetap_ditanya(basis):
@@ -259,3 +260,8 @@ def test_radio_gagal_mencatat_alasan_ke_log(monkeypatch, basis, tmp_path):
 
     assert gagal == ["Do you have ERP experience?"]
     assert any("Radio tidak terjawab" in item for item in catatan)
+
+
+def test_opsi_mirip_dan_rentang_tidak_ditebak():
+    assert jawaban.cocok_opsi("1 year", ["Less than 1 year", "3 years"]) == ""
+    assert jawaban.cocok_opsi("Advanced", ["Not advanced", "Basic"]) == ""

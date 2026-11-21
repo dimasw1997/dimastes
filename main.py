@@ -518,7 +518,7 @@ class AutoApplyEngine:
                     console.print(f"[bold blue]LOKASI: {location}[/]")
                     console.print(f"[bold blue]{'#' * 60}[/]")
 
-                for keyword in config.keywords:
+                for keyword in config.keywords_riset:
                     keyword = keyword.strip()
 
                     if not keyword or (keyword, location) in selesai:

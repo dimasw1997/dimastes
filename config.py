@@ -111,6 +111,113 @@ def _unik_urutan(daftar: list[str]) -> list[str]:
     return hasil
 
 
+# Daftar pencarian dan pencocokan judul pilihan pengguna.
+KATEGORI_BAKU = (
+    "Inventory,"
+    "Warehouse,"
+    "PPIC,"
+    "Material,"
+    "Production,"
+    "Logistics,"
+    "Supply Chain,"
+    "Stock,"
+    "Purchasing,"
+    "Procurement,"
+    "Planning,"
+    "Quality,"
+    "Audit,"
+    "Operations,"
+    "Manufacturing,"
+    "Distribution,"
+    "Shipping,"
+    "Receiving,"
+    "Storekeeper,"
+    "Expedition,"
+    "Import,"
+    "Export,"
+    "Freight,"
+    "Transportation,"
+    "Delivery,"
+    "Dispatch,"
+    "Packaging,"
+    "Manufacturing Control,"
+    "Production Planning,"
+    "Production Control,"
+    "Inventory Control,"
+    "Stock Control,"
+    "Warehouse Control,"
+    "Material Control,"
+    "Quality Control,"
+    "Quality Assurance,"
+    "Document Control,"
+    "Project Control,"
+    "Cost Control,"
+    "Demand Planning,"
+    "Supply Planning,"
+    "Order Management,"
+    "Purchasing Management,"
+    "Procurement Management,"
+    "Logistics Management,"
+    "Warehouse Management,"
+    "Inventory Management,"
+    "Operations Management,"
+    "Production Management,"
+    "Supply Management"
+)
+KATA_KUNCI_BAKU = (
+    "Inventory,"
+    "Warehouse,"
+    "PPIC,"
+    "Material,"
+    "Production,"
+    "Logistics,"
+    "Supply,"
+    "Stock,"
+    "Purchasing,"
+    "Procurement,"
+    "Planning,"
+    "Quality,"
+    "Audit,"
+    "Operations,"
+    "Manufacturing,"
+    "Distribution,"
+    "Shipping,"
+    "Receiving,"
+    "Storekeeper,"
+    "Expedition,"
+    "Import,"
+    "Export,"
+    "Freight,"
+    "Transportation,"
+    "Delivery,"
+    "Dispatch,"
+    "Packaging,"
+    "Control,"
+    "Management,"
+    "Inventory Control,"
+    "Stock Control,"
+    "Warehouse Control,"
+    "Material Control,"
+    "Quality Control,"
+    "Quality Assurance,"
+    "Document Control,"
+    "Project Control,"
+    "Cost Control,"
+    "Demand Planning,"
+    "Supply Planning,"
+    "Order Management,"
+    "Purchasing Management,"
+    "Procurement Management,"
+    "Logistics Management,"
+    "Warehouse Management,"
+    "Inventory Management,"
+    "Operations Management,"
+    "Production Management,"
+    "Supply Management,"
+    "Distribution Management"
+)
+
+
 @dataclass
 class Config:
     # Catatan: alat ini TIDAK pernah meminta/menyimpan email & password
@@ -118,11 +225,7 @@ class Config:
     # pada profil Chrome (USE_PROFILE).
 
     keywords: list[str] = field(default_factory=lambda: _list_setting(
-        "KEYWORDS",
-        "inventory control,inventory controller,inventory staff,"
-        "stock controller,PPIC,production planning,production planner,"
-        "material control,material planner,warehouse,staff gudang,"
-        "purchasing,procurement,supply chain",
+        "KEYWORDS", KATA_KUNCI_BAKU
     ))
     # Lokasi utama (dipertahankan untuk kompatibilitas).
     location: str = os.getenv("LOCATION", "Bandung")
@@ -215,22 +318,8 @@ class Config:
     ))
 
     # Kata kunci untuk mencocokkan judul. Kosong = pakai KEYWORDS.
-    # Daftar bawaan disusun dari pengalaman CV (PPIC/inventory, gudang,
-    # material/pengadaan, supply chain) dan lebih lebar dari KEYWORDS karena
-    # hanya dipakai saat mencocokkan judul, bukan saat mencari.
     title_keywords: list[str] = field(default_factory=lambda: _list_setting(
-        "TITLE_KEYWORDS",
-        "inventory,stock,stok,persediaan,gudang,warehouse,ppic,"
-        "production planning,production planner,production control,"
-        "production admin,admin produksi,staf produksi,staff produksi,"
-        "perencanaan produksi,demand planning,demand planner,"
-        "capacity planning,material control,material planner,"
-        "material controller,material handling,material management,"
-        "bahan baku,pengadaan,purchasing,procurement,pembelian,"
-        "supply chain,rantai pasok,logistik,logistics,distribusi,"
-        "distribution,inventory analyst,inventory admin,"
-        "inventory officer,admin inventory,stock opname,mrp,"
-        "cycle count,project control",
+        "TITLE_KEYWORDS", KATA_KUNCI_BAKU
     ))
 
     # true  = riset dulu semua kandidat, dinilai & diperingkat, baru lamar
@@ -249,7 +338,7 @@ class Config:
     # KEYWORDS. Daftar ini bisa lebih lebar dari KEYWORDS supaya seluruh
     # kategori pekerjaan ikut discan tanpa mengubah aturan pencocokan judul.
     research_keywords: list[str] = field(default_factory=lambda: _list_setting(
-        "RESEARCH_KEYWORDS", ""
+        "RESEARCH_KEYWORDS", KATEGORI_BAKU
     ))
     # Halaman riset per kombinasi kata kunci × lokasi. Maksimal 5 (batas
     # tetap); 0 atau nilai di atas 5 otomatis dipakai sebagai 5.

@@ -63,6 +63,7 @@ def siapkan(tmp_path, monkeypatch):
 
     monkeypatch.setattr(config, "locations", ["Bandung", "Jakarta"])
     monkeypatch.setattr(config, "keywords", ["inventory", "ppic"])
+    monkeypatch.setattr(config, "research_keywords", [])
     monkeypatch.setattr(config, "max_pages", 1)
     monkeypatch.setattr(config, "auto_apply", True)
     monkeypatch.setattr(config, "collect_before_apply", True)

@@ -508,6 +508,15 @@ def test_telusuri_keputusan_menandai_tahap_penolak(basis):
     assert "MAX_AGE_DAYS=7" in tahap["DECISION"]["alasan"]
 
 
+def test_dry_run_kosong_tidak_menyarankan_lamaran_live(basis, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "db", basis)
+    hasil = cli.dry_run("", 5)
+    keluaran = capsys.readouterr().out
+    assert hasil["total"] == 0
+    assert "run --auto" not in keluaran
+    assert "tidak melakukan pencarian live" in " ".join(keluaran.split())
+
+
 def test_dry_run_tidak_mengirim_lamaran(basis, monkeypatch):
     monkeypatch.setattr(cli, "db", basis)
     monkeypatch.setattr(jf_modul, "db", basis)

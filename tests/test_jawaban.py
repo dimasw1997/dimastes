@@ -8,6 +8,8 @@ berikut ini?" dengan pilihan Tidak Berpengalaman/Dasar/Menengah/Ahli untuk
 keahlian Manajemen Rantai Pasokan, Microsoft Excel, Manajemen Persediaan.
 """
 
+import pytest
+
 import auto_apply
 import jawaban
 from config import config
@@ -82,6 +84,16 @@ def test_cari_mirip_saat_teks_sedikit_berbeda(monkeypatch):
 
     # Spasi/tanda baca berbeda tetap dikenali.
     assert jawaban.cari("  microsoft   excel ") == "Ahli"
+
+
+def test_pengalaman_hanya_cocok_persis_bukan_profesi_lain(monkeypatch):
+    _siapkan(monkeypatch)
+    pertama = "How many years' experience do you have as a Warehouse Supervisor?"
+    lain = "How many years' experience do you have as a Warehouse Helper?"
+    jawaban.ingat(pertama, "3 years")
+
+    assert jawaban.cari(pertama) == "3 years"
+    assert jawaban.cari(lain) is None
 
 
 def test_cari_tidak_menebak_pertanyaan_berbeda(monkeypatch):
@@ -259,27 +271,15 @@ def test_perubahan_jawaban_pengguna_menggantikan_ingatan_lama(monkeypatch):
     assert [item.label for item in opsi if item.selected] == ["Ahli"]
 
 
-def test_apply_merekam_jawaban_walau_hasil_gagal(monkeypatch):
-    """Perubahan jawaban tetap diingat walau lamaran berakhir manual/error."""
+def test_apply_tidak_merekam_isian_bot_sebagai_jawaban_pengguna(monkeypatch):
     _siapkan(monkeypatch)
     applier = auto_apply.AutoApplier(driver=None)
-
-    class DriverGagal:
-        def get(self, url):
-            raise RuntimeError("halaman tidak bisa dibuka")
-
-    applier.driver = DriverGagal()
-    dipanggil = {"n": 0}
-    monkeypatch.setattr(applier, "_potret_jawaban", lambda: {"kunci": ("Q", "A")})
+    monkeypatch.setattr(applier, "_apply_alur", lambda job: "selesai")
     monkeypatch.setattr(
         applier, "_rekam_jawaban_pengguna",
-        lambda sebelum: dipanggil.__setitem__("n", dipanggil["n"] + 1),
+        lambda sebelum: pytest.fail("isian bot tidak boleh direkam"),
     )
-
-    hasil = applier.apply({"url": "https://glints.com/id/opportunities/jobs/x"})
-
-    assert hasil.status == "login_required" or not hasil.applied
-    assert dipanggil["n"] == 1
+    assert applier.apply({}) == "selesai"
 
 
 def test_pertanyaan_persetujuan_wajib_dikonfirmasi():
@@ -460,3 +460,39 @@ def test_kotak_centang_diisi_dari_ingatan(monkeypatch):
 
     assert gagal == []
     assert [item.label for item in opsi if item.selected] == ["Excel", "SAP"]
+
+
+def test_jawaban_parsial_disimpan_walau_waktu_habis(monkeypatch):
+    db = _siapkan(monkeypatch)
+    monkeypatch.setattr(config, "auto_answer_wait", 2)
+    applier = auto_apply.AutoApplier(driver=None)
+    potret = {}
+    monkeypatch.setattr(applier, "_potret_jawaban", lambda: dict(potret))
+    monkeypatch.setattr(applier, "_is_success", lambda: False)
+    monkeypatch.setattr(applier, "jawab_pertanyaan", lambda: ["Lainnya"])
+    monkeypatch.setattr(applier, "_validation_error", lambda: "wajib")
+
+    def isi_pengguna(_):
+        potret["microsoft excel"] = ("Microsoft Excel", "Ahli")
+
+    monkeypatch.setattr(auto_apply.time, "sleep", isi_pengguna)
+    assert applier._tunggu_jawaban("Lainnya") == "habis"
+    assert db.baris["microsoft excel"]["jawaban"] == "Ahli"
+
+
+def test_isian_bot_saat_menunggu_tidak_disimpan(monkeypatch):
+    db = _siapkan(monkeypatch)
+    monkeypatch.setattr(config, "auto_answer_wait", 2)
+    applier = auto_apply.AutoApplier(driver=None)
+    potret = {}
+    monkeypatch.setattr(applier, "_potret_jawaban", lambda: dict(potret))
+    monkeypatch.setattr(applier, "_is_success", lambda: False)
+    monkeypatch.setattr(auto_apply.time, "sleep", lambda _: None)
+
+    def isi_bot():
+        potret["gaji"] = ("Gaji", "5000000")
+        return ["Lainnya"]
+
+    monkeypatch.setattr(applier, "jawab_pertanyaan", isi_bot)
+    assert applier._tunggu_jawaban("Lainnya") == "habis"
+    assert db.baris == {}

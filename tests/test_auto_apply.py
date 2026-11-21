@@ -577,11 +577,10 @@ def test_jawab_pertanyaan_otomatis(monkeypatch):
     driver = FakeDriver(elements={"select": [gaji, pengalaman, kepala]})
     gagal = AutoApplier(driver).jawab_pertanyaan()
 
-    assert gagal == []
+    assert len(gagal) == 2
     assert gaji.get_attribute("value") == "Rp 5 Jt"
-    assert pengalaman.get_attribute("value") == "3 years"
-    # Bukan jabatan yang pernah dipegang -> jawab 0 tahun, jangan mengarang.
-    assert kepala.get_attribute("value") == "0 years"
+    assert not pengalaman.get_attribute("value")
+    assert not kepala.get_attribute("value")
 
 
 def test_pertanyaan_tak_dikenal_tidak_dijawab():
@@ -692,8 +691,9 @@ def test_pertanyaan_dari_wadah_dipakai_bukan_id_internal(monkeypatch):
     driver = FakeDriver(elements={"select": [select]})
     gagal = AutoApplier(driver).jawab_pertanyaan()
 
-    assert select.get_attribute("value") == "3 years"
-    assert gagal == []
+    assert not select.get_attribute("value")
+    assert len(gagal) == 1
+    assert "inventory controller" in gagal[0].lower()
 
 
 def test_batas_17_id_internal_tidak_dilaporkan():
@@ -711,6 +711,7 @@ def test_batas_17_id_internal_tidak_dilaporkan():
 
 def test_radio_ya_tidak_dijawab(monkeypatch):
     monkeypatch.setattr(config, "auto_answer_yes", True)
+    monkeypatch.setattr(auto_apply.jawaban, "cari", lambda _: "Ya")
 
     wadah = FakeElement(text="Apakah kamu bersedia bekerja dalam shift?\nYa\nTidak")
 
@@ -760,7 +761,21 @@ def test_kolom_teks_gaji_diisi(monkeypatch):
     assert kolom.get_attribute("value") == "5000000"
 
 
-def test_pengalaman_peran_lain_dijawab_nol(monkeypatch):
+def test_teks_pengalaman_tidak_diisi_dari_total(monkeypatch):
+    monkeypatch.setattr(config, "years_experience", 3.0)
+    monkeypatch.setattr(auto_apply.jawaban, "cari", lambda _: None)
+    kolom = FakeElement(attrs={"value": "", "aria-label": (
+        "How many years of recruitment experience do you have?"
+    )})
+    applier = AutoApplier(FakeDriver(elements={"input[type='number']": [kolom]}))
+
+    gagal = applier._jawab_teks()
+
+    assert not kolom.get_attribute("value")
+    assert len(gagal) == 1
+
+
+def test_pengalaman_tidak_ditebak_dari_total(monkeypatch):
     from types import SimpleNamespace
 
     cfg = SimpleNamespace(
@@ -778,14 +793,14 @@ def test_pengalaman_peran_lain_dijawab_nol(monkeypatch):
         "How many years' experience do you have as a Pharmacist in Charge?",
         opsi,
         cfg,
-    ) == "No experience"
+    ) == ""
 
-    # Peran yang sesuai pengalaman: 3 tahun.
+    # Nama bidang sesuai tidak membuktikan lama pengalaman per jabatan.
     assert auto_apply.pilih_jawaban(
         "How many years' experience do you have as an Inventory Controller?",
         opsi,
         cfg,
-    ) == "3 years"
+    ) == ""
 
 
 def test_pengalaman_peran_lain_tanpa_opsi_nol_dilewati(monkeypatch):
@@ -1187,6 +1202,7 @@ def test_kuesioner_diisi_pengguna_lalu_terkirim(monkeypatch):
 
 # ---------------------------------------------- radio tersembunyi (JobStreet) ---
 def test_radio_tersembunyi_tetap_dijawab(monkeypatch):
+    monkeypatch.setattr(auto_apply.jawaban, "cari", lambda _: "Yes")
     """JobStreet menyembunyikan input asli; labelnya yang terlihat.
 
     Tanpa toleransi ini, pertanyaan "do you have ... experience?" tidak pernah
@@ -1305,6 +1321,7 @@ def test_wadah_banyak_input_tidak_dipakai_sebagai_label(monkeypatch):
 
 
 def test_radio_dengan_label_dari_wadah_dijawab(monkeypatch):
+    monkeypatch.setattr(auto_apply.jawaban, "cari", lambda _: "Yes")
     monkeypatch.setattr(config, "auto_answer_yes", True)
 
     pertanyaan = FakeElement(text="Do you have purchasing experience?")
@@ -1398,32 +1415,32 @@ def test_tombol_navigasi_ditolak_sebagai_tombol_kirim():
     ) is True
 
 
-def test_skala_dijawab_tingkat_terendah():
-    """E-4: pertanyaan berskala dijawab jujur dengan tingkat terendah."""
+def test_skala_tidak_ditebak():
+    """Tingkat terendah belum tentu benar."""
     assert auto_apply.pilih_jawaban_radio(
         "How would you rate your Japanese language skills?",
         ["Fluent", "Beginner", "Native"],
-    ) == "Beginner"
+    ) == ""
 
     assert auto_apply.pilih_jawaban_radio(
         "Seberapa mahir kamu dengan Microsoft Excel?",
         ["Ahli", "Menengah", "Dasar"],
-    ) == "Dasar"
+    ) == ""
 
 
 def test_ya_tidak_varian_dikenali(monkeypatch):
-    """E-4: varian "Yes, I have" / "Ya, benar" tetap dijawab Ya."""
+    """Pengalaman tidak dijawab otomatis meski varian Ya dikenali."""
     monkeypatch.setattr(config, "auto_answer_yes", True)
 
     assert auto_apply.pilih_jawaban_radio(
         "Do you have production scheduling experience?",
         ["Yes, I have", "No, I don't"],
-    ) == "Yes, I have"
+    ) == ""
 
     assert auto_apply.pilih_jawaban_radio(
         "Apakah kamu memiliki pengalaman pembelian?",
         ["Ya", "Tidak"],
-    ) == "Ya"
+    ) == ""
 
 
 def test_radio_tanpa_name_dikelompokkan_per_pertanyaan(monkeypatch):
@@ -1432,6 +1449,7 @@ def test_radio_tanpa_name_dikelompokkan_per_pertanyaan(monkeypatch):
     Sebelum diperbaiki, radio seperti ini diabaikan total.
     """
     monkeypatch.setattr(config, "auto_answer_yes", True)
+    monkeypatch.setattr(auto_apply.jawaban, "cari", lambda _: "Ya")
 
     ya = FakeElement(attrs={"id": "b1"}, visible=False)
     tidak = FakeElement(attrs={"id": "b2"}, visible=False)
@@ -1486,8 +1504,8 @@ def _checkbox_driver(opsi, monkeypatch, applier):
     return kotak
 
 
-def test_checkbox_skill_pengguna_dicentang(monkeypatch):
-    """E-3: kotak centang keterampilan yang dikuasai pengguna dicentang."""
+def test_checkbox_skill_tidak_ditebak_dari_keyword(monkeypatch):
+    """Kata kunci pencarian bukan bukti keterampilan."""
     monkeypatch.setattr(config, "auto_answer_yes", True)
     monkeypatch.setattr(config, "skill_keywords", ["Excel", "SAP"])
     monkeypatch.setattr(config, "title_keywords", [])
@@ -1497,12 +1515,12 @@ def test_checkbox_skill_pengguna_dicentang(monkeypatch):
 
     gagal = applier.jawab_pertanyaan()
 
-    assert gagal == []
-    assert [item.is_selected() for item in kotak] == [True, True, False]
+    assert gagal == ["Which skills do you have?"]
+    assert [item.is_selected() for item in kotak] == [False, False, False]
 
 
-def test_checkbox_tanpa_kecocokan_pilih_none(monkeypatch):
-    """E-3: bila tak ada yang cocok, jawab jujur "None of the above"."""
+def test_checkbox_tanpa_kecocokan_tidak_mengasumsikan_none(monkeypatch):
+    """Tidak ada kata kunci cocok bukan bukti tidak punya keahlian."""
     monkeypatch.setattr(config, "auto_answer_yes", True)
     monkeypatch.setattr(config, "skill_keywords", ["Excel"])
     monkeypatch.setattr(config, "title_keywords", [])
@@ -1514,9 +1532,9 @@ def test_checkbox_tanpa_kecocokan_pilih_none(monkeypatch):
 
     gagal = applier.jawab_pertanyaan()
 
-    assert gagal == []
+    assert gagal == ["Which skills do you have?"]
     assert kotak[0].is_selected() is False
-    assert kotak[1].is_selected() is True
+    assert kotak[1].is_selected() is False
 
 
 def test_checkbox_tak_dikenal_masuk_manual(monkeypatch):
@@ -1558,3 +1576,46 @@ def test_dump_debug_tersimpan_untuk_job_id_glints(monkeypatch, tmp_path):
     assert len(berkastxt) == 1
     assert ":" not in berkastxt[0].name
     assert berkastxt[0].read_text(encoding="utf-8").startswith("URL:")
+
+
+@pytest.mark.parametrize("situs", ["JobStreet", "Glints", "Indeed"])
+def test_belum_terjawab_tunggu_manual_tanpa_galat_validasi(monkeypatch, situs):
+    """Jangan lanjut atau kirim saat ada pilihan yang belum bisa dijawab."""
+    from glints import GlintsApplier
+
+    driver = FakeDriver(url="https://glints.com/id/opportunities/jobs/123")
+    applier = GlintsApplier(driver) if situs == "Glints" else AutoApplier(driver)
+    monkeypatch.setattr(applier, "nama_situs", situs)
+    monkeypatch.setattr(applier, "_cari_tombol_lamar", lambda: FakeElement())
+    monkeypatch.setattr(applier, "_click", lambda *_: True)
+    monkeypatch.setattr(applier, "_is_login_page", lambda: False)
+    monkeypatch.setattr(applier, "_is_external_page", lambda: False)
+    monkeypatch.setattr(applier, "is_already_applied", lambda: False)
+    monkeypatch.setattr(applier, "_alasan_lewati", lambda: "")
+    monkeypatch.setattr(applier, "_external_button_present", lambda: False)
+    monkeypatch.setattr(applier, "_masuk_kerangka_lamaran", lambda: "")
+    monkeypatch.setattr(applier, "_is_review_page", lambda: False)
+    monkeypatch.setattr(applier, "_is_success", lambda: False)
+    monkeypatch.setattr(applier, "_autofill", lambda: None)
+    monkeypatch.setattr(applier, "jawab_pertanyaan", lambda: ["Construction"])
+    monkeypatch.setattr(applier, "_validation_error", lambda: "")
+    monkeypatch.setattr(applier, "_tunggu_jawaban", lambda _: "habis")
+    monkeypatch.setattr(applier, "_dump_debug", lambda *_: None)
+    monkeypatch.setattr(
+        applier, "_find_submit_button",
+        lambda *_: pytest.fail("tidak boleh menekan kirim"),
+    )
+    hasil = applier.apply({"url": driver.current_url})
+    assert hasil.status == "manual_required"
+    assert "Construction" in hasil.reason
+
+
+def test_select_tidak_dianggap_terverifikasi_jika_label_tidak_terbaca(monkeypatch):
+    class DriverJS(FakeDriver):
+        def execute_script(self, *args, **kwargs):
+            return True
+
+    applier = AutoApplier(DriverJS())
+    monkeypatch.setattr(applier, "_teks_terpilih", lambda _: "")
+    select = FakeElement()
+    assert not applier._pilih_opsi(select, "3 years")

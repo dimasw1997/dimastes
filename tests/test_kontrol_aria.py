@@ -297,3 +297,26 @@ def test_combobox_jawaban_tidak_ada_di_daftar_dilaporkan(monkeypatch, basis):
 
     assert gagal == ["Kota domisili?"]
     assert combobox.text == ""
+
+
+def test_jawaban_textarea_direkam_dan_digunakan_lagi(monkeypatch, basis):
+    kolom = Elemen(tag="textarea", attrs={"value": ""})
+    applier = _applier(monkeypatch, {"textarea": [kolom]}, "Pengalaman Anda?")
+    sebelum = applier._potret_jawaban()
+    kolom._attrs["value"] = "Pengalaman gudang tiga tahun"
+    assert applier._rekam_jawaban_pengguna(sebelum) == 1
+    assert jawaban.cari("Pengalaman Anda?") == "Pengalaman gudang tiga tahun"
+
+    kolom._attrs["value"] = ""
+    monkeypatch.setattr(
+        kolom, "send_keys", lambda nilai: kolom._attrs.__setitem__("value", nilai),
+        raising=False,
+    )
+    assert applier._jawab_teks() == []
+    assert kolom.get_attribute("value") == "Pengalaman gudang tiga tahun"
+
+
+def test_combobox_wajib_tanpa_jawaban_menghalangi(monkeypatch, basis):
+    combobox = Elemen(tag="div", attrs={"role": "combobox", "aria-required": "true"})
+    applier = _applier(monkeypatch, {"[role='combobox']": [combobox]}, "Kota?")
+    assert applier._jawab_combobox() == ["Kota?"]
