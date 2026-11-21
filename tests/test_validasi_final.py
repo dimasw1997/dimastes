@@ -466,6 +466,26 @@ def test_isian_wajib_gagal_menahan_pengiriman():
     assert klik == ["klik"]
 
 
+def test_combobox_kosong_tanpa_penanda_wajib_menahan_kirim(monkeypatch):
+    klik = []
+    applier = ApplierUji(klik, diagnosa=[])
+    combobox = Elemen(tag="input", attrs={"role": "combobox"})
+    monkeypatch.setattr(config, "ingat_jawaban", False)
+    monkeypatch.setattr(
+        applier, "_find_all",
+        lambda selector: [combobox] if selector == "[role='combobox']" else [],
+    )
+    monkeypatch.setattr(applier, "_pertanyaan", lambda *args: "Domisili?")
+    monkeypatch.setattr(applier, "jawab_pertanyaan", applier._jawab_combobox)
+    monkeypatch.setattr(applier, "_tunggu_jawaban", lambda *_: "habis")
+
+    hasil = applier._apply_alur(lowongan())
+
+    assert hasil.status == "manual_required"
+    assert "TIDAK dikirim" in hasil.reason
+    assert klik == ["klik"]  # Tombol Lamar saja; tombol kirim tidak diklik.
+
+
 def test_isian_wajib_review_menahan_pengiriman(monkeypatch):
     klik = []
     applier = ApplierUji(klik, diagnosa=[_diagnosa_wajib()])

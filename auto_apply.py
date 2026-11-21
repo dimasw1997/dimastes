@@ -2200,8 +2200,8 @@ class AutoApplier:
 
         Combobox tidak punya daftar opsi sebelum dibuka, jadi opsinya dibaca
         setelah diklik. Bila jawabannya tidak ada di ingatan, kontrol ini
-        DIBIARKAN (tidak menebak); kontrol yang ditandai wajib dilaporkan
-        agar pengiriman tertahan.
+        DIBIARKAN (tidak menebak) dan dilaporkan agar pengiriman tertahan.
+        Ketiadaan atribut wajib tidak membuktikan bahwa kontrol opsional.
         """
         gagal = []
         terlihat = set()
@@ -2223,8 +2223,9 @@ class AutoApplier:
                 ingat = jawaban.cari(pertanyaan) if pertanyaan else None
 
                 if not ingat:
-                    if self._is_required(element):
-                        gagal.append(pertanyaan or "pertanyaan combobox wajib")
+                    # Banyak situs tidak menandai kontrol wajib secara andal.
+                    # Jangan menyimpulkan bahwa kontrol kosong itu opsional.
+                    gagal.append(pertanyaan or "pertanyaan combobox")
                     console.print(
                         "[dim]   combobox belum dijawab (menunggu pengguna): "
                         f"{pertanyaan[:70] or 'tanpa teks pertanyaan'}[/]"

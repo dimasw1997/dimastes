@@ -274,8 +274,8 @@ def test_combobox_tanpa_jawaban_tidak_menebak(monkeypatch, basis):
 
     gagal = applier._jawab_combobox()
 
-    # Tidak menebak: tidak dilaporkan gagal, tetapi tidak ada yang dipilih.
-    assert gagal == []
+    # Tanpa penanda wajib pun, jangan tebak atau lanjut ke kirim.
+    assert gagal == ["Kota domisili?"]
     assert combobox.text == ""
 
 

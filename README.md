@@ -881,7 +881,9 @@ berinteraksi yang benar:
 Semua isian **diverifikasi**, tidak langsung dianggap berhasil: klik yang tidak
 mengubah status dilaporkan sebagai kegagalan (dan alasannya masuk log). Combobox
 hanya diisi bila jawabannya sudah ada di ingatan — bila tidak, bot membiarkannya
-dan menulis "combobox belum dijawab (menunggu pengguna)" daripada menebak.
+dan menahan pengiriman untuk tinjauan manual, sekalipun atribut wajib tidak
+terlihat. Ini bisa menahan kontrol yang sebenarnya opsional; ketiadaan atribut
+wajib saja tidak cukup untuk membuktikannya.
 
 #### Diagnosa kontrol: apa yang gagal, tanpa membocorkan isian
 
