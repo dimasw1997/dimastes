@@ -536,7 +536,12 @@ class IndeedBot:
             return False
 
         teks = self._teks_halaman()
-        if not teks:
+        judul = self._judul_halaman().lower()
+        if not teks or any(
+            tanda in f"{judul} {teks}" for tanda in PENANDA_BLOKIR_CLOUDFLARE
+        ) or any(
+            tanda in teks for tanda in ("unusual traffic", "captcha", "verifikasi")
+        ):
             return False
 
         return not (
@@ -550,6 +555,11 @@ class IndeedBot:
         self.driver.get(LOGIN_URL)
         time.sleep(2)
 
+        if self.diblokir_cloudflare() or self.kena_captcha():
+            self.keadaan_terakhir = "blokir"
+            self._laporkan_blokir(LOGIN_URL)
+            return False
+
         if self.sudah_login():
             console.print("[green]Sesi Indeed sudah aktif.[/]")
             return True
@@ -562,6 +572,10 @@ class IndeedBot:
         batas = time.time() + (600 if config.login_wait else 30)
         while time.time() < batas:
             time.sleep(2)
+            if self.diblokir_cloudflare() or self.kena_captcha():
+                self.keadaan_terakhir = "blokir"
+                self._laporkan_blokir(LOGIN_URL)
+                return False
             if self.sudah_login():
                 console.print("[green]Login Indeed terdeteksi.[/]")
                 return True
@@ -1083,8 +1097,8 @@ class IndeedBot:
         )
         if info["captcha"]:
             console.print(
-                "[yellow]Halaman meminta verifikasi/captcha. Selesaikan di "
-                "jendela Chrome, lalu jalankan lagi.[/]"
+                "[yellow]Halaman meminta verifikasi/captcha; hasil belum "
+                "terverifikasi. Jangan ulangi challenge yang berputar.[/]"
             )
         if info["berkas_html"]:
             console.print(f"[dim]HTML: {info['berkas_html']}[/]")
@@ -1290,6 +1304,8 @@ def jalankan_indeed(max_pages: int = 0, keywords: list[str] | None = None,
         bot.init_browser()
 
         if not bot.login():
+            if getattr(bot, "keadaan_terakhir", "") == "blokir":
+                laporan["perlu_manusia"] += 1
             console.print("[red]Login Indeed belum selesai — dihentikan.[/]")
             return laporan
 
@@ -1530,10 +1546,13 @@ def diagnosa_indeed(keyword: str = "", location: str = "") -> dict:
         berhasil = bot.buka_pencarian(kata, lokasi)
         info = bot.diagnosa_terakhir or bot.simpan_diagnosa("diagnosa", kata)
 
-        console.print(
-            f"[cyan]Login Indeed terdeteksi:[/] "
-            f"{'ya' if bot.sudah_login() else 'belum'}"
-        )
+        if bot.keadaan_terakhir == "blokir":
+            console.print("[yellow]Status login tidak dapat dipastikan.[/]")
+        else:
+            console.print(
+                f"[cyan]Login Indeed terdeteksi (perkiraan):[/] "
+                f"{'ya' if bot.sudah_login() else 'belum'}"
+            )
 
         if berhasil:
             kartu = [
@@ -1574,8 +1593,8 @@ def diagnosa_indeed(keyword: str = "", location: str = "") -> dict:
             )
         else:
             console.print(
-                "[bold yellow]Tidak ada kartu yang bisa dibaca. Kirimkan "
-                "berkas HTML + screenshot di atas untuk penyesuaian.[/]"
+                "[bold yellow]Tidak ada kartu yang bisa dibaca; hasil Indeed "
+                "belum terverifikasi.[/]"
             )
 
     except Exception as exc:

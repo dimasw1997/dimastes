@@ -212,3 +212,22 @@ def test_bukti_tersimpan_bila_flag_hidup(tmp_path, monkeypatch):
 
 def test_penjaga_config_utuh():
     assert config_modul.config is config
+
+
+def test_halaman_verifikasi_tidak_dianggap_login(monkeypatch):
+    bot = indeed.IndeedBot()
+    monkeypatch.setattr(bot, "_url", lambda: "https://id.indeed.com/jobs")
+    monkeypatch.setattr(bot, "_teks_halaman", lambda: "diperlukan verifikasi tambahan")
+    monkeypatch.setattr(bot, "_judul_halaman", lambda: "Tunggu sebentar...")
+
+    assert bot.sudah_login() is False
+
+
+def test_verifikasi_saat_login_menghentikan_tanpa_menunggu(monkeypatch):
+    bot = indeed.IndeedBot()
+    bot.driver = Driver("Diperlukan verifikasi tambahan")
+    monkeypatch.setattr(indeed.time, "sleep", lambda _: None)
+    monkeypatch.setattr(bot, "_laporkan_blokir", lambda _: None)
+
+    assert bot.login() is False
+    assert bot.keadaan_terakhir == "blokir"
